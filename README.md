@@ -30,7 +30,7 @@ To use Firestore: create a Firebase project, enable **Firestore**, enable **Emai
 
 The agent is Gemini Flash via the Vercel AI SDK (`/api/agent`). It has read tools (search, item detail, BOM explosion, where-used, reports) and write tools (bulk update, create items, adjust/receive/build, BOM edits, deactivate, orders, RMAs, suppliers). All tools execute **in the browser** against the active store, so the server never holds your data. Write tools render as proposal cards you approve or reject; flip **Settings → Agent → Auto-apply** to skip approvals.
 
-Open it with the **Agent** button or `⌘J`. `⌘K` is global search; typing a question with no matches hands it to the agent. If Gemini answers 503 "high demand", the route automatically retries on the models in `GEMINI_FALLBACK_MODELS` (default `gemini-flash-latest,gemini-2.5-flash`).
+Open it with the **Agent** button or `⌘J`. `⌘K` is global search; typing a question with no matches hands it to the agent. If Gemini answers 503 "high demand", the route automatically retries on the models in `GEMINI_FALLBACK_MODELS` (default `gemini-3.7-flash,gemini-3.5-flash,gemini-3.5-flash-lite,gemini-3.6-flash`), and any model that takes more than 15 s to start answering is skipped.
 
 ## What's in the MVP
 
