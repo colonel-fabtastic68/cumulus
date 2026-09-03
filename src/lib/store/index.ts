@@ -1,5 +1,6 @@
 import { buildSeed } from "@/lib/seed";
-import { FirestoreStore, getFirebaseApp, readFirebaseConfig } from "./firestore";
+import { getRuntimeConfig } from "@/lib/firebase-config";
+import { FirestoreStore, getFirebaseApp } from "./firestore";
 import { LocalStore } from "./local";
 import type { Store } from "./types";
 
@@ -14,10 +15,9 @@ let singleton: Store | null = null;
  */
 export function createStore(): Store {
   if (singleton) return singleton;
-  const cfg = readFirebaseConfig();
+  const { firebase: cfg, workspaceId } = getRuntimeConfig();
   if (cfg && typeof window !== "undefined") {
     const app = getFirebaseApp(cfg);
-    const workspaceId = process.env.NEXT_PUBLIC_CUMULUS_WORKSPACE ?? "default";
     singleton = new FirestoreStore(app, workspaceId, buildSeed);
   } else {
     singleton = new LocalStore(buildSeed);

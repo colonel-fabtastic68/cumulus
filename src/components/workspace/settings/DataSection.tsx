@@ -1,5 +1,7 @@
 "use client";
 
+import { getRuntimeConfig } from "@/lib/firebase-config";
+
 import { useRef, useState, type ChangeEvent } from "react";
 import { ChevronDown, ChevronRight, Database, Download, Eraser, RotateCcw, Upload } from "lucide-react";
 import { COLLECTIONS, type Member, type WorkspaceSettings, type WorkspaceSnapshot } from "@/lib/types";
@@ -10,7 +12,7 @@ import { buildEmpty, buildSeed } from "@/lib/seed";
 import { formatNumber } from "@/lib/format";
 import { toDateInput } from "@/lib/format";
 
-const WORKSPACE_ID = process.env.NEXT_PUBLIC_CUMULUS_WORKSPACE ?? "default";
+const WORKSPACE_ID = getRuntimeConfig().workspaceId;
 
 const FIREBASE_VARS = [
   ["NEXT_PUBLIC_FIREBASE_API_KEY", "required"],
