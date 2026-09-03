@@ -45,7 +45,7 @@ const FIRESTORE_HINTS = (
     <li>Cloud Firestore is created for the project (Firebase console → Build → Firestore Database).</li>
     <li>Rules allow signed-in users: deploy <code>firestore.rules</code> from this repo.</li>
     <li>
-      <code>NEXT_PUBLIC_FIREBASE_PROJECT_ID</code> matches the project. Remove the <code>NEXT_PUBLIC_FIREBASE_*</code> lines from <code>.env.local</code> to go back to local mode.
+      <code>FIREBASE_PROJECT_ID</code> matches the project. Remove the <code>FIREBASE_*</code> lines from <code>.env.local</code> to go back to local mode.
     </li>
   </ul>
 );

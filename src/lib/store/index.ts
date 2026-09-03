@@ -10,7 +10,7 @@ let singleton: Store | null = null;
 
 /**
  * Picks the backend:
- *  - Firestore when NEXT_PUBLIC_FIREBASE_* is configured
+ *  - Firestore when FIREBASE_* is configured (injected by the server at request time)
  *  - localStorage otherwise (zero-setup pilot mode)
  */
 export function createStore(): Store {

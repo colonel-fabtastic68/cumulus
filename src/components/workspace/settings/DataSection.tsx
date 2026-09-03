@@ -15,13 +15,13 @@ import { toDateInput } from "@/lib/format";
 const WORKSPACE_ID = getRuntimeConfig().workspaceId;
 
 const FIREBASE_VARS = [
-  ["NEXT_PUBLIC_FIREBASE_API_KEY", "required"],
-  ["NEXT_PUBLIC_FIREBASE_PROJECT_ID", "required"],
-  ["NEXT_PUBLIC_FIREBASE_APP_ID", "required"],
-  ["NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN", "optional, defaults to <project>.firebaseapp.com"],
-  ["NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET", "optional"],
-  ["NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID", "optional"],
-  ["NEXT_PUBLIC_CUMULUS_WORKSPACE", "optional, workspace id under /workspaces (defaults to \"default\")"],
+  ["FIREBASE_API_KEY", "required"],
+  ["FIREBASE_PROJECT_ID", "required"],
+  ["FIREBASE_APP_ID", "required"],
+  ["FIREBASE_AUTH_DOMAIN", "optional, defaults to <project>.firebaseapp.com"],
+  ["FIREBASE_STORAGE_BUCKET", "optional"],
+  ["FIREBASE_MESSAGING_SENDER_ID", "optional"],
+  ["CUMULUS_WORKSPACE", "optional, workspace id under /workspaces (defaults to \"default\")"],
 ] as const;
 
 type PendingAction = { kind: "import"; snapshot: WorkspaceSnapshot; fileName: string } | { kind: "reset" } | { kind: "clear" } | null;

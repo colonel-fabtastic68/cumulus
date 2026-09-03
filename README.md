@@ -21,10 +21,10 @@ Open http://localhost:3000. The workspace is pre-seeded with a demo company (Hal
 
 | Mode | When | Where data lives | Collaboration |
 | --- | --- | --- | --- |
-| **Local** (default) | No `NEXT_PUBLIC_FIREBASE_*` vars | Browser `localStorage` | Open two tabs — changes sync live via `BroadcastChannel`. Use the avatar menu to switch between demo users. |
+| **Local** (default) | No `FIREBASE_*` vars | Browser `localStorage` | Open two tabs — changes sync live via `BroadcastChannel`. Use the avatar menu to switch between demo users. |
 | **Firestore** | Firebase env vars set | `workspaces/{id}/…` in Firestore | Real-time across every user and device. Google sign-in via Firebase Auth. |
 
-To use Firestore: create a Firebase project, enable **Firestore**, enable **Email/Password** and **Anonymous** under Authentication → Sign-in method, register a Web app, and copy its config into `.env.local`. Sign in with an email and password (or continue as a guest); the first account to sign in becomes the workspace owner. Rules are in `firestore.rules` (`allow read, write: if request.auth != null;`), which covers guests too.
+To use Firestore: create a Firebase project, enable **Firestore**, enable **Email/Password** and **Anonymous** under Authentication → Sign-in method, register a Web app, and copy its config into `.env.local` as `FIREBASE_API_KEY`, `FIREBASE_PROJECT_ID`, `FIREBASE_APP_ID` (plus the optional `FIREBASE_AUTH_DOMAIN`, `FIREBASE_STORAGE_BUCKET`, `FIREBASE_MESSAGING_SENDER_ID`). Use the same names in Vercel; no `NEXT_PUBLIC_` prefix is needed because the server reads them at request time and passes the config to the browser. Sign in with an email and password (or continue as a guest); the first account to sign in becomes the workspace owner. Rules are in `firestore.rules` (`allow read, write: if request.auth != null;`), which covers guests too.
 
 ### Agent
 

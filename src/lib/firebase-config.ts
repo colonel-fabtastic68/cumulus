@@ -1,10 +1,13 @@
 /**
- * Firebase web config, read from NEXT_PUBLIC_FIREBASE_* environment variables.
+ * Firebase web config and workspace id, read from plain server-side
+ * environment variables (FIREBASE_*, CUMULUS_WORKSPACE). The (app) layout reads
+ * them on the server at request time and hands them to the client through
+ * Providers, so nothing needs the NEXT_PUBLIC_ prefix and changes on Vercel take
+ * effect on the next deploy regardless of build cache.
  *
- * The (app) layout reads these on the server at request time and injects them
- * into the client (see Providers), so changing them on Vercel takes effect on
- * the next deploy even when the build cache is reused. The inlined
- * `process.env.NEXT_PUBLIC_*` values remain as a fallback.
+ * The Firebase web API key identifies the project rather than authorising
+ * access (security comes from Firestore rules and Auth), so sending it to the
+ * browser is expected.
  */
 export interface FirebaseConfig {
   apiKey: string;
@@ -20,6 +23,17 @@ export interface RuntimeConfig {
   workspaceId: string;
 }
 
+/** Env names in the order they are consulted; the NEXT_PUBLIC_ ones are legacy. */
+export const ENV_NAMES = {
+  apiKey: ["FIREBASE_API_KEY", "NEXT_PUBLIC_FIREBASE_API_KEY"],
+  projectId: ["FIREBASE_PROJECT_ID", "NEXT_PUBLIC_FIREBASE_PROJECT_ID"],
+  appId: ["FIREBASE_APP_ID", "NEXT_PUBLIC_FIREBASE_APP_ID"],
+  authDomain: ["FIREBASE_AUTH_DOMAIN", "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN"],
+  storageBucket: ["FIREBASE_STORAGE_BUCKET", "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET"],
+  messagingSenderId: ["FIREBASE_MESSAGING_SENDER_ID", "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID"],
+  workspaceId: ["CUMULUS_WORKSPACE", "NEXT_PUBLIC_CUMULUS_WORKSPACE"],
+} as const;
+
 /** Values pasted straight out of the Firebase JS config arrive as `"AIza…",` — strip the syntax. */
 export function cleanEnv(value: string | undefined): string | undefined {
   if (!value) return undefined;
@@ -32,26 +46,34 @@ export function cleanEnv(value: string | undefined): string | undefined {
   return v || undefined;
 }
 
+function pick(env: Record<string, string | undefined>, names: readonly string[]): string | undefined {
+  for (const n of names) {
+    const v = cleanEnv(env[n]);
+    if (v) return v;
+  }
+  return undefined;
+}
+
 export function parseFirebaseConfig(env: Record<string, string | undefined>): FirebaseConfig | null {
-  const apiKey = cleanEnv(env.NEXT_PUBLIC_FIREBASE_API_KEY);
-  const projectId = cleanEnv(env.NEXT_PUBLIC_FIREBASE_PROJECT_ID);
-  const appId = cleanEnv(env.NEXT_PUBLIC_FIREBASE_APP_ID);
+  const apiKey = pick(env, ENV_NAMES.apiKey);
+  const projectId = pick(env, ENV_NAMES.projectId);
+  const appId = pick(env, ENV_NAMES.appId);
   if (!apiKey || !projectId || !appId) return null;
   return {
     apiKey,
     projectId,
     appId,
-    authDomain: cleanEnv(env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN) ?? `${projectId}.firebaseapp.com`,
-    storageBucket: cleanEnv(env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET),
-    messagingSenderId: cleanEnv(env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID),
+    authDomain: pick(env, ENV_NAMES.authDomain) ?? `${projectId}.firebaseapp.com`,
+    storageBucket: pick(env, ENV_NAMES.storageBucket),
+    messagingSenderId: pick(env, ENV_NAMES.messagingSenderId),
   };
 }
 
-/** Server-side: read the runtime config from the process environment. */
+/** Server-side: read the runtime config from the process environment (at request time). */
 export function runtimeConfigFromEnv(): RuntimeConfig {
   return {
     firebase: parseFirebaseConfig(process.env),
-    workspaceId: cleanEnv(process.env.NEXT_PUBLIC_CUMULUS_WORKSPACE) ?? "default",
+    workspaceId: pick(process.env, ENV_NAMES.workspaceId) ?? "default",
   };
 }
 
@@ -62,18 +84,7 @@ export function setRuntimeConfig(config: RuntimeConfig) {
   injected = config;
 }
 
-/** The active runtime config: injected by the server, else build-time inlined values. */
+/** The active runtime config. Local mode until the server has injected one. */
 export function getRuntimeConfig(): RuntimeConfig {
-  if (injected) return injected;
-  return {
-    firebase: parseFirebaseConfig({
-      NEXT_PUBLIC_FIREBASE_API_KEY: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-      NEXT_PUBLIC_FIREBASE_PROJECT_ID: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-      NEXT_PUBLIC_FIREBASE_APP_ID: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-    }),
-    workspaceId: cleanEnv(process.env.NEXT_PUBLIC_CUMULUS_WORKSPACE) ?? "default",
-  };
+  return injected ?? { firebase: null, workspaceId: "default" };
 }
