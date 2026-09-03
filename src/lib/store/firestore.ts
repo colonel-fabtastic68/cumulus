@@ -25,19 +25,34 @@ export interface FirebaseConfig {
   appId: string;
 }
 
+/**
+ * Values pasted straight out of the Firebase JS config object arrive as
+ * `"AIza…",` — strip the quotes, commas and whitespace so they still work.
+ */
+function cleanEnv(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const v = value
+    .trim()
+    .replace(/[,;]\s*$/, "")
+    .replace(/^["']/, "")
+    .replace(/["'],?\s*$/, "")
+    .trim();
+  return v || undefined;
+}
+
 /** Reads NEXT_PUBLIC_FIREBASE_* env vars. Returns null when not configured. */
 export function readFirebaseConfig(): FirebaseConfig | null {
-  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
-  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-  const appId = process.env.NEXT_PUBLIC_FIREBASE_APP_ID;
+  const apiKey = cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_API_KEY);
+  const projectId = cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID);
+  const appId = cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_APP_ID);
   if (!apiKey || !projectId || !appId) return null;
   return {
     apiKey,
     projectId,
     appId,
-    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? `${projectId}.firebaseapp.com`,
-    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+    authDomain: cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN) ?? `${projectId}.firebaseapp.com`,
+    storageBucket: cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET),
+    messagingSenderId: cleanEnv(process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID),
   };
 }
 

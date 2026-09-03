@@ -205,6 +205,7 @@ function describeAuthError(e: unknown): string {
   if (code.includes("admin-restricted-operation")) return "Guest access is not enabled for this Firebase project. Enable Anonymous under Authentication → Sign-in method.";
   if (code.includes("operation-not-allowed")) return "Email/password sign-in is not enabled for this Firebase project. Enable it under Authentication → Sign-in method.";
   if (code.includes("unauthorized-domain")) return "This domain is not authorised for sign-in. Add it under Authentication → Settings → Authorized domains.";
+  if (code.includes("api-key-not-valid") || code.includes("invalid-api-key")) return "Firebase rejected the Web API key. Copy apiKey from Firebase console → Project settings → Your apps (no quotes or commas) into NEXT_PUBLIC_FIREBASE_API_KEY and restart the dev server.";
   if (code.includes("network-request-failed")) return "Could not reach Firebase. Check your connection and the NEXT_PUBLIC_FIREBASE_* settings.";
   return e instanceof Error ? e.message : String(e);
 }
