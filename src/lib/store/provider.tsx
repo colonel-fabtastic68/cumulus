@@ -9,6 +9,8 @@ import type { Store } from "./types";
 interface StoreContextValue {
   store: Store;
   ready: boolean;
+  /** Set when the backend failed to initialise (Firestore mode). */
+  error: string | null;
 }
 
 const StoreContext = createContext<StoreContextValue | null>(null);
@@ -16,18 +18,24 @@ const StoreContext = createContext<StoreContextValue | null>(null);
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [store] = useState<Store>(() => createStore());
   const [ready, setReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    store.ready().then(() => {
-      if (!cancelled) setReady(true);
-    });
+    store.ready().then(
+      () => {
+        if (!cancelled) setReady(true);
+      },
+      (e: unknown) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      },
+    );
     return () => {
       cancelled = true;
     };
   }, [store]);
 
-  const value = useMemo(() => ({ store, ready }), [store, ready]);
+  const value = useMemo(() => ({ store, ready, error }), [store, ready, error]);
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
 

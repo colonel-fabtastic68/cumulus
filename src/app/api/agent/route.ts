@@ -1,10 +1,75 @@
 import { createGoogle } from "@ai-sdk/google";
-import { convertToModelMessages, createUIMessageStreamResponse, isStepCount, streamText, toUIMessageStream, type UIMessage } from "ai";
+import { APICallError, convertToModelMessages, createUIMessageStreamResponse, isStepCount, streamText, toUIMessageStream, wrapLanguageModel, type LanguageModelMiddleware, type UIMessage } from "ai";
 import { agentTools } from "@/lib/agent/tools";
 
 export const maxDuration = 60;
 
 const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.8-flash";
+/** Tried in order when the primary model is overloaded (503) or rate-limited (429). */
+const FALLBACK_MODELS = (process.env.GEMINI_FALLBACK_MODELS ?? "gemini-flash-latest,gemini-2.5-flash")
+  .split(",")
+  .map((s) => s.trim())
+  .filter((s) => s && s !== MODEL);
+
+function isOverloaded(e: unknown): boolean {
+  if (APICallError.isInstance(e)) return e.statusCode === 503 || e.statusCode === 429 || e.isRetryable;
+  return /high demand|overloaded|503|429|UNAVAILABLE|RESOURCE_EXHAUSTED/i.test(e instanceof Error ? e.message : String(e));
+}
+
+/**
+ * Primary Gemini model with automatic fallback: if the first call fails with an
+ * overload/rate-limit error, the same request is retried on each fallback model.
+ */
+function modelWithFallback(google: ReturnType<typeof createGoogle>) {
+  const middleware: LanguageModelMiddleware = {
+    wrapStream: async ({ doStream, params }) => {
+      try {
+        return await doStream();
+      } catch (primary) {
+        if (!isOverloaded(primary)) throw primary;
+        let last: unknown = primary;
+        for (const id of FALLBACK_MODELS) {
+          try {
+            console.warn(`[agent] ${MODEL} unavailable, falling back to ${id}`);
+            return await google(id).doStream(params);
+          } catch (e) {
+            last = e;
+            if (!isOverloaded(e)) throw e;
+          }
+        }
+        throw last;
+      }
+    },
+    wrapGenerate: async ({ doGenerate, params }) => {
+      try {
+        return await doGenerate();
+      } catch (primary) {
+        if (!isOverloaded(primary)) throw primary;
+        let last: unknown = primary;
+        for (const id of FALLBACK_MODELS) {
+          try {
+            return await google(id).doGenerate(params);
+          } catch (e) {
+            last = e;
+            if (!isOverloaded(e)) throw e;
+          }
+        }
+        throw last;
+      }
+    },
+  };
+  return wrapLanguageModel({ model: google(MODEL), middleware });
+}
+
+/** Turn provider errors into something the person in the chat can act on. */
+function friendlyError(error: unknown): string {
+  const msg = error instanceof Error ? error.message : String(error);
+  if (/high demand|overloaded|503|UNAVAILABLE/i.test(msg)) return `Gemini is overloaded right now (${MODEL}${FALLBACK_MODELS.length ? ` and fallbacks ${FALLBACK_MODELS.join(", ")}` : ""}). Wait a moment and send the message again.`;
+  if (/429|RESOURCE_EXHAUSTED|quota/i.test(msg)) return "Gemini rate limit or quota reached for this API key. Wait a minute or raise the quota in Google AI Studio.";
+  if (/API key|401|403|PERMISSION_DENIED/i.test(msg)) return "Gemini rejected the API key. Check GOOGLE_GENERATIVE_AI_API_KEY in .env.local and restart the dev server.";
+  if (/not found|404/i.test(msg)) return `Model "${MODEL}" was not found for this key. Set GEMINI_MODEL in .env.local to a model you have access to (for example gemini-2.5-flash).`;
+  return msg;
+}
 
 function systemPrompt(context: string, userName: string, autoApprove: boolean) {
   return `You are Cumulus, the inventory agent for a small company. You work inside their inventory workspace and can read everything and change anything through tools.
@@ -31,7 +96,7 @@ ${context}`;
 /** Lightweight status check used by Settings and the Agents page. */
 export async function GET() {
   const configured = Boolean(process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY);
-  return Response.json({ configured, model: MODEL });
+  return Response.json({ configured, model: MODEL, fallbacks: FALLBACK_MODELS });
 }
 
 export async function POST(req: Request) {
@@ -46,20 +111,22 @@ export async function POST(req: Request) {
   const google = createGoogle({ apiKey });
 
   const result = streamText({
-    model: google(MODEL),
+    model: modelWithFallback(google),
     instructions: systemPrompt(body.context ?? "(no snapshot provided)", body.userName ?? "a teammate", body.autoApprove ?? false),
     messages: await convertToModelMessages(body.messages),
     tools: agentTools,
     stopWhen: isStepCount(12),
+    // Fallback models run inside each attempt, so one retry is plenty.
+    maxRetries: 1,
     onError: ({ error }) => {
-      console.error("[agent]", error);
+      console.error("[agent]", error instanceof Error ? error.message : error);
     },
   });
 
   return createUIMessageStreamResponse({
     stream: toUIMessageStream({
       stream: result.stream,
-      onError: (error) => (error instanceof Error ? error.message : String(error)),
+      onError: friendlyError,
     }),
   });
 }

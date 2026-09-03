@@ -1,4 +1,5 @@
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
 import {
   getFirestore,
   collection,
@@ -58,7 +59,7 @@ export class FirestoreStore implements Store {
   private readyPromise: Promise<void>;
 
   constructor(
-    app: FirebaseApp,
+    private app: FirebaseApp,
     private workspaceId: string,
     private seed: () => WorkspaceSnapshot,
   ) {
@@ -74,9 +75,24 @@ export class FirestoreStore implements Store {
     return collection(this.db, "workspaces", this.workspaceId, name);
   }
 
+  /** Resolves once Firebase Auth reports a signed-in user. Rules require auth, so reads must wait. */
+  private waitForSignIn(): Promise<void> {
+    return new Promise((resolve) => {
+      const unsub = onAuthStateChanged(getAuth(this.app), (user) => {
+        if (user) {
+          unsub();
+          resolve();
+        }
+      });
+    });
+  }
+
   private async init() {
+    await this.waitForSignIn();
     // Seed an empty workspace on first use.
-    const settingsSnap = await getDocs(this.col("settings"));
+    const settingsSnap = await getDocs(this.col("settings")).catch((e: unknown) => {
+      throw new Error(describeFirestoreError(e));
+    });
     if (settingsSnap.empty) {
       await this.replaceAll(this.seed());
     }
@@ -183,6 +199,17 @@ export class FirestoreStore implements Store {
   dispose() {
     for (const u of this.unsubs) u();
   }
+}
+
+/** Turn Firestore SDK errors into something a pilot user can act on. */
+export function describeFirestoreError(e: unknown): string {
+  const code = (e as { code?: string })?.code ?? "";
+  const msg = e instanceof Error ? e.message : String(e);
+  if (code.includes("permission-denied")) return "Firestore refused the request (permission denied). Deploy firestore.rules from this repo, or set your rules to allow signed-in users.";
+  if (code.includes("unavailable") || /offline/i.test(msg)) return "Could not reach Firestore. Check that Cloud Firestore is enabled for the project in the Firebase console and that NEXT_PUBLIC_FIREBASE_PROJECT_ID is right.";
+  if (code.includes("failed-precondition")) return "Firestore reported a failed precondition. Usually the database has not been created yet: open Firestore in the Firebase console and create it (Native mode).";
+  if (code.includes("unauthenticated")) return "Firestore rejected the request as unauthenticated. Sign in again.";
+  return `Firestore error: ${msg}`;
 }
 
 /**

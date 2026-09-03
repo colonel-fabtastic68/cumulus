@@ -1,55 +1,123 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { AgentPanel } from "@/components/agent/AgentPanel";
 import { useAuth } from "@/lib/auth";
 import { useStoreContext } from "@/lib/store/provider";
-import { Button, Skeleton } from "@/components/ui";
+import { Banner, Button, Skeleton } from "@/components/ui";
 import { CloudMark } from "./Sidebar";
 
-export function AppShell({ children }: { children: ReactNode }) {
-  const { ready } = useStoreContext();
-  const { user, loading, mode, signIn } = useAuth();
-  const [mobileNav, setMobileNav] = useState(false);
-
-  if (!ready || loading) {
-    return (
-      <div className="flex h-screen">
-        <div className="hidden w-[232px] border-r border-border p-4 md:block">
-          <Skeleton className="mb-6 h-7 w-32" />
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="mb-2 h-7 w-full" />
+function LoadingSkeleton({ note }: { note?: ReactNode }) {
+  return (
+    <div className="flex h-screen">
+      <div className="hidden w-[232px] border-r border-border p-4 md:block">
+        <Skeleton className="mb-6 h-7 w-32" />
+        {Array.from({ length: 8 }).map((_, i) => (
+          <Skeleton key={i} className="mb-2 h-7 w-full" />
+        ))}
+      </div>
+      <div className="flex-1 p-8">
+        <Skeleton className="mb-4 h-7 w-56" />
+        <div className="grid grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-24" />
           ))}
         </div>
-        <div className="flex-1 p-8">
-          <Skeleton className="mb-4 h-7 w-56" />
-          <div className="grid grid-cols-4 gap-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-24" />
-            ))}
-          </div>
-        </div>
+        {note && <div className="mt-6 max-w-xl">{note}</div>}
       </div>
-    );
-  }
+    </div>
+  );
+}
 
-  if (mode === "firestore" && !user) {
+function CenterCard({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex h-screen items-center justify-center bg-bg p-6">
+      <div className="card w-full max-w-md p-6">{children}</div>
+    </div>
+  );
+}
+
+const FIRESTORE_HINTS = (
+  <ul className="mt-2 list-disc pl-4 text-[12.5px] text-text-secondary">
+    <li>Cloud Firestore is created for the project (Firebase console → Build → Firestore Database).</li>
+    <li>Rules allow signed-in users: deploy <code>firestore.rules</code> from this repo.</li>
+    <li>
+      <code>NEXT_PUBLIC_FIREBASE_PROJECT_ID</code> matches the project. Remove the <code>NEXT_PUBLIC_FIREBASE_*</code> lines from <code>.env.local</code> to go back to local mode.
+    </li>
+  </ul>
+);
+
+export function AppShell({ children }: { children: ReactNode }) {
+  const { ready, error: storeError } = useStoreContext();
+  const { user, signedIn, loading, mode, authError, signIn } = useAuth();
+  const [mobileNav, setMobileNav] = useState(false);
+  const [slow, setSlow] = useState(false);
+
+  // Flag a slow Firestore connection so the skeleton never looks frozen.
+  useEffect(() => {
+    if (mode !== "firestore" || ready || !signedIn) return;
+    const t = setTimeout(() => setSlow(true), 8000);
+    return () => clearTimeout(t);
+  }, [mode, ready, signedIn]);
+
+  if (loading) return <LoadingSkeleton />;
+
+  if (mode === "firestore" && !signedIn) {
     return (
-      <div className="flex h-screen items-center justify-center bg-bg p-6">
-        <div className="card w-full max-w-sm p-6 text-center">
-          <span className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-[10px] bg-primary text-white">
+      <CenterCard>
+        <div className="text-center">
+          <span className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-[10px] bg-primary text-text-inverse">
             <CloudMark className="h-5 w-5" />
           </span>
           <h1 className="text-[16px] font-semibold">Sign in to Cumulus</h1>
-          <p className="mt-1 text-[13px] text-text-secondary">Use your Google account to join the workspace.</p>
+          <p className="mt-1 text-[13px] text-text-secondary">This workspace lives in Google Cloud Firestore. Use your Google account to join it.</p>
           <Button variant="primary" className="mt-4" fullWidth onClick={() => signIn()}>
             Continue with Google
           </Button>
+          {authError && (
+            <Banner tone="critical" className="mt-4 text-left">
+              {authError}
+            </Banner>
+          )}
+          <p className="mt-4 text-[12px] text-text-tertiary">
+            Prefer to try it without an account? Remove the <code>NEXT_PUBLIC_FIREBASE_*</code> lines from <code>.env.local</code> and restart for local mode.
+          </p>
         </div>
-      </div>
+      </CenterCard>
+    );
+  }
+
+  if (storeError) {
+    return (
+      <CenterCard>
+        <h1 className="text-[16px] font-semibold">Couldn&apos;t open the workspace</h1>
+        <Banner tone="critical" className="mt-3">
+          {storeError}
+        </Banner>
+        <p className="mt-3 text-[13px] text-text-secondary">Check that:</p>
+        {FIRESTORE_HINTS}
+        <Button className="mt-4" onClick={() => window.location.reload()}>
+          Try again
+        </Button>
+      </CenterCard>
+    );
+  }
+
+  if (!ready || !user) {
+    return (
+      <LoadingSkeleton
+        note={
+          slow ? (
+            <Banner tone="info" title="Still connecting to Firestore…">
+              This is taking longer than usual. It usually means the database is not reachable. Check that:
+              {FIRESTORE_HINTS}
+            </Banner>
+          ) : undefined
+        }
+      />
     );
   }
 

@@ -13,9 +13,13 @@ export const ONLINE_WINDOW_MS = 2 * 60_000;
 interface AuthContextValue {
   /** Current member, or null when signed out (Firestore mode only). */
   user: Member | null;
+  /** Firestore mode: a Firebase account is signed in (the member record may still be loading). */
+  signedIn: boolean;
   /** True while resolving auth state. */
   loading: boolean;
   mode: "local" | "firestore";
+  /** Sign-in failure, e.g. Google provider not enabled. */
+  authError: string | null;
   /** Local mode: switch the simulated user. */
   switchUser: (memberId: string) => void;
   /** Firestore mode: Google sign-in. */
@@ -33,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const mode = store.kind;
   const [savedLocalUserId, setSavedLocalUserId] = useState<string | null>(() => (typeof localStorage !== "undefined" ? localStorage.getItem(LOCAL_USER_KEY) : null));
   const [firebaseUid, setFirebaseUid] = useState<string | null | undefined>(undefined);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // ---- Local mode: saved member, else the owner, else the first member
   const localUserId = useMemo(() => {
@@ -88,7 +93,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const userId = mode === "local" ? localUserId : firebaseUid ?? null;
   const user = useMemo(() => members.find((m) => m.id === userId) ?? null, [members, userId]);
-  const loading = !ready || (mode === "firestore" && firebaseUid === undefined);
+  const signedIn = mode === "local" ? true : !!firebaseUid;
+  // In Firestore mode the store only initialises after sign-in, so auth state resolves first.
+  const loading = mode === "firestore" ? firebaseUid === undefined : !ready;
 
   // ---- Presence heartbeat
   useEffect(() => {
@@ -110,8 +117,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(async () => {
     const cfg = readFirebaseConfig();
     if (!cfg) return;
-    const { getAuth, GoogleAuthProvider, signInWithPopup } = await import("firebase/auth");
-    await signInWithPopup(getAuth(getFirebaseApp(cfg)), new GoogleAuthProvider());
+    setAuthError(null);
+    try {
+      const { getAuth, GoogleAuthProvider, signInWithPopup } = await import("firebase/auth");
+      await signInWithPopup(getAuth(getFirebaseApp(cfg)), new GoogleAuthProvider());
+    } catch (e) {
+      const code = (e as { code?: string })?.code ?? "";
+      if (code.includes("operation-not-allowed")) setAuthError("Google sign-in is not enabled for this Firebase project. Enable it under Authentication → Sign-in method.");
+      else if (code.includes("unauthorized-domain")) setAuthError("This domain is not authorised for sign-in. Add localhost under Authentication → Settings → Authorized domains.");
+      else if (code.includes("popup-closed-by-user") || code.includes("cancelled-popup-request")) setAuthError(null);
+      else setAuthError(e instanceof Error ? e.message : String(e));
+    }
   }, []);
 
   const signOut = useCallback(async () => {
@@ -122,8 +138,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, loading, mode, switchUser, signIn, signOut }),
-    [user, loading, mode, switchUser, signIn, signOut],
+    () => ({ user, signedIn, loading, mode, authError, switchUser, signIn, signOut }),
+    [user, signedIn, loading, mode, authError, switchUser, signIn, signOut],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
