@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Member } from "@/lib/types";
 import { newId, nowIso } from "@/lib/utils";
 import { useCollection, useStoreContext } from "@/lib/store/provider";
@@ -18,12 +18,18 @@ interface AuthContextValue {
   /** True while resolving auth state. */
   loading: boolean;
   mode: "local" | "firestore";
-  /** Sign-in failure, e.g. Google provider not enabled. */
+  /** Sign-in failure, e.g. provider not enabled or wrong password. */
   authError: string | null;
   /** Local mode: switch the simulated user. */
   switchUser: (memberId: string) => void;
-  /** Firestore mode: Google sign-in. */
-  signIn: () => Promise<void>;
+  /** Firestore mode: email + password sign-in. Resolves true on success. */
+  signIn: (email: string, password: string) => Promise<boolean>;
+  /** Firestore mode: create an email + password account. */
+  signUp: (name: string, email: string, password: string) => Promise<boolean>;
+  /** Firestore mode: anonymous guest session. */
+  signInAsGuest: () => Promise<boolean>;
+  /** Firestore mode: send a password reset email. */
+  resetPassword: (email: string) => Promise<boolean>;
   signOut: () => Promise<void>;
 }
 
@@ -38,6 +44,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [savedLocalUserId, setSavedLocalUserId] = useState<string | null>(() => (typeof localStorage !== "undefined" ? localStorage.getItem(LOCAL_USER_KEY) : null));
   const [firebaseUid, setFirebaseUid] = useState<string | null | undefined>(undefined);
   const [authError, setAuthError] = useState<string | null>(null);
+  /** Display name chosen on the sign-up form; read when the member record is first created. */
+  const pendingName = useRef<string | null>(null);
 
   // ---- Local mode: saved member, else the owner, else the first member
   const localUserId = useMemo(() => {
@@ -63,13 +71,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const existing = await store.get("members", u.uid);
         if (!existing) {
           const all = await store.list("members");
+          const guest = u.isAnonymous;
+          const name = pendingName.current?.trim() || u.displayName || (guest ? `Guest ${u.uid.slice(0, 4).toUpperCase()}` : u.email?.split("@")[0]) || "Teammate";
+          pendingName.current = null;
           const member: Member = {
             id: u.uid,
-            name: u.displayName ?? u.email ?? "Teammate",
+            name,
             email: u.email ?? "",
             role: all.length === 0 ? "owner" : "member",
             color: AVATAR_COLORS[all.length % AVATAR_COLORS.length]!,
             status: "active",
+            guest: guest || undefined,
             lastSeenAt: nowIso(),
             createdAt: nowIso(),
           };
@@ -114,21 +126,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSavedLocalUserId(memberId);
   }, []);
 
-  const signIn = useCallback(async () => {
+  /** Runs a Firebase Auth call and turns its error codes into plain-language messages. */
+  const runAuth = useCallback(async (action: (auth: import("firebase/auth").Auth) => Promise<unknown>): Promise<boolean> => {
     const cfg = readFirebaseConfig();
-    if (!cfg) return;
+    if (!cfg) return false;
     setAuthError(null);
     try {
-      const { getAuth, GoogleAuthProvider, signInWithPopup } = await import("firebase/auth");
-      await signInWithPopup(getAuth(getFirebaseApp(cfg)), new GoogleAuthProvider());
+      const { getAuth } = await import("firebase/auth");
+      await action(getAuth(getFirebaseApp(cfg)));
+      return true;
     } catch (e) {
-      const code = (e as { code?: string })?.code ?? "";
-      if (code.includes("operation-not-allowed")) setAuthError("Google sign-in is not enabled for this Firebase project. Enable it under Authentication → Sign-in method.");
-      else if (code.includes("unauthorized-domain")) setAuthError("This domain is not authorised for sign-in. Add localhost under Authentication → Settings → Authorized domains.");
-      else if (code.includes("popup-closed-by-user") || code.includes("cancelled-popup-request")) setAuthError(null);
-      else setAuthError(e instanceof Error ? e.message : String(e));
+      setAuthError(describeAuthError(e));
+      return false;
     }
   }, []);
+
+  const signIn = useCallback(
+    (email: string, password: string) =>
+      runAuth(async (auth) => {
+        const { signInWithEmailAndPassword } = await import("firebase/auth");
+        await signInWithEmailAndPassword(auth, email.trim(), password);
+      }),
+    [runAuth],
+  );
+
+  const signUp = useCallback(
+    (name: string, email: string, password: string) =>
+      runAuth(async (auth) => {
+        const { createUserWithEmailAndPassword, updateProfile } = await import("firebase/auth");
+        pendingName.current = name;
+        const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        if (name.trim()) await updateProfile(cred.user, { displayName: name.trim() });
+      }),
+    [runAuth],
+  );
+
+  const signInAsGuest = useCallback(
+    () =>
+      runAuth(async (auth) => {
+        const { signInAnonymously } = await import("firebase/auth");
+        await signInAnonymously(auth);
+      }),
+    [runAuth],
+  );
+
+  const resetPassword = useCallback(
+    (email: string) =>
+      runAuth(async (auth) => {
+        const { sendPasswordResetEmail } = await import("firebase/auth");
+        await sendPasswordResetEmail(auth, email.trim());
+      }),
+    [runAuth],
+  );
 
   const signOut = useCallback(async () => {
     const cfg = readFirebaseConfig();
@@ -138,10 +187,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, signedIn, loading, mode, authError, switchUser, signIn, signOut }),
-    [user, signedIn, loading, mode, authError, switchUser, signIn, signOut],
+    () => ({ user, signedIn, loading, mode, authError, switchUser, signIn, signUp, signInAsGuest, resetPassword, signOut }),
+    [user, signedIn, loading, mode, authError, switchUser, signIn, signUp, signInAsGuest, resetPassword, signOut],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+/** Plain-language messages for the Firebase Auth error codes a pilot user is likely to hit. */
+function describeAuthError(e: unknown): string {
+  const code = (e as { code?: string })?.code ?? "";
+  if (code.includes("invalid-credential") || code.includes("wrong-password") || code.includes("user-not-found")) return "Email or password is incorrect.";
+  if (code.includes("invalid-email")) return "That email address doesn't look right.";
+  if (code.includes("email-already-in-use")) return "An account with that email already exists. Sign in instead.";
+  if (code.includes("weak-password")) return "Use a password with at least 6 characters.";
+  if (code.includes("missing-password")) return "Enter a password.";
+  if (code.includes("too-many-requests")) return "Too many attempts. Wait a few minutes and try again.";
+  if (code.includes("admin-restricted-operation")) return "Guest access is not enabled for this Firebase project. Enable Anonymous under Authentication → Sign-in method.";
+  if (code.includes("operation-not-allowed")) return "Email/password sign-in is not enabled for this Firebase project. Enable it under Authentication → Sign-in method.";
+  if (code.includes("unauthorized-domain")) return "This domain is not authorised for sign-in. Add it under Authentication → Settings → Authorized domains.";
+  if (code.includes("network-request-failed")) return "Could not reach Firebase. Check your connection and the NEXT_PUBLIC_FIREBASE_* settings.";
+  return e instanceof Error ? e.message : String(e);
 }
 
 export function useAuth(): AuthContextValue {

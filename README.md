@@ -24,7 +24,7 @@ Open http://localhost:3000. The workspace is pre-seeded with a demo company (Hal
 | **Local** (default) | No `NEXT_PUBLIC_FIREBASE_*` vars | Browser `localStorage` | Open two tabs — changes sync live via `BroadcastChannel`. Use the avatar menu to switch between demo users. |
 | **Firestore** | Firebase env vars set | `workspaces/{id}/…` in Firestore | Real-time across every user and device. Google sign-in via Firebase Auth. |
 
-To use Firestore: create a Firebase project, enable **Firestore** and **Google** sign-in under Authentication, register a Web app, and copy its config into `.env.local`. For a pilot, Firestore rules can be `allow read, write: if request.auth != null;`.
+To use Firestore: create a Firebase project, enable **Firestore**, enable **Email/Password** and **Anonymous** under Authentication → Sign-in method, register a Web app, and copy its config into `.env.local`. Sign in with an email and password (or continue as a guest); the first account to sign in becomes the workspace owner. Rules are in `firestore.rules` (`allow read, write: if request.auth != null;`), which covers guests too.
 
 ### Agent
 

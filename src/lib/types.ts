@@ -252,6 +252,8 @@ export interface Member {
   /** Hex colour used for the avatar. */
   color: string;
   status: "active" | "invited";
+  /** Signed in anonymously (Firestore mode). */
+  guest?: boolean;
   lastSeenAt?: string;
   createdAt: string;
 }

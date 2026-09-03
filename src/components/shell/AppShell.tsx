@@ -8,7 +8,7 @@ import { AgentPanel } from "@/components/agent/AgentPanel";
 import { useAuth } from "@/lib/auth";
 import { useStoreContext } from "@/lib/store/provider";
 import { Banner, Button, Skeleton } from "@/components/ui";
-import { CloudMark } from "./Sidebar";
+import { SignInCard } from "./SignInCard";
 
 function LoadingSkeleton({ note }: { note?: ReactNode }) {
   return (
@@ -52,7 +52,7 @@ const FIRESTORE_HINTS = (
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { ready, error: storeError } = useStoreContext();
-  const { user, signedIn, loading, mode, authError, signIn } = useAuth();
+  const { user, signedIn, loading, mode } = useAuth();
   const [mobileNav, setMobileNav] = useState(false);
   const [slow, setSlow] = useState(false);
 
@@ -68,24 +68,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (mode === "firestore" && !signedIn) {
     return (
       <CenterCard>
-        <div className="text-center">
-          <span className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-[10px] bg-primary text-text-inverse">
-            <CloudMark className="h-5 w-5" />
-          </span>
-          <h1 className="text-[16px] font-semibold">Sign in to Cumulus</h1>
-          <p className="mt-1 text-[13px] text-text-secondary">This workspace lives in Google Cloud Firestore. Use your Google account to join it.</p>
-          <Button variant="primary" className="mt-4" fullWidth onClick={() => signIn()}>
-            Continue with Google
-          </Button>
-          {authError && (
-            <Banner tone="critical" className="mt-4 text-left">
-              {authError}
-            </Banner>
-          )}
-          <p className="mt-4 text-[12px] text-text-tertiary">
-            Prefer to try it without an account? Remove the <code>NEXT_PUBLIC_FIREBASE_*</code> lines from <code>.env.local</code> and restart for local mode.
-          </p>
-        </div>
+        <SignInCard />
       </CenterCard>
     );
   }
