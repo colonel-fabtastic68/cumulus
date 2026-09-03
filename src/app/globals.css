@@ -33,6 +33,11 @@
   --info: #1f5f8b;
   --info-soft: #e8f1f8;
 
+  /* iOS-style switch */
+  --switch-on: #34c759;
+  --switch-off: #e9e9eb;
+  --switch-knob: #ffffff;
+
   --radius-sm: 6px;
   --radius: 10px;
   --radius-lg: 14px;
@@ -69,6 +74,9 @@
   --color-critical-soft: var(--critical-soft);
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);
+  --color-switch-on: var(--switch-on);
+  --color-switch-off: var(--switch-off);
+  --color-switch-knob: var(--switch-knob);
   --radius-sm: var(--radius-sm);
   --radius-md: var(--radius);
   --radius-lg: var(--radius-lg);

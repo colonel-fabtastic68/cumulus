@@ -148,26 +148,61 @@ export function Checkbox({ label, checked, onChange, indeterminate, disabled, cl
   );
 }
 
-export function Toggle({ label, checked, onChange, help, disabled }: { label?: ReactNode; checked: boolean; onChange: (v: boolean) => void; help?: ReactNode; disabled?: boolean }) {
-  return (
-    <label className={cn("flex cursor-pointer items-start justify-between gap-4", disabled && "cursor-not-allowed opacity-60")}>
-      {label && (
-        <span>
-          <span className="text-[13px] font-medium text-text">{label}</span>
-          {help && <span className="block text-[12px] text-text-tertiary">{help}</span>}
-        </span>
+export interface ToggleProps {
+  label?: ReactNode;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  help?: ReactNode;
+  disabled?: boolean;
+  /** Compact 20px track for dense rows. */
+  size?: "sm" | "md";
+  className?: string;
+  "aria-label"?: string;
+}
+
+/**
+ * iOS-style switch: green track when on, light gray when off, white knob.
+ * The knob is anchored with left-0 so it always travels inside the track.
+ */
+export function Toggle({ label, checked, onChange, help, disabled, size = "md", className, "aria-label": ariaLabel }: ToggleProps) {
+  const track = size === "sm" ? "h-5 w-[34px]" : "h-[26px] w-[46px]";
+  const knob = size === "sm" ? "h-4 w-4" : "h-[22px] w-[22px]";
+  const travel = size === "sm" ? "translate-x-[14px]" : "translate-x-5";
+  const id = useId();
+  const control = (
+    <button
+      type="button"
+      role="switch"
+      id={id}
+      aria-checked={checked}
+      aria-label={ariaLabel ?? (label && typeof label === "string" ? label : undefined)}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={cn(
+        "relative inline-flex shrink-0 items-center rounded-full border-2 border-transparent p-0 transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-switch-on/40 focus-visible:ring-offset-2 disabled:cursor-not-allowed",
+        track,
+        checked ? "bg-switch-on" : "bg-switch-off",
       )}
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        disabled={disabled}
-        onClick={() => onChange(!checked)}
-        className={cn("relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors", checked ? "bg-primary" : "bg-border-strong")}
-      >
-        <span className={cn("absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform", checked ? "translate-x-[18px]" : "translate-x-0.5")} />
-      </button>
-    </label>
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute left-0 top-0 rounded-full bg-switch-knob shadow-[0_3px_8px_rgba(0,0,0,0.15),0_1px_1px_rgba(0,0,0,0.16)] transition-transform duration-200 ease-in-out",
+          knob,
+          checked ? travel : "translate-x-0",
+        )}
+      />
+    </button>
+  );
+  if (!label && !help) return <span className={cn("inline-flex", disabled && "opacity-60", className)}>{control}</span>;
+  return (
+    <div className={cn("flex items-start justify-between gap-4", disabled && "opacity-60", className)}>
+      <label htmlFor={id} className={cn("min-w-0", disabled ? "cursor-not-allowed" : "cursor-pointer")}>
+        <span className="text-[13px] font-medium text-text">{label}</span>
+        {help && <span className="block text-[12px] text-text-tertiary">{help}</span>}
+      </label>
+      <span className="mt-px shrink-0">{control}</span>
+    </div>
   );
 }
 
