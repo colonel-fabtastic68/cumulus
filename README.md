@@ -1,36 +1,75 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Cumulus
 
-## Getting Started
+Agentic, collaborative inventory management for small teams. Think Base44/Lovable meets Google Docs, for inventory.
 
-First, run the development server:
+This is an MVP for pilot testing. Everything runs locally with **no backend** except:
+
+- a Gemini API key for the agent, and
+- optionally Google Cloud Firestore for shared, real-time data (local mode works with zero setup).
+
+## Run it
 
 ```bash
+npm install
+cp .env.example .env.local   # add GOOGLE_GENERATIVE_AI_API_KEY
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000. The workspace is pre-seeded with a demo company (Halcyon Audio, a guitar-pedal maker) with six months of history so reports and the agent have something to chew on. Reset or clear it from **Settings → Data**.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Modes
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Mode | When | Where data lives | Collaboration |
+| --- | --- | --- | --- |
+| **Local** (default) | No `NEXT_PUBLIC_FIREBASE_*` vars | Browser `localStorage` | Open two tabs — changes sync live via `BroadcastChannel`. Use the avatar menu to switch between demo users. |
+| **Firestore** | Firebase env vars set | `workspaces/{id}/…` in Firestore | Real-time across every user and device. Google sign-in via Firebase Auth. |
 
-## Learn More
+To use Firestore: create a Firebase project, enable **Firestore** and **Google** sign-in under Authentication, register a Web app, and copy its config into `.env.local`. For a pilot, Firestore rules can be `allow read, write: if request.auth != null;`.
 
-To learn more about Next.js, take a look at the following resources:
+### Agent
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+The agent is Gemini Flash via the Vercel AI SDK (`/api/agent`). It has read tools (search, item detail, BOM explosion, where-used, reports) and write tools (bulk update, create items, adjust/receive/build, BOM edits, deactivate, orders, RMAs, suppliers). All tools execute **in the browser** against the active store, so the server never holds your data. Write tools render as proposal cards you approve or reject; flip **Settings → Agent → Auto-apply** to skip approvals.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Open it with the **Agent** button or `⌘J`. `⌘K` is global search; typing a question with no matches hands it to the agent.
 
-## Deploy on Vercel
+## What's in the MVP
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| Factor (from the brief) | Where |
+| --- | --- |
+| 3 · Bad data in = bad data out | Every quantity change is a ledger movement with a running balance (`Item → Stock history`). On-hand is never edited directly. |
+| 2 / 19 / 20 · Shelf, sub-assemblies, relieving correctly | BOMs within BOMs. Builds relieve sub-assemblies from stock or explode them to parts. Settings → relieve on build vs on fulfilment. Optional in-use tracking flag. |
+| 4 / 18 · Consumption at every layer | Reports → Consumption: sold vs consumed in builds vs written off vs returned, per item. Orders record who bought what. |
+| 5 / 17 · Projections & seasonality | Reports → Seasonality (monthly sales/consumption). The agent can project from it. |
+| 6 · Price & cost changes | Receiving updates standard cost. Agent bulk price/cost changes by % with margin preview. Sale price + quantity breaks per item. |
+| 7 · Receiving, back-dating | Receiving with a back-datable receipt date; today's totals stay correct. |
+| 8 · Waste | Expected waste % per item and per BOM line, applied on build. |
+| 9 · Lead times | Per item and per supplier; low-stock report shows lead time and days of cover. |
+| 10 · Shelf life | Lots per receipt/build with FIFO relief. Reports → Shelf life: oldest batch, average age. |
+| 11 · RMAs | Returns with condition and disposition; restock flows back into inventory automatically. |
+| 12 · Write-offs | Adjust stock → write-off with reason codes; separate report. |
+| 13 · Sale prices & qty breaks | Item → Pricing. Orders pick the right price for the quantity. |
+| 15 · BOM customisation & where-used | Item → BOM and Where used (direct + all ancestors). BOM tree with buildable quantity. |
+| 16 · Deactivating old part numbers | Superseded status with replacement link; agent sweep for inactive parts; bulk deactivate. |
+| 21 · Min/Max | Per item; Home + Reports → Low stock with reorder quantities grouped by supplier. |
+| Import / migration | Import → CSV with AI column mapping, preview, upsert by SKU. |
+| Integrations | Integrations page with Shopify / WooCommerce / QuickBooks / Square placeholders (not wired yet). |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Not yet: live vendor price feeds (6b), product configurators (15a/b), automatic sourcing search (14), scheduled automations actually running on a schedule (they're defined on the Agents page and can be run on demand), and live Shopify/WooCommerce sync (CSV import covers migration for now).
+
+Pilot testers: start with [docs/PILOT-GUIDE.md](docs/PILOT-GUIDE.md).
+
+## Architecture
+
+```
+src/
+  lib/types.ts          domain model (Item, StockMovement, Lot, Receipt, Build, SalesOrder, Rma, …)
+  lib/store/            Store interface + LocalStore (localStorage) + FirestoreStore
+  lib/inventory.ts      all mutations & reports (BOM explosion, receiving, builds, RMAs, imports…)
+  lib/agent/tools.ts    tool schemas shared by server and client
+  lib/agent/execute.ts  client-side tool execution against the store
+  app/api/agent         streamText + Gemini (no data access; tools run on the client)
+  components/ui         small Polaris-flavoured component kit
+  app/(app)/…           pages
+```
+
+Design language: flat white / off-white, quiet borders, 10–14px radii, Inter. Tokens live in `src/app/globals.css`.
