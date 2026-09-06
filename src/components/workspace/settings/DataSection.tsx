@@ -7,7 +7,7 @@ import { ChevronDown, ChevronRight, Database, Download, Eraser, RotateCcw, Uploa
 import { COLLECTIONS, type Member, type WorkspaceSettings, type WorkspaceSnapshot } from "@/lib/types";
 import { Badge, Button, ConfirmDialog, useToast } from "@/components/ui";
 import { useCollection, useStore } from "@/lib/store/provider";
-import { useAuth } from "@/lib/auth";
+import { useAuth, useCurrentUser } from "@/lib/auth";
 import { buildSeed, freshWorkspace } from "@/lib/seed";
 import { formatNumber } from "@/lib/format";
 import { toDateInput } from "@/lib/format";
@@ -59,6 +59,7 @@ function summarise(s: WorkspaceSnapshot): string {
 export function DataSection({ settings, canManage }: { settings: WorkspaceSettings; canManage: boolean }) {
   const store = useStore();
   const members = useCollection("members");
+  const user = useCurrentUser();
   const items = useCollection("items");
   const { mode } = useAuth();
   const toast = useToast();
@@ -120,7 +121,9 @@ export function DataSection({ settings, canManage }: { settings: WorkspaceSettin
         await store.replaceAll(mode === "firestore" ? keepTeam(buildSeed(), members) : buildSeed());
         toast("Demo data restored", "success");
       } else {
-        await store.replaceAll(freshWorkspace({ members, currency: settings.currency }));
+        // Keep real accounts only: drop the demo team (seed ids) and anonymous guest sessions.
+        const realMembers = members.filter((m) => !m.id.startsWith("u_") && !m.guest);
+        await store.replaceAll(freshWorkspace({ members: realMembers.length ? realMembers : members.filter((m) => m.id === user.id), currency: settings.currency }));
         toast("Workspace cleared", "success");
       }
       setPending(null);
