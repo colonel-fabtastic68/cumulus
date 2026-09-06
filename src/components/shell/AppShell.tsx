@@ -121,7 +121,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       )}
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar onMenu={() => setMobileNav(true)} />
-        <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
+        <main className="@container min-h-0 flex-1 overflow-y-auto">{children}</main>
       </div>
       <AgentPanel />
     </div>

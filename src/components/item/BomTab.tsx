@@ -117,7 +117,7 @@ function BomEditor({ item, items, currency, canEdit }: { item: Item; items: Item
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-x-6 gap-y-4 @md:grid-cols-4">
         <Tile label="Components" value={parsed.length} hint={`${parsed.filter((l) => byId.get(l.itemId)?.type === "assembly").length} sub-assemblies`} />
         <Tile label="Rolled-up cost" value={formatMoney(rolled, currency)} hint={dirty ? "From the unsaved draft" : "Recursive across sub-assemblies"} />
         <Tile

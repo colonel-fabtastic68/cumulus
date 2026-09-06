@@ -29,7 +29,7 @@ export function StockSummaryCard({ item, movements, lots, settings }: { item: It
 
   return (
     <Card>
-      <div className={cn("grid gap-x-6 gap-y-4", settings.trackInUse ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6" : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5")}>
+      <div className={cn("grid gap-x-6 gap-y-4", settings.trackInUse ? "grid-cols-2 @md:grid-cols-3 @3xl:grid-cols-6" : "grid-cols-2 @md:grid-cols-3 @3xl:grid-cols-5")}>
         <Tile label="On hand" value={formatQty(item.onHand, item.unit)} hint={item.location ? `Location ${item.location}` : undefined} tone={low ? "critical" : "default"} />
         {settings.trackInUse && <Tile label="In use" value={formatQty(item.inUse, item.unit)} hint="Checked out to jobs" />}
         <Tile

@@ -111,7 +111,7 @@ export function ReviewStep({ source, mapping, onBack, onDone }: ReviewStepProps)
           Your role can review the file but not import it. Ask an owner or admin to run the import or change your role.
         </Banner>
       )}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 @md:grid-cols-4">
         <SummaryTile label="Rows" value={counts.all} />
         <SummaryTile label="New items" value={counts.new} tone="success" />
         <SummaryTile label="Updates" value={counts.update} tone="info" />

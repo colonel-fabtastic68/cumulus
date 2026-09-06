@@ -61,7 +61,7 @@ function PricingEditor({ item, currency, canEdit }: { item: Item; currency: stri
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-x-6 gap-y-4 @md:grid-cols-5">
         <Tile label="List price" value={formatMoney(item.price, currency)} hint={item.price > 0 ? `${formatPercent(marginPct(item), 1)} margin` : "No price set"} tone={item.price > 0 ? marginTone(marginPct(item)) : "default"} />
         <Tile
           label="Sale price"
@@ -158,7 +158,7 @@ function PricingEditor({ item, currency, canEdit }: { item: Item; currency: stri
         <h4 className="text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">Quote calculator</h4>
         <div className="mt-2 flex flex-wrap items-end gap-4">
           <TextField label="Quantity" type="number" min={1} step={1} value={quoteQty} onChange={(e) => setQuoteQty(e.target.value)} containerClassName="w-32" />
-          <div className="grid w-full grid-cols-1 gap-6 sm:w-auto sm:grid-cols-3">
+          <div className="grid w-full grid-cols-1 gap-6 @md:w-auto @md:grid-cols-3">
             <Tile label="Unit price" value={formatMoney(quotePrice, currency)} hint={quotePrice < item.price ? `${formatPercent(round((1 - quotePrice / (item.price || 1)) * 100, 1), 1)} off list` : "List price"} />
             <Tile label="Total" value={formatMoney(round(quotePrice * q), currency)} hint={`${q} × ${formatMoney(quotePrice, currency)}`} />
             <Tile label="Margin" value={formatPercent(marginPct(item, quotePrice), 1)} hint={`${formatMoney(round((quotePrice - item.unitCost) * q), currency)} gross profit`} tone={marginTone(marginPct(item, quotePrice))} />

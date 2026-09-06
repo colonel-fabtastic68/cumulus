@@ -22,7 +22,7 @@ function computeStats(rmas: Rma[], movements: StockMovement[]) {
 export function RmaStats({ rmas, movements }: { rmas: Rma[]; movements: StockMovement[] }) {
   const stats = useMemo(() => computeStats(rmas, movements), [rmas, movements]);
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 @md:grid-cols-3">
       <Stat label="Open RMAs" value={formatNumber(stats.open)} hint="Awaiting inspection or a decision" tone={stats.open > 0 ? "warning" : "default"} icon={<RotateCcw />} />
       <Stat label="Units restocked" value={formatNumber(stats.restocked)} hint={`Last ${WINDOW_DAYS} days · back on the shelf`} tone={stats.restocked > 0 ? "success" : "default"} icon={<PackagePlus />} />
       <Stat label="Units scrapped" value={formatNumber(stats.scrapped)} hint={`Last ${WINDOW_DAYS} days · written off`} tone={stats.scrapped > 0 ? "critical" : "default"} icon={<Trash2 />} />

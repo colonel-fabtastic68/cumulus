@@ -166,7 +166,7 @@ export function WriteOffsReport() {
         }
       />
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 @md:grid-cols-3">
         <Stat label="Units written off" value={formatNumber(totals.units, 2)} hint={`${pluralize(rows.length, "event")} in the last ${days} days`} tone={totals.units > 0 ? "critical" : "default"} />
         <Stat label="Cost impact" value={formatMoney(totals.cost, currency)} hint="At the unit cost on each movement" tone={totals.cost > 0 ? "critical" : "default"} />
         <Stat label="Top reason" value={topReason ? topReason.reason : "—"} hint={topReason ? `${formatMoney(topReason.cost, currency)} · ${formatNumber(topReason.share, 1)}% of cost` : "Nothing written off"} />

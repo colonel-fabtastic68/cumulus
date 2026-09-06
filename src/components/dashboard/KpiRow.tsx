@@ -41,7 +41,7 @@ export function KpiRow({ value, currency, activeCount, assemblyCount, lowCount, 
   }
 
   return (
-    <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+    <div className="mb-4 grid grid-cols-2 gap-3 @xl:grid-cols-3 @3xl:grid-cols-6">
       <Stat label="Inventory value" value={formatMoney(value, currency)} hint="At standard cost" icon={<Wallet />} />
       <Stat label="Active SKUs" value={formatNumber(activeCount)} hint={`${pluralize(assemblyCount, "assembly", "assemblies")}`} icon={<Boxes />} href="/inventory" />
       <Stat

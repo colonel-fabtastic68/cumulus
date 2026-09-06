@@ -13,7 +13,7 @@ export function TopBar({ onMenu }: { onMenu?: () => void }) {
   const { mode, switchUser, signOut } = useAuth();
   const user = useCurrentUser();
   const members = useCollection("members");
-  const { open: openAgent, isOpen } = useAgent();
+  const { open: openAgent, toggle: toggleAgent, isOpen } = useAgent();
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchNonce, setSearchNonce] = useState(0);
   const openSearch = () => {
@@ -32,12 +32,12 @@ export function TopBar({ onMenu }: { onMenu?: () => void }) {
       }
       if (mod && e.key.toLowerCase() === "j") {
         e.preventDefault();
-        openAgent();
+        toggleAgent();
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [openAgent]);
+  }, [toggleAgent]);
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-bg px-4">
@@ -60,7 +60,7 @@ export function TopBar({ onMenu }: { onMenu?: () => void }) {
           <span>{online.length} online</span>
         </div>
       )}
-      <Button variant={isOpen ? "primary" : "secondary"} size="md" icon={<Sparkles />} onClick={() => openAgent()} className="hidden sm:inline-flex">
+      <Button variant={isOpen ? "primary" : "secondary"} size="md" icon={<Sparkles />} onClick={() => (isOpen ? toggleAgent() : openAgent())} className="hidden sm:inline-flex">
         Agent <Kbd>⌘J</Kbd>
       </Button>
       <IconButton variant="plain" size="md" className="text-text-secondary" aria-label="Activity" href="/activity" icon={<Bell />} />

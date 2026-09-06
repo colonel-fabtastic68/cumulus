@@ -39,7 +39,7 @@ export function DoneStep({ result, sourceName, attempted, onRestart }: DoneStepP
         </div>
       </Card>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 @md:grid-cols-4">
         <Stat label="Created" value={result.created} tone={result.created ? "success" : "default"} />
         <Stat label="Updated" value={result.updated} />
         <Stat label="Skipped" value={result.skipped} tone={result.skipped ? "warning" : "default"} />

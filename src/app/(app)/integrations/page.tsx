@@ -37,7 +37,7 @@ export default function IntegrationsPage() {
 
         <section>
           <SectionHeading title="Storefronts and accounting" description="Save your store details now so the connection is ready to switch on later." />
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2">
             {INTEGRATIONS.map((def) => (
               <IntegrationCard key={def.id} def={def} integration={byId.get(def.id)} onSetUp={() => setSetupId(def.id)} />
             ))}

@@ -56,7 +56,7 @@ export function Page({ title, subtitle, titleMeta, backHref, backLabel, primaryA
 /** Two-column layout for detail pages: main content + aside. */
 export function PageLayout({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-[minmax(0,1fr)_320px]">
       <div className="flex min-w-0 flex-col gap-4">{children}</div>
       {aside && <div className="flex flex-col gap-4">{aside}</div>}
     </div>
@@ -65,7 +65,7 @@ export function PageLayout({ children, aside }: { children: ReactNode; aside?: R
 
 export function Section({ title, description, children, actions }: { title: ReactNode; description?: ReactNode; children: ReactNode; actions?: ReactNode }) {
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-[240px_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 gap-4 @xl:grid-cols-[240px_minmax(0,1fr)]">
       <div>
         <h2 className="text-[14px] font-semibold text-text">{title}</h2>
         {description && <p className="mt-1 text-[12.5px] text-text-secondary">{description}</p>}

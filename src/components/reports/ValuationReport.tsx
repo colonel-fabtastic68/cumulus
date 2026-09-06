@@ -129,7 +129,7 @@ export function ValuationReport() {
         }
       />
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 @md:grid-cols-3">
         <Stat label="Total value" value={formatMoney(totalValue, currency)} hint="At standard cost" />
         <Stat label="Total units" value={formatNumber(totalUnits, 2)} hint="Across all units of measure" />
         <Stat label="SKUs with stock" value={formatNumber(stocked.length)} hint={`${pluralize(items.length - stocked.length, "SKU")} with nothing on hand`} />

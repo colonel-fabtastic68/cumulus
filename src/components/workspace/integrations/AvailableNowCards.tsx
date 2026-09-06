@@ -34,7 +34,7 @@ function FeatureCard({ icon, title, badge, description, action }: { icon: ReactN
 export function AvailableNowCards() {
   const { open } = useAgent();
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 @xl:grid-cols-3">
       <FeatureCard
         icon={<FileSpreadsheet />}
         title="CSV import"

@@ -35,17 +35,38 @@ function buildSuggestions(items: Item[], lowCount: number, inactivityDays: numbe
   ];
 }
 
+/** Width of the docked column: the 460px card plus 12px margins either side. */
+const DOCK_WIDTH = "md:w-[484px]";
+const EASE = "ease-[cubic-bezier(0.2,0.8,0.2,1)]";
+
+/**
+ * The agent lives in a column beside the page. Opening animates the column's
+ * width so the page content shifts left smoothly while the rounded card
+ * slides in from the right; closing reverses it. Below the md breakpoint
+ * there is no room to push, so the card floats over the page instead.
+ * Once opened, the chat stays mounted (hidden) so the conversation survives.
+ */
 export function AgentPanel() {
-  const { isOpen, close, pending, consumePending, pendingSession, consumePendingSession, pageContext } = useAgent();
-  if (!isOpen) return null;
+  const { isOpen, everOpened, close, pending, consumePending, pendingSession, consumePendingSession, pageContext } = useAgent();
   return (
-    <aside
-      role="complementary"
-      aria-label="Agent"
-      className="flyout-in fixed inset-x-2 bottom-2 top-2 z-[70] flex flex-col overflow-hidden rounded-[16px] bg-surface shadow-[var(--shadow-flyout)] sm:inset-x-auto sm:right-3 sm:bottom-3 sm:top-3 sm:w-[460px]"
-    >
-      <AgentChat onClose={close} pending={pending} consumePending={consumePending} pendingSession={pendingSession} consumePendingSession={consumePendingSession} pageContext={pageContext} />
-    </aside>
+    <div className={cn("relative w-0 shrink-0 overflow-hidden transition-[width] duration-300", EASE, isOpen ? DOCK_WIDTH : "md:w-0")}>
+      {everOpened && (
+        <aside
+          role="complementary"
+          aria-label="Agent"
+          aria-hidden={!isOpen}
+          inert={!isOpen}
+          className={cn(
+            "flex flex-col overflow-hidden rounded-[16px] bg-surface shadow-[var(--shadow-flyout)] transition-[transform,opacity] duration-300",
+            EASE,
+            "fixed inset-2 z-[70] md:absolute md:inset-y-3 md:left-3 md:z-auto md:w-[460px]",
+            isOpen ? "translate-x-0 opacity-100" : "translate-x-[calc(100%+16px)] opacity-0",
+          )}
+        >
+          <AgentChat onClose={close} pending={pending} consumePending={consumePending} pendingSession={pendingSession} consumePendingSession={consumePendingSession} pageContext={pageContext} />
+        </aside>
+      )}
+    </div>
   );
 }
 

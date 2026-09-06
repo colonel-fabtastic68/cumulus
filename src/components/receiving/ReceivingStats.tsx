@@ -47,7 +47,7 @@ export function ReceivingStats({ receipts }: { receipts: Receipt[] }) {
   }, [receipts]);
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 @md:grid-cols-3">
       <Stat label="Receipts this month" value={formatNumber(stats.thisMonth)} hint={stats.monthLabel} icon={<PackageCheck />} />
       <Stat
         label="Value received"

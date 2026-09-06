@@ -67,7 +67,7 @@ export function OverviewTab({ item, supplier, movements, membersById }: { item: 
   ];
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 gap-6 @3xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <div className="min-w-0">
         <h4 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">Details</h4>
         <DescriptionList rows={rows} />

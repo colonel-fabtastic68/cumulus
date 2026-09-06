@@ -4,6 +4,8 @@ import { createContext, useCallback, useContext, useMemo, useRef, useState, type
 
 interface AgentContextValue {
   isOpen: boolean;
+  /** True once the panel has been opened; it then stays mounted (hidden) so the conversation survives closing. */
+  everOpened: boolean;
   /** Open the panel, optionally pre-filling (and immediately sending) a prompt. */
   open: (prompt?: string, opts?: { send?: boolean }) => void;
   close: () => void;
@@ -24,6 +26,7 @@ const AgentContext = createContext<AgentContextValue | null>(null);
 
 export function AgentProvider({ children }: { children: ReactNode }) {
   const [isOpen, setOpen] = useState(false);
+  const [everOpened, setEverOpened] = useState(false);
   const [pending, setPending] = useState<AgentContextValue["pending"]>(null);
   const [pendingSession, setPendingSession] = useState<AgentContextValue["pendingSession"]>(null);
   const [pageContext, setPageContextState] = useState<AgentContextValue["pageContext"]>({});
@@ -31,13 +34,18 @@ export function AgentProvider({ children }: { children: ReactNode }) {
 
   const open = useCallback((prompt?: string, opts?: { send?: boolean }) => {
     setOpen(true);
+    setEverOpened(true);
     if (prompt) setPending({ prompt, send: opts?.send ?? false, nonce: ++nonce.current });
   }, []);
   const close = useCallback(() => setOpen(false), []);
-  const toggle = useCallback(() => setOpen((o) => !o), []);
+  const toggle = useCallback(() => {
+    setEverOpened(true);
+    setOpen((o) => !o);
+  }, []);
   const consumePending = useCallback(() => setPending(null), []);
   const openSession = useCallback((id: string) => {
     setOpen(true);
+    setEverOpened(true);
     setPendingSession({ id, nonce: ++nonce.current });
   }, []);
   const consumePendingSession = useCallback(() => setPendingSession(null), []);
@@ -46,8 +54,8 @@ export function AgentProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ isOpen, open, close, toggle, pending, consumePending, openSession, pendingSession, consumePendingSession, pageContext, setPageContext }),
-    [isOpen, open, close, toggle, pending, consumePending, openSession, pendingSession, consumePendingSession, pageContext, setPageContext],
+    () => ({ isOpen, everOpened, open, close, toggle, pending, consumePending, openSession, pendingSession, consumePendingSession, pageContext, setPageContext }),
+    [isOpen, everOpened, open, close, toggle, pending, consumePending, openSession, pendingSession, consumePendingSession, pageContext, setPageContext],
   );
   return <AgentContext.Provider value={value}>{children}</AgentContext.Provider>;
 }

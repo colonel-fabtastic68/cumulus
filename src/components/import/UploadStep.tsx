@@ -97,7 +97,7 @@ export function UploadStep({ source, onSource, onClear, onContinue }: UploadStep
           </div>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-2">
           <Card>
             <CardHeader title="Upload a file" subtitle="CSV or tab-separated, with a header row. Shopify and WooCommerce product exports work as-is." />
             <div
