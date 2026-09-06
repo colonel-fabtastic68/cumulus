@@ -24,7 +24,7 @@ Open http://localhost:3000. The workspace is pre-seeded with a demo company (Hal
 | **Local** (default) | No `FIREBASE_*` vars | Browser `localStorage` | Open two tabs — changes sync live via `BroadcastChannel`. Use the avatar menu to switch between demo users. |
 | **Firestore** | Firebase env vars set | `workspaces/{id}/…` in Firestore | Real-time across every user and device. Google sign-in via Firebase Auth. |
 
-To use Firestore: create a Firebase project, enable **Firestore**, enable **Email/Password** and **Anonymous** under Authentication → Sign-in method, register a Web app, and copy its config into `.env.local` as `FIREBASE_API_KEY`, `FIREBASE_PROJECT_ID`, `FIREBASE_APP_ID` (plus the optional `FIREBASE_AUTH_DOMAIN`, `FIREBASE_STORAGE_BUCKET`, `FIREBASE_MESSAGING_SENDER_ID`). Use the same names in Vercel; no `NEXT_PUBLIC_` prefix is needed because the server reads them at request time and passes the config to the browser. Sign in with an email and password (or continue as a guest); the first account to sign in becomes the workspace owner. Rules are in `firestore.rules` (`allow read, write: if request.auth != null;`), which covers guests too.
+To use Firestore: create a Firebase project, enable **Firestore**, enable **Email/Password** and **Anonymous** under Authentication → Sign-in method, register a Web app, and copy its config into `.env.local` as `FIREBASE_API_KEY`, `FIREBASE_PROJECT_ID`, `FIREBASE_APP_ID` (plus the optional `FIREBASE_AUTH_DOMAIN`, `FIREBASE_STORAGE_BUCKET`, `FIREBASE_MESSAGING_SENDER_ID`). Use the same names in Vercel; no `NEXT_PUBLIC_` prefix is needed because the server reads them at request time and passes the config to the browser. Sign in with an email and password (or continue as a guest); the first account to sign in becomes the workspace owner. A new Firestore workspace starts empty and asks for the company name; Settings → Data → Clear workspace wipes everything but the team and starts that over. Rules are in `firestore.rules` (`allow read, write: if request.auth != null;`), which covers guests too.
 
 ### Nimbus, the agent
 
@@ -40,7 +40,7 @@ Cumulus exposes its tool set over the [Model Context Protocol](https://modelcont
 claude mcp add --transport http cumulus http://localhost:3000/api/mcp --header "Authorization: Bearer $CUMULUS_MCP_TOKEN"
 ```
 
-Set `CUMULUS_MCP_TOKEN` to require a bearer token. For now the endpoint serves an in-memory demo workspace (writes stay in the server process); wiring it to the live Firestore workspace needs a server credential for the Firebase project, and the hook for that lives in `src/lib/mcp/store.ts`. The Nimbus page has a "Connect other agents" section with the endpoint, connection snippets, a token generator and a live test call.
+Set `CUMULUS_MCP_TOKEN` to require a bearer token. To serve the **live workspace**, give the server a Firebase service account: Firebase console → Project settings → Service accounts → Generate new private key, then put the JSON (one line) in `FIREBASE_SERVICE_ACCOUNT_JSON` locally and on Vercel. The endpoint then reads and writes `workspaces/<CUMULUS_WORKSPACE>` through the Admin SDK. Without it, the endpoint serves an in-memory demo workspace. The Nimbus page has a "Connect other agents" section with the endpoint, connection snippets, a token generator and a live test call.
 
 ## What's in the MVP
 

@@ -246,7 +246,7 @@ export function McpCard() {
             </tbody>
           </SimpleTable>
           <p className="mt-2 text-[12px] text-text-tertiary">
-            Groundwork: the endpoint is stateless JSON-RPC over HTTP and currently serves an in-memory demo workspace. Connecting it to the live Firestore workspace needs a server credential for the Firebase project; the hook for that is in <code>src/lib/mcp/store.ts</code>.
+            The endpoint is stateless JSON-RPC over HTTP. With <code>FIREBASE_SERVICE_ACCOUNT_JSON</code> set on the server it serves the live workspace (badge shows the workspace id); otherwise an in-memory demo, so nothing real is exposed by accident.
           </p>
         </div>
       </div>

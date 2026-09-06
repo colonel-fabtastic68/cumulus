@@ -8,7 +8,7 @@ import { COLLECTIONS, type Member, type WorkspaceSettings, type WorkspaceSnapsho
 import { Badge, Button, ConfirmDialog, useToast } from "@/components/ui";
 import { useCollection, useStore } from "@/lib/store/provider";
 import { useAuth } from "@/lib/auth";
-import { buildEmpty, buildSeed } from "@/lib/seed";
+import { buildSeed, freshWorkspace } from "@/lib/seed";
 import { formatNumber } from "@/lib/format";
 import { toDateInput } from "@/lib/format";
 
@@ -120,7 +120,7 @@ export function DataSection({ settings, canManage }: { settings: WorkspaceSettin
         await store.replaceAll(mode === "firestore" ? keepTeam(buildSeed(), members) : buildSeed());
         toast("Demo data restored", "success");
       } else {
-        await store.replaceAll(keepTeam({ ...buildEmpty(), members: [] }, members));
+        await store.replaceAll(freshWorkspace({ members, currency: settings.currency }));
         toast("Workspace cleared", "success");
       }
       setPending(null);

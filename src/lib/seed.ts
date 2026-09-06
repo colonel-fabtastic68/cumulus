@@ -610,8 +610,13 @@ export function buildSeed(debug?: string[]): WorkspaceSnapshot {
   return generate(overrides, behind, debug);
 }
 
-/** Empty workspace with sensible settings — for teams importing their own data. */
-export function buildEmpty(): WorkspaceSnapshot {
+/**
+ * A clean workspace for a real company: no items, no history, fresh document
+ * counters, and an empty company name so the app asks for it on first load.
+ * Pass the current members to keep the team (their accounts are real).
+ */
+export function freshWorkspace(opts: { members?: Member[]; companyName?: string; currency?: string } = {}): WorkspaceSnapshot {
+  const settings = seedSettings();
   return {
     items: [],
     movements: [],
@@ -621,7 +626,7 @@ export function buildEmpty(): WorkspaceSnapshot {
     builds: [],
     orders: [],
     rmas: [],
-    members: [SEED_MEMBERS[0]!],
+    members: opts.members ?? [],
     activity: [],
     integrations: [
       { id: "shopify", status: "not_connected", createdAt: iso(0) },
@@ -629,7 +634,12 @@ export function buildEmpty(): WorkspaceSnapshot {
       { id: "quickbooks", status: "not_connected", createdAt: iso(0) },
       { id: "square", status: "not_connected", createdAt: iso(0) },
     ],
-    settings: [{ ...seedSettings(), companyName: "My company" }],
+    settings: [{ ...settings, companyName: opts.companyName ?? "", currency: opts.currency ?? settings.currency, automations: settings.automations.map((a) => ({ ...a, enabled: false })) }],
     agentSessions: [],
   };
+}
+
+/** Kept for compatibility: an empty workspace with the demo owner. */
+export function buildEmpty(): WorkspaceSnapshot {
+  return freshWorkspace({ members: [SEED_MEMBERS[0]!], companyName: "My company" });
 }

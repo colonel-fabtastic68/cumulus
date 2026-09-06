@@ -6,7 +6,8 @@ import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { AgentPanel } from "@/components/agent/AgentPanel";
 import { useAuth } from "@/lib/auth";
-import { useStoreContext } from "@/lib/store/provider";
+import { useSettings, useStoreContext } from "@/lib/store/provider";
+import { Onboarding } from "./Onboarding";
 import { Banner, Button, Skeleton } from "@/components/ui";
 import { SignInCard } from "./SignInCard";
 
@@ -53,6 +54,7 @@ const FIRESTORE_HINTS = (
 export function AppShell({ children }: { children: ReactNode }) {
   const { ready, error: storeError } = useStoreContext();
   const { user, signedIn, loading, mode } = useAuth();
+  const settings = useSettings();
   const [mobileNav, setMobileNav] = useState(false);
   const [slow, setSlow] = useState(false);
 
@@ -103,6 +105,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       />
     );
   }
+
+  // A fresh workspace (no company name yet) asks for its basics first.
+  if (!settings.companyName.trim()) return <Onboarding />;
 
   return (
     <div className="flex h-screen overflow-hidden">

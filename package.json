@@ -13,6 +13,7 @@
     "@ai-sdk/react": "^4.0.94",
     "ai": "^7.0.91",
     "firebase": "^12.18.0",
+    "firebase-admin": "^14.3.0",
     "lucide-react": "^1.39.0",
     "next": "16.3.4",
     "papaparse": "^5.7.0",
