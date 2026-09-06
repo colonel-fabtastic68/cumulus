@@ -32,6 +32,16 @@ Nimbus, the agent, is Gemini Flash via the Vercel AI SDK (`/api/agent`). It has 
 
 Open it with the **Nimbus** button or `⌘J`. `⌘K` is global search; typing a question with no matches hands it to the agent. If Gemini answers 503 "high demand", the route automatically retries on the models in `GEMINI_FALLBACK_MODELS` (default `gemini-3.7-flash,gemini-3.5-flash,gemini-3.5-flash-lite,gemini-3.6-flash`), and any model that takes more than 15 s to start answering is skipped.
 
+### MCP endpoint (for other agents)
+
+Cumulus exposes its tool set over the [Model Context Protocol](https://modelcontextprotocol.io) at `POST /api/mcp` (JSON-RPC 2.0 over Streamable HTTP, stateless). Any MCP-capable host — Claude Code, Claude Desktop, Cursor, or a custom agent — gets the same tools Nimbus uses: workspace summary, item search and detail, BOM explosion, reports, and the write operations (adjust, receive, build, orders, returns, bulk updates).
+
+```bash
+claude mcp add --transport http cumulus http://localhost:3000/api/mcp --header "Authorization: Bearer $CUMULUS_MCP_TOKEN"
+```
+
+Set `CUMULUS_MCP_TOKEN` to require a bearer token. For now the endpoint serves an in-memory demo workspace (writes stay in the server process); wiring it to the live Firestore workspace needs a server credential for the Firebase project, and the hook for that lives in `src/lib/mcp/store.ts`. The Nimbus page has a "Connect other agents" section with the endpoint, connection snippets, a token generator and a live test call.
+
 ## What's in the MVP
 
 | Factor (from the brief) | Where |
