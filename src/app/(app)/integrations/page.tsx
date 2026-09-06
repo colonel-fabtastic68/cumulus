@@ -30,7 +30,7 @@ export default function IntegrationsPage() {
 
   return (
     <Page title="Integrations" subtitle="Connect the places your inventory already lives">
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4">
         <Banner tone="info" title="Live sync is not built yet">
           The cards below describe what each connection will do once it ships. Until then, every one of these platforms exports a CSV that imports here in under a minute, and the agent can do the rest.
         </Banner>

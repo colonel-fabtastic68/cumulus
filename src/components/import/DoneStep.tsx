@@ -16,9 +16,9 @@ export function DoneStep({ result, sourceName, attempted, onRestart }: DoneStepP
   const ok = result.errors.length === 0;
   return (
     <div className="flex flex-col gap-4">
-      <Card>
-        <div className="flex flex-col items-center py-4 text-center">
-          <span className={`mb-3 flex h-11 w-11 items-center justify-center rounded-full ${ok ? "bg-success-soft text-success" : "bg-warning-soft text-warning"}`}>
+      <Card className="px-6 py-8">
+        <div className="flex flex-col items-center text-center">
+          <span className={`mb-4 flex h-12 w-12 items-center justify-center rounded-full ${ok ? "bg-success-soft text-success" : "bg-warning-soft text-warning"}`}>
             <CheckCircle2 className="h-5 w-5" />
           </span>
           <h2 className="text-[16px] font-semibold text-text">{ok ? "Import complete" : "Import finished with some errors"}</h2>

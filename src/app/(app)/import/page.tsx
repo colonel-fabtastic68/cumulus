@@ -26,7 +26,7 @@ export default function ImportPage() {
       }
     >
       {!canWrite(user) && (
-        <Banner tone="warning" title="You have view-only access" className="mb-4">
+        <Banner tone="warning" title="You have view-only access">
           You can walk through the wizard and preview the mapping, but importing items needs a member, admin or owner role.
         </Banner>
       )}

@@ -14,16 +14,21 @@ export interface PageProps {
   secondaryActions?: ReactNode;
   children: ReactNode;
   className?: string;
-  /** Narrow content column for forms and settings. */
+  /** Constrain the content column (forms, settings). The header stays put. */
   narrow?: boolean;
-  /** Full-bleed width for wide tables. */
+  /** Kept for API compatibility; every page now shares one width. */
   wide?: boolean;
 }
 
-export function Page({ title, subtitle, titleMeta, backHref, backLabel, primaryAction, secondaryActions, children, className, narrow, wide }: PageProps) {
+/**
+ * Every page shares the same container, header position and content rhythm:
+ * same horizontal padding, title at the same offset, and a 16px gap between
+ * the blocks below it.
+ */
+export function Page({ title, subtitle, titleMeta, backHref, backLabel, primaryAction, secondaryActions, children, className, narrow }: PageProps) {
   return (
-    <div className={cn("animate-in mx-auto w-full px-5 py-5 md:px-8", narrow ? "max-w-3xl" : wide ? "max-w-[1400px]" : "max-w-[1160px]", className)}>
-      <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
+    <div className={cn("animate-in mx-auto w-full max-w-[1280px] px-6 py-6 md:px-8", className)}>
+      <header className="mb-6 flex min-h-[44px] flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           {backHref && (
             <Link href={backHref} className="mb-1.5 inline-flex items-center gap-0.5 text-[12.5px] text-text-secondary hover:text-text">
@@ -31,7 +36,7 @@ export function Page({ title, subtitle, titleMeta, backHref, backLabel, primaryA
             </Link>
           )}
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-[20px] font-semibold leading-7 tracking-[-0.01em] text-text">{title}</h1>
+            <h1 className="text-[20px] font-bold leading-7 tracking-[-0.01em] text-text">{title}</h1>
             {titleMeta}
           </div>
           {subtitle && <p className="mt-0.5 text-[13px] text-text-secondary">{subtitle}</p>}
@@ -43,7 +48,7 @@ export function Page({ title, subtitle, titleMeta, backHref, backLabel, primaryA
           </div>
         )}
       </header>
-      {children}
+      <div className={cn("flex flex-col gap-4", narrow && "max-w-3xl")}>{children}</div>
     </div>
   );
 }

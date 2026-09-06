@@ -6,7 +6,6 @@ export * from "./NeedsAttentionCard";
 export * from "./ToShipCard";
 export * from "./OpenReturnsCard";
 export * from "./ShippedVsBuiltChart";
-export * from "./AgentSuggestionsCard";
 export * from "./RecentActivityCard";
 export * from "./TeamCard";
 export * from "./DashboardEmpty";

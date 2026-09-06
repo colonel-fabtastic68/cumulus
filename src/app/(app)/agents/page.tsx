@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
-import { Sparkles } from "lucide-react";
-import { Button, Page } from "@/components/ui";
+import { Page } from "@/components/ui";
 import { useAgent } from "@/components/agent/AgentProvider";
-import { AgentStatusCard, AutomationsCard, ConversationsTable, DataHealthCard, QuickTasksGrid } from "@/components/agents";
+import { AgentStatusCard, AutomationsCard, ConversationsTable, DataHealthCard } from "@/components/agents";
 
 function SectionHeading({ title, description }: { title: ReactNode; description?: ReactNode }) {
   return (
@@ -16,29 +15,16 @@ function SectionHeading({ title, description }: { title: ReactNode; description?
 }
 
 export default function AgentsPage() {
-  const { open, setPageContext } = useAgent();
+  const { setPageContext } = useAgent();
 
   useEffect(() => {
     setPageContext({ page: "Agents" });
   }, [setPageContext]);
 
   return (
-    <Page
-      title="Agents"
-      subtitle="Delegate bulk work. The agent reads everything, proposes changes, and applies them after you approve."
-      primaryAction={
-        <Button variant="primary" icon={<Sparkles />} onClick={() => open()}>
-          Open agent
-        </Button>
-      }
-    >
-      <div className="flex flex-col gap-6">
+    <Page title="Agents" subtitle="Delegate bulk work. The agent reads everything, proposes changes, and applies them after you approve.">
+      <div className="flex flex-col gap-4">
         <AgentStatusCard />
-
-        <section>
-          <SectionHeading title="Quick tasks" description="One click sends a precise, ready-to-run request to the agent." />
-          <QuickTasksGrid />
-        </section>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <DataHealthCard />

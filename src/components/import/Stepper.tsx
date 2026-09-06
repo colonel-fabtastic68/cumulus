@@ -13,7 +13,7 @@ const STEPS: Array<{ step: WizardStep; label: string }> = [
 
 export function Stepper({ current, onStepClick }: { current: WizardStep; onStepClick?: (step: WizardStep) => void }) {
   return (
-    <ol className="card mb-4 flex items-center px-3 py-2.5 sm:px-4" aria-label="Import progress">
+    <ol className="card flex items-center px-3 py-2.5 sm:px-4" aria-label="Import progress">
       {STEPS.map((s, i) => {
         const done = s.step < current;
         const active = s.step === current;

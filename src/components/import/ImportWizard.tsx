@@ -26,7 +26,7 @@ export function ImportWizard() {
   const goTo = (next: WizardStep) => setState((s) => ({ ...s, step: next }));
 
   return (
-    <div>
+    <div className="flex flex-col gap-4">
       <Stepper current={step} onStepClick={goTo} />
       {step === 1 && (
         <UploadStep

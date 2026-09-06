@@ -7,7 +7,6 @@ import { ItemFormModal } from "@/components/inventory";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { canWrite, useCurrentUser } from "@/lib/auth";
 import {
-  AgentSuggestionsCard,
   DashboardEmpty,
   KpiRow,
   NeedsAttentionCard,
@@ -74,7 +73,6 @@ export default function HomePage() {
           <PageLayout
             aside={
               <>
-                <AgentSuggestionsCard suggestions={data.suggestions} />
                 <RecentActivityCard events={data.recentActivity} membersById={data.membersById} />
                 <TeamCard members={data.members} />
               </>

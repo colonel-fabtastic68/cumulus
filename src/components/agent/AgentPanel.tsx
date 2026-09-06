@@ -39,7 +39,11 @@ export function AgentPanel() {
   const { isOpen, close, pending, consumePending, pendingSession, consumePendingSession, pageContext } = useAgent();
   if (!isOpen) return null;
   return (
-    <aside className="fixed inset-y-0 right-0 z-[70] flex w-full flex-col border-l border-border bg-surface shadow-[var(--shadow-pop)] sm:w-[440px] lg:static lg:z-auto lg:w-[380px] lg:shadow-none xl:w-[440px]">
+    <aside
+      role="complementary"
+      aria-label="Agent"
+      className="flyout-in fixed inset-x-2 bottom-2 top-2 z-[70] flex flex-col overflow-hidden rounded-[16px] bg-surface shadow-[var(--shadow-flyout)] sm:inset-x-auto sm:right-3 sm:bottom-3 sm:top-3 sm:w-[460px]"
+    >
       <AgentChat onClose={close} pending={pending} consumePending={consumePending} pendingSession={pendingSession} consumePendingSession={consumePendingSession} pageContext={pageContext} />
     </aside>
   );
@@ -226,7 +230,7 @@ function AgentChat({ onClose, pending, consumePending, pendingSession, consumePe
 
   return (
     <>
-      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-3">
+      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface-subdued/80 px-3">
         <span className="flex h-7 w-7 items-center justify-center rounded-[8px] bg-accent-soft text-accent">
           <Sparkles className="h-4 w-4" />
         </span>

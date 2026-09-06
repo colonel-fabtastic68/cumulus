@@ -22,8 +22,8 @@ const base =
   "inline-flex items-center justify-center gap-1.5 font-medium whitespace-nowrap select-none transition-colors disabled:opacity-50 disabled:pointer-events-none rounded-[var(--radius-sm)]";
 
 const variants: Record<ButtonVariant, string> = {
-  primary: "bg-primary text-text-inverse hover:bg-primary-hover shadow-[inset_0_-1px_0_rgba(0,0,0,0.25)]",
-  secondary: "bg-surface text-text border border-border-strong/70 hover:bg-surface-hover shadow-[0_1px_0_rgba(0,0,0,0.04)]",
+  primary: "bg-primary text-text-inverse hover:bg-primary-hover shadow-[inset_0_-1px_0_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.12),0_1px_0_rgba(0,0,0,0.05)]",
+  secondary: "bg-surface text-text border border-border-strong/60 hover:bg-[#fafafa] active:bg-surface-hover shadow-[0_1px_0_rgba(0,0,0,0.05),inset_0_-1px_0_rgba(0,0,0,0.06)]",
   plain: "bg-transparent text-accent hover:bg-accent-soft/70",
   critical: "bg-critical text-text-inverse hover:bg-critical-hover",
   success: "bg-success text-text-inverse hover:bg-success-hover",
