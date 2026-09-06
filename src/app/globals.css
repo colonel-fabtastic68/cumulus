@@ -5,45 +5,75 @@
  * Modelled on Shopify Polaris (web) but intentionally lighter.
  */
 :root {
-  --bg: #f1f1f1;            /* app background (Polaris off-white) */
-  --surface: #ffffff;       /* cards, panels */
-  --surface-subdued: #fafafa;
-  --surface-hover: #f3f3f4;
-  --surface-selected: #eef4fb;
-  --border: #e3e3e5;
-  --border-strong: #c9c9cc;
+  /* Polaris colour tokens (admin, light) */
+  --bg: #f1f1f1;                 /* color-bg */
+  --surface: #ffffff;            /* color-bg-surface */
+  --surface-subdued: #f7f7f7;    /* color-bg-surface-secondary */
+  --surface-hover: #f7f7f7;      /* color-bg-surface-hover */
+  --surface-active: #f1f1f1;     /* color-bg-surface-active */
+  --surface-selected: #f1f1f1;   /* color-bg-surface-selected */
+  --fill-tertiary: #e3e3e3;      /* color-bg-fill-tertiary */
+  --nav-bg: #ebebeb;             /* frame navigation background */
+  --border: #e3e3e3;             /* color-border */
+  --border-secondary: #ebebeb;
+  --border-strong: #cccccc;      /* color-border-tertiary / hover */
+  --input-border: #8a8a8a;       /* color-input-border */
+  --input-border-hover: #616161;
   --text: #303030;
   --text-secondary: #616161;
   --text-tertiary: #8a8a8a;
+  --text-disabled: #b5b5b5;
   --text-inverse: #ffffff;
+  --icon: #4a4a4a;
 
-  --primary: #303030;       /* primary button (near-black, Polaris style) */
+  --primary: #303030;            /* color-bg-fill-brand */
   --primary-hover: #1a1a1a;
-  --accent: #2c6ecb;        /* links, focus, selection */
-  --accent-soft: #eaf2fc;
+  --primary-active: #0a0a0a;
+  --accent: #005bd3;             /* color-text-link / border-focus */
+  --accent-hover: #004299;
+  --accent-soft: #e0f0ff;
 
-  --success: #1f7a4d;
-  --success-hover: #186540;
-  --success-soft: #e6f4ec;
-  --warning: #9a6700;
-  --warning-soft: #fff4d6;
-  --critical: #b42318;
-  --critical-hover: #9a1d13;
-  --critical-soft: #fdecea;
-  --info: #1f5f8b;
-  --info-soft: #e8f1f8;
+  --success: #0c5132;            /* color-text-success */
+  --success-fill: #29845a;       /* color-bg-fill-success */
+  --success-hover: #1f6e4a;
+  --success-soft: #cdfee1;       /* color-bg-surface-success */
+  --warning: #5e4200;            /* color-text-warning */
+  --warning-fill: #ffb800;
+  --warning-soft: #ffd6a4;       /* color-bg-surface-warning */
+  --caution: #4f4700;
+  --caution-soft: #ffef9d;
+  --critical: #8e1f0b;           /* color-text-critical */
+  --critical-fill: #e51c00;      /* color-bg-fill-critical */
+  --critical-hover: #a80800;
+  --critical-soft: #fed1cb;      /* color-bg-surface-critical */
+  --info: #00527c;               /* color-text-info */
+  --info-soft: #e0f0ff;          /* color-bg-surface-info */
+  --magic: #5700d1;
+  --magic-soft: #f3f0ff;
 
-  /* iOS-style switch */
+  /* iOS-style switch (kept by request) */
   --switch-on: #34c759;
   --switch-off: #e9e9eb;
   --switch-knob: #ffffff;
 
+  /* Polaris radii: 200 = 8px, 300 = 12px */
   --radius-sm: 8px;
   --radius: 12px;
   --radius-lg: 12px;
-  --shadow-card: 0 1px 0 rgba(26, 26, 26, 0.07), 0 0 0 1px var(--border);
-  --shadow-pop: 0 4px 24px rgba(0, 0, 0, 0.08), 0 0 0 1px var(--border);
-  --shadow-flyout: 0 20px 60px rgba(26, 26, 26, 0.18), 0 2px 8px rgba(26, 26, 26, 0.08), 0 0 0 1px rgba(26, 26, 26, 0.06);
+
+  /* Polaris shadows */
+  --shadow-100: 0 1px 0 0 rgba(26, 26, 26, 0.07);
+  --shadow-300: 0 4px 6px -2px rgba(26, 26, 26, 0.2);
+  --shadow-400: 0 8px 16px -4px rgba(26, 26, 26, 0.22);
+  --shadow-600: 0 20px 20px -8px rgba(26, 26, 26, 0.28);
+  --shadow-bevel: 1px 1px 0 0 rgba(26, 26, 26, 0.07) inset, -1px 0 0 0 rgba(26, 26, 26, 0.07) inset, 0 -1px 0 0 rgba(26, 26, 26, 0.16) inset, 0 1px 0 0 rgba(26, 26, 26, 0.13);
+  --shadow-button: 0 -1px 0 0 #b5b5b5 inset, 0 0 0 1px rgba(0, 0, 0, 0.1) inset, 0 0.5px 0 1.5px #ffffff inset;
+  --shadow-button-hover: 0 1px 0 0 #e3e3e3 inset, -1px 0 0 0 #e3e3e3 inset, 1px 0 0 0 #e3e3e3 inset, 0 -1px 0 0 #b5b5b5 inset;
+  --shadow-button-primary: 0 -1px 0 1px rgba(0, 0, 0, 0.8) inset, 0 0 0 1px #303030 inset, 0 0.5px 0 1.5px rgba(255, 255, 255, 0.25) inset;
+  --shadow-button-primary-hover: 0 1px 0 0 rgba(255, 255, 255, 0.24) inset, 1px 0 0 0 rgba(255, 255, 255, 0.2) inset, -1px 0 0 0 rgba(255, 255, 255, 0.2) inset, 0 -1px 0 0 #000000 inset;
+  --shadow-card: var(--shadow-bevel);
+  --shadow-pop: var(--shadow-300), 0 0 0 1px rgba(26, 26, 26, 0.07);
+  --shadow-flyout: var(--shadow-600), 0 0 0 1px rgba(26, 26, 26, 0.07);
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -55,6 +85,22 @@
   --color-surface-subdued: var(--surface-subdued);
   --color-surface-hover: var(--surface-hover);
   --color-surface-selected: var(--surface-selected);
+  --color-surface-active: var(--surface-active);
+  --color-fill-tertiary: var(--fill-tertiary);
+  --color-nav-bg: var(--nav-bg);
+  --color-input-border: var(--input-border);
+  --color-input-border-hover: var(--input-border-hover);
+  --color-text-disabled: var(--text-disabled);
+  --color-icon: var(--icon);
+  --color-primary-active: var(--primary-active);
+  --color-accent-hover: var(--accent-hover);
+  --color-success-fill: var(--success-fill);
+  --color-warning-fill: var(--warning-fill);
+  --color-caution: var(--caution);
+  --color-caution-soft: var(--caution-soft);
+  --color-critical-fill: var(--critical-fill);
+  --color-magic: var(--magic);
+  --color-magic-soft: var(--magic-soft);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
   --color-text: var(--text);
@@ -94,7 +140,8 @@ body {
   color: var(--text);
   font-family: var(--font-sans);
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 20px;
+  font-weight: 450;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -125,7 +172,6 @@ body {
 :where(button, a, input, select, textarea, [tabindex]):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
-  border-radius: var(--radius-sm);
 }
 
 input[type="number"]::-webkit-inner-spin-button,
@@ -138,6 +184,14 @@ input[type="number"]::-webkit-outer-spin-button {
   background: var(--surface);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
+}
+
+/* Polaris weights on the variable Inter font */
+.font-medium {
+  font-weight: 550;
+}
+.font-semibold {
+  font-weight: 650;
 }
 
 .tabular {
@@ -218,7 +272,7 @@ input[type="number"]::-webkit-outer-spin-button {
   background: var(--surface-subdued);
   padding: 8px 12px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 550;
   color: var(--text-secondary);
 }
 :where(.simple-table) td {

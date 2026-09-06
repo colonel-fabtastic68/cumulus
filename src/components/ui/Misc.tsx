@@ -11,7 +11,7 @@ import type { Member } from "@/lib/types";
 
 export function Tabs<T extends string>({ value, onChange, tabs, className }: { value: T; onChange: (v: T) => void; tabs: Array<{ value: T; label: ReactNode; count?: number }>; className?: string }) {
   return (
-    <div className={cn("flex items-center gap-1 overflow-x-auto border-b border-border", className)} role="tablist">
+    <div className={cn("flex items-center gap-1 overflow-x-auto border-b border-border py-2", className)} role="tablist">
       {tabs.map((t) => (
         <button
           key={t.value}
@@ -20,12 +20,12 @@ export function Tabs<T extends string>({ value, onChange, tabs, className }: { v
           aria-selected={t.value === value}
           onClick={() => onChange(t.value)}
           className={cn(
-            "-mb-px inline-flex h-9 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 text-[13px] font-medium transition-colors",
-            t.value === value ? "border-primary text-text" : "border-transparent text-text-secondary hover:text-text",
+            "inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-sm)] px-3 text-[12px] font-[550] transition-colors",
+            t.value === value ? "bg-[rgba(0,0,0,0.06)] text-text" : "text-text-secondary hover:bg-[rgba(0,0,0,0.04)] hover:text-text",
           )}
         >
           {t.label}
-          {t.count !== undefined && <span className="rounded-full bg-surface-hover px-1.5 text-[11px] text-text-secondary">{t.count}</span>}
+          {t.count !== undefined && <span className={cn("rounded-[6px] px-1.5 text-[11px]", t.value === value ? "bg-surface text-text-secondary" : "bg-fill-tertiary/70 text-text-secondary")}>{t.count}</span>}
         </button>
       ))}
     </div>

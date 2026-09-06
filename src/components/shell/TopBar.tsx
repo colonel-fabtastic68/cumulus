@@ -40,14 +40,14 @@ export function TopBar({ onMenu }: { onMenu?: () => void }) {
   }, [toggleAgent]);
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-bg px-4">
+    <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-nav-bg px-4">
       <button type="button" onClick={onMenu} className="mr-1 rounded p-1.5 text-text-secondary hover:bg-surface-hover md:hidden" aria-label="Menu">
         <MenuIcon className="h-4 w-4" />
       </button>
       <button
         type="button"
         onClick={openSearch}
-        className="flex h-8 w-full max-w-md items-center gap-2 rounded-[var(--radius-sm)] border border-border bg-surface px-2.5 text-[13px] text-text-tertiary shadow-[0_1px_0_rgba(0,0,0,0.03)] hover:border-border-strong"
+        className="flex h-8 w-full max-w-md items-center gap-2 rounded-[var(--radius-sm)] border border-border bg-surface px-3 text-[13px] text-text-tertiary shadow-[var(--shadow-100)] hover:border-border-strong"
       >
         <Search className="h-3.5 w-3.5" />
         <span className="flex-1 text-left">Search items, orders, suppliers…</span>

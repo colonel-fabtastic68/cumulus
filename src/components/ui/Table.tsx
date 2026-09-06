@@ -85,7 +85,7 @@ export function Table<T>({ rows, columns, rowKey, rowLabel, onRowClick, selectab
     onSelectedChange?.(next);
   };
 
-  const cellPad = dense ? "px-3 py-1.5" : "px-3 py-2.5";
+  const cellPad = dense ? "px-3 py-1.5" : "px-3 py-2";
 
   return (
     <div className={cn("card overflow-hidden", className)}>
@@ -106,7 +106,7 @@ export function Table<T>({ rows, columns, rowKey, rowLabel, onRowClick, selectab
       )}
       <div className={cn("overflow-x-auto", stickyHeader && "max-h-[70vh] overflow-y-auto")}>
         <table className="w-full min-w-[640px] border-collapse text-[13px]">
-          <thead className={cn("bg-surface-subdued text-[12px] text-text-secondary", stickyHeader && "sticky top-0 z-[1]")}>
+          <thead className={cn("bg-surface-subdued text-[12px] font-[550] text-text-secondary", stickyHeader && "sticky top-0 z-[1]")}>
             <tr>
               {selectable && (
                 <th className={cn("w-9 border-b border-border", cellPad)}>

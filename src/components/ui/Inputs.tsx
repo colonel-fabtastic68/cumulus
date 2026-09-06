@@ -4,12 +4,13 @@ import { forwardRef, useId, type InputHTMLAttributes, type ReactNode, type Selec
 import { Check, ChevronDown, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+/** Polaris text field: 32px, 13px text, visible 1px border, focus in link blue. */
 const fieldBase =
-  "w-full rounded-[var(--radius-sm)] border border-border-strong/70 bg-surface px-2.5 text-[13px] text-text placeholder:text-text-tertiary shadow-[0_1px_0_rgba(0,0,0,0.03)] focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:bg-surface-subdued disabled:text-text-tertiary";
+  "w-full rounded-[var(--radius-sm)] border border-input-border bg-surface px-3 text-[13px] leading-5 text-text placeholder:text-text-tertiary transition-[border-color,box-shadow] duration-100 hover:border-input-border-hover focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent disabled:border-border disabled:bg-surface-subdued disabled:text-text-disabled";
 
 export function Label({ children, htmlFor, hint, className }: { children: ReactNode; htmlFor?: string; hint?: ReactNode; className?: string }) {
   return (
-    <label htmlFor={htmlFor} className={cn("mb-1 block text-[12.5px] font-medium text-text", className)}>
+    <label htmlFor={htmlFor} className={cn("mb-1 block text-[13px] leading-5 text-text", className)}>
       {children}
       {hint && <span className="ml-1 font-normal text-text-tertiary">{hint}</span>}
     </label>
@@ -236,15 +237,15 @@ export function FormGrid({ children, cols = 2, className }: { children: ReactNod
 /** Segmented filter control, e.g. status tabs above a table. */
 export function Segmented<T extends string>({ value, onChange, options, className }: { value: T; onChange: (v: T) => void; options: Array<{ value: T; label: ReactNode; count?: number }>; className?: string }) {
   return (
-    <div className={cn("inline-flex items-center gap-0.5 rounded-[var(--radius-sm)] bg-surface-hover p-0.5", className)}>
+    <div className={cn("inline-flex items-center gap-0.5 rounded-[var(--radius-sm)] bg-fill-tertiary/70 p-0.5", className)}>
       {options.map((o) => (
         <button
           key={o.value}
           type="button"
           onClick={() => onChange(o.value)}
           className={cn(
-            "inline-flex h-7 items-center gap-1.5 rounded-[5px] px-2.5 text-[12.5px] font-medium transition-colors",
-            o.value === value ? "bg-surface text-text shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-text-secondary hover:text-text",
+            "inline-flex h-7 items-center gap-1.5 rounded-[6px] px-2.5 text-[12px] font-[550] transition-colors",
+            o.value === value ? "bg-surface text-text shadow-[var(--shadow-100),0_0_0_1px_rgba(26,26,26,0.07)]" : "text-text-secondary hover:bg-[rgba(0,0,0,0.04)] hover:text-text",
           )}
         >
           {o.label}

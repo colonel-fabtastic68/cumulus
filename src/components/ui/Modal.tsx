@@ -85,7 +85,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
         {(title || subtitle) && (
           <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-3.5">
             <div>
-              {title && <h2 id={`${id}-title`} className="text-[15px] font-semibold text-text">{title}</h2>}
+              {title && <h2 id={`${id}-title`} className="text-[16px] font-[650] leading-6 text-text">{title}</h2>}
               {subtitle && <p className="mt-0.5 text-[12.5px] text-text-secondary">{subtitle}</p>}
             </div>
             <IconButton variant="plain" size="sm" onClick={onClose} aria-label="Close" className="text-text-secondary">
@@ -112,7 +112,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
       <div ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={title ? `${id}-title` : undefined} style={{ width: `min(${width}px, 100vw)` }} className="slide-in-right absolute inset-y-0 right-0 flex flex-col bg-surface shadow-[var(--shadow-pop)] outline-none">
         <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-3.5">
           <div className="min-w-0">
-            {title && <h2 id={`${id}-title`} className="truncate text-[15px] font-semibold text-text">{title}</h2>}
+            {title && <h2 id={`${id}-title`} className="truncate text-[16px] font-[650] leading-6 text-text">{title}</h2>}
             {subtitle && <p className="mt-0.5 text-[12.5px] text-text-secondary">{subtitle}</p>}
           </div>
           <div className="flex items-center gap-1">

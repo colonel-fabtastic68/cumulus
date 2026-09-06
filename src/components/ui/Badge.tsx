@@ -1,20 +1,31 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-export type BadgeTone = "default" | "info" | "success" | "warning" | "critical" | "accent";
+/** Polaris badge tones. `accent` and `attention` map to the info and caution surfaces. */
+export type BadgeTone = "default" | "info" | "success" | "warning" | "critical" | "accent" | "attention" | "magic";
+export type BadgeSize = "base" | "large";
 
 const tones: Record<BadgeTone, string> = {
-  default: "bg-surface-hover text-text-secondary",
+  default: "bg-fill-tertiary text-text",
   info: "bg-info-soft text-info",
   success: "bg-success-soft text-success",
   warning: "bg-warning-soft text-warning",
   critical: "bg-critical-soft text-critical",
-  accent: "bg-accent-soft text-accent",
+  accent: "bg-info-soft text-info",
+  attention: "bg-caution-soft text-caution",
+  magic: "bg-magic-soft text-magic",
 };
 
-export function Badge({ tone = "default", children, className, dot }: { tone?: BadgeTone; children: ReactNode; className?: string; dot?: boolean }) {
+export function Badge({ tone = "default", size = "base", children, className, dot }: { tone?: BadgeTone; size?: BadgeSize; children: ReactNode; className?: string; dot?: boolean }) {
   return (
-    <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-[2px] text-[11.5px] font-medium leading-4 whitespace-nowrap", tones[tone], className)}>
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 whitespace-nowrap rounded-[8px] font-[550]",
+        size === "large" ? "px-2.5 py-1 text-[13px] leading-5" : "px-2 py-[2px] text-[12px] leading-4",
+        tones[tone],
+        className,
+      )}
+    >
       {dot && <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />}
       {children}
     </span>

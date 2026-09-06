@@ -50,11 +50,11 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         href={n.href}
         onClick={onNavigate}
         className={cn(
-          "group flex h-8 items-center gap-2.5 rounded-[var(--radius-sm)] px-2.5 text-[13px] font-medium transition-colors",
-          active ? "bg-surface text-text shadow-[0_1px_0_rgba(0,0,0,0.04),0_0_0_1px_var(--border)]" : "text-text-secondary hover:bg-surface-hover hover:text-text",
+          "group flex h-8 items-center gap-2.5 rounded-[var(--radius-sm)] px-2.5 text-[13px] font-[550] transition-colors",
+          active ? "bg-surface text-text shadow-[var(--shadow-100),0_0_0_1px_rgba(26,26,26,0.07)]" : "text-text hover:bg-[rgba(0,0,0,0.04)]",
         )}
       >
-        <Icon className={cn("h-4 w-4", active ? "text-text" : "text-text-tertiary group-hover:text-text-secondary")} />
+        <Icon className={cn("h-4 w-4", active ? "text-text" : "text-icon")} />
         <span className="flex-1">{n.label}</span>
         {count ? <span className={cn("rounded-full px-1.5 text-[11px] font-medium", n.href === "/inventory" ? "bg-warning-soft text-warning" : "bg-surface-hover text-text-secondary")}>{count}</span> : null}
       </Link>
@@ -62,7 +62,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   };
 
   return (
-    <aside className="flex h-full w-[232px] shrink-0 flex-col border-r border-border bg-bg">
+    <aside className="flex h-full w-[232px] shrink-0 flex-col border-r border-border bg-nav-bg">
       <div className="flex h-14 items-center gap-2.5 px-4">
         <span className="flex h-7 w-7 items-center justify-center rounded-[8px] bg-primary text-white">
           <CloudMark />
@@ -74,7 +74,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </div>
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 pb-3">
         {NAV.map(renderLink)}
-        <div className="mt-4 mb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">Workspace</div>
+        <div className="mt-4 mb-1 px-2.5 text-[12px] font-[550] text-text-secondary">Workspace</div>
         {NAV_SECONDARY.map(renderLink)}
       </nav>
     </aside>
