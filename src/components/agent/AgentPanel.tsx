@@ -40,7 +40,7 @@ const DOCK_WIDTH = "md:w-[484px]";
 const EASE = "ease-[cubic-bezier(0.2,0.8,0.2,1)]";
 
 /**
- * The agent lives in a column beside the page. Opening animates the column's
+ * Nimbus lives in a column beside the page. Opening animates the column's
  * width so the page content shifts left smoothly while the rounded card
  * slides in from the right; closing reverses it. Below the md breakpoint
  * there is no room to push, so the card floats over the page instead.
@@ -53,7 +53,7 @@ export function AgentPanel() {
       {everOpened && (
         <aside
           role="complementary"
-          aria-label="Agent"
+          aria-label="Nimbus"
           aria-hidden={!isOpen}
           inert={!isOpen}
           className={cn(
@@ -256,7 +256,7 @@ function AgentChat({ onClose, pending, consumePending, pendingSession, consumePe
           <Sparkles className="h-4 w-4" />
         </span>
         <div className="min-w-0 flex-1 leading-tight">
-          <div className="text-[13.5px] font-semibold">Agent</div>
+          <div className="text-[13.5px] font-semibold">Nimbus</div>
           <div className="truncate text-[11.5px] text-text-tertiary">{autoApprove ? "Auto-applies changes" : "Asks before changing data"}</div>
         </div>
         <Menu
@@ -292,7 +292,7 @@ function AgentChat({ onClose, pending, consumePending, pendingSession, consumePe
 
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         {needsKey && (
-          <Banner tone="warning" title="Add a Gemini API key to enable the agent" className="mb-3">
+          <Banner tone="warning" title="Add a Gemini API key to enable Nimbus" className="mb-3">
             Create a key at aistudio.google.com/apikey, put it in <code>.env.local</code> as <code>GOOGLE_GENERATIVE_AI_API_KEY</code>, then restart <code>npm run dev</code>.
           </Banner>
         )}

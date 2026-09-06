@@ -128,7 +128,7 @@ export function WriteOffsReport() {
         },
         sortValue: (r) => r.reason,
       },
-      { key: "by", header: "By", hideBelow: "lg", render: (r) => <span className="text-text-secondary">{r.by?.name ?? (r.movement.createdBy === "agent" ? "Agent" : <Dash />)}</span>, sortValue: (r) => r.by?.name ?? "" },
+      { key: "by", header: "By", hideBelow: "lg", render: (r) => <span className="text-text-secondary">{r.by?.name ?? (r.movement.createdBy === "agent" ? "Nimbus" : <Dash />)}</span>, sortValue: (r) => r.by?.name ?? "" },
     ],
     [currency],
   );
@@ -161,7 +161,7 @@ export function WriteOffsReport() {
         actions={
           <>
             <ExportCsvButton onExport={exportCsv} disabled={rows.length === 0} />
-            <AskAgentButton prompt={agentPrompt} label="Ask agent" disabled={all.length === 0} />
+            <AskAgentButton prompt={agentPrompt} label="Ask Nimbus" disabled={all.length === 0} />
           </>
         }
       />

@@ -29,7 +29,7 @@ export function AboutSection() {
             label: "Docs",
             value: (
               <span>
-                <code className="rounded bg-surface-hover px-1 font-mono text-[12px]">README.md</code> in the project root covers modes, the agent and every factor from the brief;{" "}
+                <code className="rounded bg-surface-hover px-1 font-mono text-[12px]">README.md</code> in the project root covers modes, Nimbus and every factor from the brief;{" "}
                 <code className="rounded bg-surface-hover px-1 font-mono text-[12px]">docs/PILOT-GUIDE.md</code> is the walkthrough for pilot users.
               </span>
             ),
@@ -42,7 +42,7 @@ export function AboutSection() {
           Agents and automations
         </Button>
         <Button icon={<Sparkles />} onClick={() => open("What can you do in this workspace? Give me a short tour of your read and write tools.", { send: true })}>
-          Ask the agent for a tour
+          Ask Nimbus for a tour
         </Button>
       </div>
     </div>

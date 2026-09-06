@@ -138,7 +138,7 @@ export function DeadStockReport() {
         actions={
           <>
             <ExportCsvButton onExport={exportCsv} disabled={rows.length === 0} />
-            <AskAgentButton prompt={reviewPrompt} label="Review with agent" disabled={all.length === 0} />
+            <AskAgentButton prompt={reviewPrompt} label="Review with Nimbus" disabled={all.length === 0} />
           </>
         }
       />
@@ -189,7 +189,7 @@ export function DeadStockReport() {
                 </Button>
               )}
               <Button size="sm" icon={<Sparkles />} onClick={askAboutSelection}>
-                Ask agent to review
+                Ask Nimbus to review
               </Button>
             </>
           )}

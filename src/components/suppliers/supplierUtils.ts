@@ -107,7 +107,7 @@ export function statsFor(map: Map<string, SupplierStats>, supplierId: string): S
   return map.get(supplierId) ?? EMPTY_STATS;
 }
 
-/** Prompt handed to the agent by "Draft reorder email". */
+/** Prompt handed to Nimbus by "Draft reorder email". */
 export function reorderEmailPrompt(supplier: Supplier, stats: SupplierStats, settings: WorkspaceSettings, actor: Pick<Member, "name">): string {
   const describe = (i: Item) => {
     const parts = [`on hand ${formatQty(i.onHand, i.unit)}`, i.minQty !== undefined ? `min ${formatQty(i.minQty, i.unit)}` : null, `reorder ${formatQty(reorderQty(i), i.unit)}`, `last cost ${formatMoney(i.unitCost, settings.currency)}`, i.supplierSku ? `supplier part ${i.supplierSku}` : null];

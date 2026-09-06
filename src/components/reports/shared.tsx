@@ -38,8 +38,8 @@ export function ExportCsvButton({ onExport, label = "Export CSV", disabled, size
   );
 }
 
-/** Opens the agent panel and sends the given prompt straight away. */
-export function AskAgentButton({ prompt, label = "Ask agent", size = "sm", disabled }: { prompt: string; label?: string; size?: "sm" | "md"; disabled?: boolean }) {
+/** Opens Nimbus panel and sends the given prompt straight away. */
+export function AskAgentButton({ prompt, label = "Ask Nimbus", size = "sm", disabled }: { prompt: string; label?: string; size?: "sm" | "md"; disabled?: boolean }) {
   const { open } = useAgent();
   return (
     <Button size={size} variant="secondary" icon={<Sparkles />} onClick={() => open(prompt, { send: true })} disabled={disabled}>

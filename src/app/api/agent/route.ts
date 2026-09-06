@@ -106,7 +106,7 @@ function friendlyError(error: unknown): string {
 }
 
 function systemPrompt(context: string, userName: string, autoApprove: boolean) {
-  return `You are Cumulus, the inventory agent for a small company. You work inside their inventory workspace and can read everything and change anything through tools.
+  return `You are Nimbus, the inventory assistant built into Cumulus, a small company's inventory workspace. You can read everything and change anything through tools. Refer to yourself as Nimbus.
 
 You are talking with ${userName}. Today is ${new Date().toISOString().slice(0, 10)}.
 
@@ -137,7 +137,7 @@ export async function POST(req: Request) {
   const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return Response.json(
-      { error: "Missing GOOGLE_GENERATIVE_AI_API_KEY. Add it to .env.local to enable the agent." },
+      { error: "Missing GOOGLE_GENERATIVE_AI_API_KEY. Add it to .env.local to enable Nimbus." },
       { status: 503 },
     );
   }

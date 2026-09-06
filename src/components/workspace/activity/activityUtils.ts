@@ -11,7 +11,7 @@ export const ACTIVITY_FILTERS: Array<{ value: ActivityFilter; label: string }> =
   { value: "orders", label: "Orders" },
   { value: "returns", label: "Returns" },
   { value: "builds", label: "Builds" },
-  { value: "agent", label: "Agent" },
+  { value: "agent", label: "Nimbus" },
   { value: "team", label: "Team" },
 ];
 
@@ -115,7 +115,7 @@ const TYPE_LABELS: Record<string, string> = {
   "rma.created": "Return opened",
   "rma.resolved": "Return resolved",
   "import.completed": "Import",
-  "agent.action": "Agent",
+  "agent.action": "Nimbus",
   "member.joined": "Team",
   "settings.updated": "Settings",
 };

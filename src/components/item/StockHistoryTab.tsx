@@ -114,7 +114,7 @@ export function StockHistoryTab({ item, movements, lookups }: { item: Item; move
       header: "By",
       hideBelow: "lg",
       sortValue: (m) => lookups.membersById.get(m.createdBy)?.name ?? m.createdBy,
-      render: (m) => <span className="text-text-secondary">{lookups.membersById.get(m.createdBy)?.name ?? (m.createdBy === "agent" ? "Agent" : m.createdBy || "—")}</span>,
+      render: (m) => <span className="text-text-secondary">{lookups.membersById.get(m.createdBy)?.name ?? (m.createdBy === "agent" ? "Nimbus" : m.createdBy || "—")}</span>,
     },
   ];
 

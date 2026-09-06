@@ -104,7 +104,7 @@ export function ConsumptionReport() {
         actions={
           <>
             <ExportCsvButton onExport={exportCsv} disabled={rows.length === 0} />
-            <AskAgentButton prompt={agentPrompt} label="Ask agent" disabled={all.length === 0} />
+            <AskAgentButton prompt={agentPrompt} label="Ask Nimbus" disabled={all.length === 0} />
           </>
         }
       />

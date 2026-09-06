@@ -147,7 +147,7 @@ export default function ItemDetailPage() {
           <Menu
             trigger={<IconButton aria-label="More actions" icon={<MoreHorizontal />} />}
             items={[
-              { label: "Ask agent about this item", icon: <Sparkles />, onSelect: () => openAgent(`Tell me about ${item.sku} (${item.name}): stock position, recent usage, days of cover, where it is used, and anything I should act on.`, { send: true }) },
+              { label: "Ask Nimbus about this item", icon: <Sparkles />, onSelect: () => openAgent(`Tell me about ${item.sku} (${item.name}): stock position, recent usage, days of cover, where it is used, and anything I should act on.`, { send: true }) },
               ...(writable
                 ? [
                     "divider" as const,

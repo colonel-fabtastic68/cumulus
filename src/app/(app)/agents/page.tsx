@@ -18,11 +18,11 @@ export default function AgentsPage() {
   const { setPageContext } = useAgent();
 
   useEffect(() => {
-    setPageContext({ page: "Agents" });
+    setPageContext({ page: "Nimbus" });
   }, [setPageContext]);
 
   return (
-    <Page title="Agents" subtitle="Delegate bulk work. The agent reads everything, proposes changes, and applies them after you approve.">
+    <Page title="Nimbus" subtitle="Delegate bulk work. Nimbus reads everything, proposes changes, and applies them after you approve.">
       <div className="flex flex-col gap-4">
         <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-2">
           <DataHealthCard />
@@ -30,7 +30,7 @@ export default function AgentsPage() {
         </div>
 
         <section>
-          <SectionHeading title="Conversations" description="Everything the agent has been asked in this workspace. Open one to pick up where it left off." />
+          <SectionHeading title="Conversations" description="Everything Nimbus has been asked in this workspace. Open one to pick up where it left off." />
           <ConversationsTable />
         </section>
       </div>

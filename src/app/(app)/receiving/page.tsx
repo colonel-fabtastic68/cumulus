@@ -41,7 +41,7 @@ export default function ReceivingPage() {
       primaryAction={writable ? receiveButton : undefined}
       secondaryActions={
         <Button icon={<Sparkles />} onClick={() => openAgent("Help me record a receipt")}>
-          Ask agent
+          Ask Nimbus
         </Button>
       }
     >

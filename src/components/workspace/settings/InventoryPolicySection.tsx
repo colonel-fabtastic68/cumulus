@@ -95,7 +95,7 @@ export function InventoryPolicySection({ settings, readOnly }: { settings: Works
         onChange={(e) => setInactivityDays(e.target.value)}
         suffix="days"
         error={daysError}
-        help="Items with no stock movement for this long are flagged as inactive on reports and by the agent."
+        help="Items with no stock movement for this long are flagged as inactive on reports and by Nimbus."
         disabled={readOnly}
         containerClassName="sm:max-w-[240px]"
       />

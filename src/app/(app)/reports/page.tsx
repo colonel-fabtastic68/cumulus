@@ -72,11 +72,11 @@ function ReportsView() {
   return (
     <Page
       title="Reports"
-      subtitle={`Reorder, valuation, ageing and usage across ${settings.companyName}. Every report exports to CSV and can be handed to the agent.`}
+      subtitle={`Reorder, valuation, ageing and usage across ${settings.companyName}. Every report exports to CSV and can be handed to Nimbus.`}
       wide
       secondaryActions={
         <Button icon={<Sparkles />} onClick={() => openAgent()}>
-          Ask the agent
+          Ask Nimbus
         </Button>
       }
     >

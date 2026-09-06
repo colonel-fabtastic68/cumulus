@@ -30,7 +30,7 @@ Work through as many as you like. After each one, note: did it do what you expec
 - Cycle count SW-3PDT-BLU: set the counted quantity and give a reason.
 - Write off 2 damaged enclosures.
 
-### 5. Let the agent do the bulk work (Agent, ⌘J)
+### 5. Let Nimbus do the bulk work (⌘J)
 Try these, in your own words:
 - "Raise the price of all finished goods by 5%." Review the proposal card before applying. Reject it, then ask for 3% instead.
 - "Which parts haven't moved in 120 days and aren't in any active BOM? Deactivate them."

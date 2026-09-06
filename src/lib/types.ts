@@ -320,7 +320,7 @@ export interface WorkspaceSettings {
   relievePolicy: "on_build" | "on_fulfill";
   /** Factor 16: auto-flag items with no movement for this many days. */
   inactivityDays: number;
-  /** Let the agent apply write actions without an explicit approval click. */
+  /** Let Nimbus apply write actions without an explicit approval click. */
   agentAutoApprove: boolean;
   automations: AgentAutomation[];
   /** Next document numbers. */
@@ -333,7 +333,7 @@ export interface WorkspaceSettings {
   updatedAt: string;
 }
 
-/** Persisted agent chat session so teammates can see what the agent did. */
+/** Persisted agent chat session so teammates can see what Nimbus did. */
 export interface AgentSession {
   id: ID;
   title: string;

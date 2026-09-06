@@ -124,7 +124,7 @@ export function ValuationReport() {
         actions={
           <>
             <ExportCsvButton onExport={exportItems} disabled={valued.length === 0} />
-            <AskAgentButton prompt={AGENT_PROMPT} label="Ask agent" disabled={valued.length === 0} />
+            <AskAgentButton prompt={AGENT_PROMPT} label="Ask Nimbus" disabled={valued.length === 0} />
           </>
         }
       />

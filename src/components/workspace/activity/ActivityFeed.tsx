@@ -12,7 +12,7 @@ const FALLBACK_COLOR = "#8a8a8a";
 function ActorAvatar({ event, membersById }: { event: ActivityEvent; membersById: Map<string, Member> }) {
   if (event.type.startsWith("agent.")) {
     return (
-      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent" title="Agent">
+      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent" title="Nimbus">
         <Sparkles className="h-3.5 w-3.5" />
       </span>
     );

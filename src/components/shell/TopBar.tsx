@@ -60,8 +60,7 @@ export function TopBar({ onMenu }: { onMenu?: () => void }) {
           <span>{online.length} online</span>
         </div>
       )}
-      <Button variant={isOpen ? "primary" : "secondary"} size="md" icon={<Sparkles />} onClick={() => (isOpen ? toggleAgent() : openAgent())} className="hidden sm:inline-flex">
-        Agent <Kbd>⌘J</Kbd>
+      <Button variant={isOpen ? "primary" : "secondary"} size="md" icon={<Sparkles />} onClick={() => (isOpen ? toggleAgent() : openAgent())} className="hidden sm:inline-flex">Nimbus <Kbd>⌘J</Kbd>
       </Button>
       <IconButton variant="plain" size="md" className="text-text-secondary" aria-label="Activity" href="/activity" icon={<Bell />} />
       <Menu
@@ -152,7 +151,7 @@ function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => void })
             <div className="px-3 py-6 text-center text-[13px] text-text-tertiary">
               {q.trim() ? (
                 <button type="button" className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] bg-accent-soft px-2.5 py-1.5 text-accent" onClick={() => { openAgent(q); onClose(); }}>
-                  <Sparkles className="h-3.5 w-3.5" /> Ask the agent: “{q}”
+                  <Sparkles className="h-3.5 w-3.5" /> Ask Nimbus: “{q}”
                 </button>
               ) : (
                 "Type to search across items, orders, returns and suppliers."

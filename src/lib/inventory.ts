@@ -3,7 +3,7 @@
  * so the ledger is the single source of truth ("bad data in = bad data out").
  *
  * Functions that take a `Store` mutate data; the rest are pure and work on
- * arrays so they can be used in the UI, in reports and by the agent alike.
+ * arrays so they can be used in the UI, in reports and by Nimbus alike.
  */
 import type {
   ActivityEvent,
@@ -886,7 +886,7 @@ export async function updateItem(store: Store, actor: Actor, itemId: string, pat
   ]);
 }
 
-/** Bulk field update — the agent's bread and butter. */
+/** Bulk field update — Nimbus's bread and butter. */
 export async function bulkUpdateItems(store: Store, actor: Actor, itemIds: string[], patch: ItemPatch, reason?: string): Promise<number> {
   if (itemIds.length === 0) return 0;
   const items = await store.list("items");

@@ -24,7 +24,7 @@ export const REF_LABELS: Record<RefType, string> = {
   order: "Order",
   rma: "RMA",
   import: "Import",
-  agent: "Agent",
+  agent: "Nimbus",
   manual: "Manual",
 };
 

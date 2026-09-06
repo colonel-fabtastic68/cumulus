@@ -1,7 +1,7 @@
 import type { WorkspaceSnapshot } from "@/lib/types";
 import { inventoryValue, isLowStock, reorderQty } from "@/lib/inventory";
 
-/** Compact text snapshot of the workspace for the agent's system prompt. */
+/** Compact text snapshot of the workspace for Nimbus's system prompt. */
 export function buildAgentContext(ws: Pick<WorkspaceSnapshot, "items" | "suppliers" | "orders" | "rmas" | "settings" | "members">, extra: { page?: string; selectedSkus?: string[] } = {}): string {
   const settings = ws.settings[0];
   const active = ws.items.filter((i) => i.status === "active");

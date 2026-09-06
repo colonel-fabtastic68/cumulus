@@ -241,7 +241,7 @@ export function DataSection({ settings, canManage }: { settings: WorkspaceSettin
         onClose={() => (busy ? undefined : setPending(null))}
         onConfirm={() => void run()}
         title="Clear the whole workspace?"
-        message="All items, stock history, suppliers, orders, returns and agent conversations are deleted. Your team and settings are kept. This cannot be undone unless you exported first."
+        message="All items, stock history, suppliers, orders, returns and Nimbus conversations are deleted. Your team and settings are kept. This cannot be undone unless you exported first."
         confirmLabel="Clear workspace"
         destructive
         loading={busy}

@@ -101,7 +101,7 @@ export function ConversationsTable() {
           <EmptyState
             icon={<Sparkles />}
             title="No conversations yet"
-            description="Every chat with the agent is saved here so teammates can see what was asked and what changed. Start with a quick task above, or just ask."
+            description="Every chat with Nimbus is saved here so teammates can see what was asked and what changed. Start with a quick task above, or just ask."
             action={
               <Button variant="primary" size="sm" icon={<Sparkles />} onClick={() => open()}>
                 Start a conversation

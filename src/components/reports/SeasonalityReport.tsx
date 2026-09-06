@@ -118,7 +118,7 @@ export function SeasonalityReport() {
         />
       </section>
 
-      <p className="text-[12.5px] text-text-secondary">Use this to shape projections; the agent can project next month when asked.</p>
+      <p className="text-[12.5px] text-text-secondary">Use this to shape projections; Nimbus can project next month when asked.</p>
     </div>
   );
 }

@@ -40,7 +40,7 @@ function AutomationForm({ onClose, automation, onSave, onDelete }: AutomationMod
   const [touched, setTouched] = useState(false);
 
   const nameError = touched && !name.trim() ? "Give the automation a name" : undefined;
-  const promptError = touched && !prompt.trim() ? "Tell the agent what to do" : undefined;
+  const promptError = touched && !prompt.trim() ? "Tell Nimbus what to do" : undefined;
   const valid = name.trim().length > 0 && prompt.trim().length > 0;
 
   const submit = async () => {
@@ -80,7 +80,7 @@ function AutomationForm({ onClose, automation, onSave, onDelete }: AutomationMod
         open
         onClose={onClose}
         title={isNew ? "New automation" : "Edit automation"}
-        subtitle="A saved prompt the agent runs on a schedule or on demand."
+        subtitle="A saved prompt Nimbus runs on a schedule or on demand."
         footer={
           <>
             {!isNew && onDelete && (
@@ -113,7 +113,7 @@ function AutomationForm({ onClose, automation, onSave, onDelete }: AutomationMod
             placeholder="Review all items below minimum quantity and recommend reorder quantities grouped by supplier…"
             rows={5}
             error={promptError}
-            help={promptError ? undefined : "Written as if you typed it into the agent. Be precise about scope and what to do with the result."}
+            help={promptError ? undefined : "Written as if you typed it into Nimbus. Be precise about scope and what to do with the result."}
           />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Select label="Schedule" value={schedule} onChange={(e) => setSchedule(e.target.value as AgentAutomation["schedule"])} options={SCHEDULE_OPTIONS} />

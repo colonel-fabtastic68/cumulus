@@ -13,7 +13,7 @@ export function RecentActivityCard({ events, membersById }: { events: ActivityEv
         <CardTitle icon={<ClipboardList />} title="Recent activity" action={<CardLink href="/activity">All activity</CardLink>} />
       </div>
       {events.length === 0 ? (
-        <p className="px-4 pb-4 text-[13px] text-text-secondary">No activity yet. Changes made by your team and the agent will appear here.</p>
+        <p className="px-4 pb-4 text-[13px] text-text-secondary">No activity yet. Changes made by your team and Nimbus will appear here.</p>
       ) : (
         <ul className="border-t border-border">
           {events.map((e) => {

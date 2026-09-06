@@ -19,7 +19,7 @@ const NAV = [
 ];
 
 const NAV_SECONDARY = [
-  { href: "/agents", label: "Agents", icon: Sparkles },
+  { href: "/agents", label: "Nimbus", icon: Sparkles },
   { href: "/import", label: "Import", icon: Download },
   { href: "/integrations", label: "Integrations", icon: Plug },
   { href: "/team", label: "Team", icon: Users },

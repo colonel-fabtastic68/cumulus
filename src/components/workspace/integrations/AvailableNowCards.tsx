@@ -48,9 +48,9 @@ export function AvailableNowCards() {
       />
       <FeatureCard
         icon={<Sparkles />}
-        title="Agent access"
+        title="Nimbus access"
         badge={<Badge tone="success">Available now</Badge>}
-        description="The agent already reads and changes everything through the app: bulk price updates, receiving, builds, orders and returns, each as a proposal you approve."
+        description="Nimbus already reads and changes everything through the app: bulk price updates, receiving, builds, orders and returns, each as a proposal you approve."
         action={
           <Button size="sm" href="/agents" iconRight={<ArrowRight />}>
             Open Agents
@@ -60,7 +60,7 @@ export function AvailableNowCards() {
       <FeatureCard
         icon={<MessageSquarePlus />}
         title="Request an integration"
-        description="Missing a system you rely on? Tell the agent what you would want to sync. The request stays inside this workspace; nothing is sent externally."
+        description="Missing a system you rely on? Tell Nimbus what you would want to sync. The request stays inside this workspace; nothing is sent externally."
         action={
           <Button size="sm" icon={<Sparkles />} onClick={() => open(REQUEST_PROMPT, { send: false })}>
             Draft a request

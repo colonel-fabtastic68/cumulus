@@ -59,7 +59,7 @@ export function AgentSection({ settings, readOnly }: { settings: WorkspaceSettin
     setSaving(true);
     try {
       await saveSettings({ agentAutoApprove: autoApprove });
-      toast(autoApprove ? "Auto-apply is on. The agent applies changes without asking." : "Auto-apply is off. The agent asks before changing data.", "success");
+      toast(autoApprove ? "Auto-apply is on. Nimbus applies changes without asking." : "Auto-apply is off. Nimbus asks before changing data.", "success");
     } catch (e) {
       toast(e instanceof Error ? e.message : "Could not save settings", "critical");
     } finally {
@@ -75,11 +75,11 @@ export function AgentSection({ settings, readOnly }: { settings: WorkspaceSettin
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[13px] font-medium text-text">Agent status</span>
+            <span className="text-[13px] font-medium text-text">Nimbus status</span>
             <StatusBadgeFor status={status} />
           </div>
           <p className="mt-0.5 text-[12.5px] text-text-secondary">
-            {status.state === "loading" && "Checking the agent endpoint…"}
+            {status.state === "loading" && "Checking Nimbus endpoint…"}
             {status.state === "error" && (
               <>
                 The status check at <code className="rounded bg-surface-hover px-1 font-mono text-[12px]">/api/agent</code> failed. Make sure the app server is running.
@@ -110,11 +110,11 @@ export function AgentSection({ settings, readOnly }: { settings: WorkspaceSettin
       </div>
 
       <Toggle
-        label="Auto-apply agent changes"
+        label="Let Nimbus apply changes"
         help={
           autoApprove
-            ? "On: write tools run as soon as the agent calls them. The change is still logged in Activity with the agent as the actor."
-            : "Off: every write the agent proposes shows up as an approval card in the chat. Nothing changes until someone clicks Approve; Reject sends the agent back to ask what to change."
+            ? "On: write tools run as soon as Nimbus calls them. The change is still logged in Activity with Nimbus as the actor."
+            : "Off: every write Nimbus proposes shows up as an approval card in the chat. Nothing changes until someone clicks Approve; Reject sends Nimbus back to ask what to change."
         }
         checked={autoApprove}
         onChange={setAutoApprove}

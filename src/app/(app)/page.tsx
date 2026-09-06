@@ -40,7 +40,7 @@ export default function HomePage() {
       wide
       primaryAction={
         <Button variant="primary" icon={<Sparkles />} onClick={() => openAgent()}>
-          Ask the agent
+          Ask Nimbus
         </Button>
       }
       secondaryActions={

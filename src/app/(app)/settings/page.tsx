@@ -28,7 +28,7 @@ export default function SettingsPage() {
   const formKey = settings.updatedAt;
 
   return (
-    <Page narrow title="Settings" subtitle="Company details, inventory policy, agent behaviour and where the data lives">
+    <Page narrow title="Settings" subtitle="Company details, inventory policy, Nimbus and where the data lives">
       {readOnly && (
         <Banner tone="info" title="Read-only" className="mb-5">
           Only owners and admins can change settings. You can still review everything here.
@@ -46,7 +46,7 @@ export default function SettingsPage() {
           </Section>
         </Row>
         <Row>
-          <Section title="Agent" description="Whether the agent may change data on its own, and whether the model is configured.">
+          <Section title="Nimbus" description="Whether Nimbus may change data on its own, and whether the model is configured.">
             <AgentSection key={formKey} settings={settings} readOnly={readOnly} />
           </Section>
         </Row>

@@ -539,7 +539,7 @@ function generate(overrides: Map<string, { min: number; max: number }>, behind: 
     });
   }
   activity.push({ id: "act_rma_1003", type: "rma.created", message: "Priya Nair opened RMA-1003 for Chicago Music Exchange", actorId: "u_priya", actorName: "Priya Nair", entityType: "rma", entityId: "rma_1003", createdAt: iso(2, 14, now) });
-  activity.push({ id: "act_agent_1", type: "agent.action", message: "Agent updated lead time on 9 Mouser parts (approved by Maya Chen)", actorId: "u_maya", actorName: "Maya Chen", meta: { count: 9 }, createdAt: iso(1, 16, now) });
+  activity.push({ id: "act_agent_1", type: "agent.action", message: "Nimbus updated lead time on 9 Mouser parts (approved by Maya Chen)", actorId: "u_maya", actorName: "Maya Chen", meta: { count: 9 }, createdAt: iso(1, 16, now) });
   activity.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 
   const settings = seedSettings();

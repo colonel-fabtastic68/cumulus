@@ -13,7 +13,7 @@ export const ROLE_OPTIONS: Array<{ value: MemberRole; label: string }> = [
 export const ROLE_DESCRIPTIONS: Record<MemberRole, string> = {
   owner: "Everything, including settings, data reset and billing. There must always be at least one.",
   admin: "Everything an owner can do except removing the last owner. Manages the team and settings.",
-  member: "Day-to-day work: receive, build, ship, adjust stock, edit items, run the agent.",
+  member: "Day-to-day work: receive, build, ship, adjust stock, edit items, work with Nimbus.",
   viewer: "Read-only. Can browse inventory, reports and activity but cannot change anything.",
 };
 
