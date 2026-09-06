@@ -49,6 +49,26 @@ const itemFields = z
   })
   .describe("Fields to set. Only include fields that should change.");
 
+/** Which items a bulk change targets. */
+const bulkTarget = {
+  skus: skuList.optional(),
+  filter: itemFilter.optional(),
+  all: z.boolean().optional().describe("true = every active item. Use when the user says all / every item."),
+};
+
+/** What a bulk change does. Shared by previewBulkUpdate and bulkUpdateItems. */
+const bulkChange = {
+  set: itemFields.optional().describe("Same values for every targeted item"),
+  adjustPricePct: z.number().optional().describe("Relative price change in percent: 10 raises every targeted price by 10%, -5 lowers it by 5%"),
+  adjustCostPct: z.number().optional().describe("Relative unit-cost change in percent"),
+  addTags: z.array(z.string()).optional(),
+  removeTags: z.array(z.string()).optional(),
+  lines: z
+    .array(z.object({ sku: z.string(), set: itemFields }))
+    .optional()
+    .describe("Per-item values when items get different values, e.g. [{sku:'A', set:{price:10}}, {sku:'B', set:{price:12}}]. Listed SKUs are targeted automatically, so one call covers any number of items."),
+};
+
 export const agentTools = {
   // ---- READ -----------------------------------------------------------------
   getWorkspaceSummary: tool({
@@ -56,8 +76,8 @@ export const agentTools = {
     inputSchema: z.object({}),
   }),
   searchItems: tool({
-    description: "Search and filter items. Returns SKU, name, type, category, on-hand, min/max, cost, price, supplier, lead time, status. Use limit to keep results small.",
-    inputSchema: z.object({ filter: itemFilter.optional(), limit: z.number().optional().describe("Default 50, max 200"), sortBy: z.enum(["sku", "name", "onHand", "value", "updatedAt"]).optional() }),
+    description: "Search and filter items in ONE call. Pass a list of SKUs to look several up at once, or a filter. Returns SKU, name, type, category, on-hand, min/max, cost, price, supplier, lead time, status. Use limit to keep results small.",
+    inputSchema: z.object({ skus: skuList.optional().describe("Look up these SKUs (any number) in a single call"), filter: itemFilter.optional(), limit: z.number().optional().describe("Default 50, max 200"), sortBy: z.enum(["sku", "name", "onHand", "value", "updatedAt"]).optional() }),
   }),
   getItem: tool({
     description: "Full detail for one item: fields, BOM, where-used, recent stock movements, lots on the shelf, buildable quantity (for assemblies).",
@@ -81,23 +101,14 @@ export const agentTools = {
     }),
   }),
   previewBulkUpdate: tool({
-    description: "Dry-run: show which items a filter matches and what would change, before calling bulkUpdateItems. Use this to confirm scope with the user for large changes.",
-    inputSchema: z.object({ filter: itemFilter.optional(), skus: skuList.optional(), set: itemFields }),
+    description: "Dry-run of bulkUpdateItems with the same arguments: which items match and what would change on each. Use it to confirm scope before a large change.",
+    inputSchema: z.object({ ...bulkTarget, ...bulkChange }),
   }),
 
   // ---- WRITE (require approval) ---------------------------------------------
   bulkUpdateItems: tool({
-    description: "Update fields on many items at once. Target items by SKU list and/or filter. Supports percentage price/cost changes via adjustPricePct / adjustCostPct. Always give a reason.",
-    inputSchema: z.object({
-      skus: skuList.optional(),
-      filter: itemFilter.optional(),
-      set: itemFields.optional(),
-      adjustPricePct: z.number().optional().describe("e.g. 5 raises price by 5%, -10 lowers by 10%"),
-      adjustCostPct: z.number().optional(),
-      addTags: z.array(z.string()).optional(),
-      removeTags: z.array(z.string()).optional(),
-      reason: z.string(),
-    }),
+    description: "Update any number of items in ONE call. Target them with skus, a filter, or all: true. Same value for every target: set. Percentage change: adjustPricePct / adjustCostPct. Different values per item: lines (one entry per SKU, all in this single call). Never call this once per item. Always give a reason.",
+    inputSchema: z.object({ ...bulkTarget, ...bulkChange, reason: z.string() }),
   }),
   createItems: tool({
     description: "Create new items (parts or assemblies). SKUs must be unique. Optional openingQty records an opening balance. Optional bom uses component SKUs.",

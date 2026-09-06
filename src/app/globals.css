@@ -179,6 +179,17 @@ input[type="number"]::-webkit-outer-spin-button {
   opacity: 0.4;
 }
 
+/* Live preview of proposed changes: off-orange row tint with an accent edge */
+:root {
+  --preview-soft: #fff4e5;
+  --preview-strong: #ffb800;
+}
+.preview-row,
+.preview-row:hover {
+  background: var(--preview-soft) !important;
+  box-shadow: inset 3px 0 0 var(--preview-strong);
+}
+
 /* Utility layers used across the app */
 .card {
   background: var(--surface);

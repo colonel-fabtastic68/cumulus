@@ -74,6 +74,15 @@ export interface Item {
     quickbooks?: string;
   };
 
+  brand?: string;
+  weight?: number;
+  /** Unit for `weight`, e.g. "lb" or "kg". */
+  weightUnit?: string;
+  dimensions?: { length?: number; width?: number; height?: number; unit?: string };
+  imageUrl?: string;
+  /** Extra attributes captured on import (custom fields), keyed by field name. */
+  attributes?: Record<string, string>;
+
   createdAt: string;
   updatedAt: string;
   updatedBy?: string;

@@ -3,12 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls, type InferUITools, type UIDataTypes, type UIMessage } from "ai";
-import { ArrowUp, Check, ChevronDown, ChevronRight, History, Loader2, Plus, Sparkles, Square, X } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, ChevronRight, Eye, History, Loader2, Plus, Sparkles, Square, X } from "lucide-react";
 import { Badge, Banner, Button, IconButton, Markdown, Menu, useToast } from "@/components/ui";
 import { agentTools, isWriteTool, TOOL_LABELS, type AgentToolName } from "@/lib/agent/tools";
-import { describeProposal, executeTool } from "@/lib/agent/execute";
+import { describeProposal, executeTool, previewPatches, PREVIEWABLE_TOOLS } from "@/lib/agent/execute";
 import { buildAgentContext } from "@/lib/agent/context";
-import { useCollection, useSettings, useStore } from "@/lib/store/provider";
+import { useCollection, usePreview, useSettings, useStore } from "@/lib/store/provider";
 import { useCurrentUser, canWrite } from "@/lib/auth";
 import type { AgentSession, Item } from "@/lib/types";
 import { isLowStock } from "@/lib/inventory";
@@ -230,7 +230,7 @@ function AgentChat({ onClose, pending, consumePending, pendingSession, consumePe
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingSession?.nonce]);
 
-  const approve = async (name: AgentToolName, toolCallId: string, input: unknown) => {
+  const approve = async (name: AgentToolName, toolCallId: string, input: unknown): Promise<void> => {
     try {
       const output = await executeTool(name, input, execCtx);
       addToolOutput({ tool: name, toolCallId, output: output as never });
@@ -356,10 +356,7 @@ function AgentChat({ onClose, pending, consumePending, pendingSession, consumePe
             </IconButton>
           )}
         </div>
-        <div className="mt-1.5 flex items-center justify-between text-[11px] text-text-tertiary">
-          <span>Enter to send · Shift+Enter for a new line</span>
-          <span>Gemini Flash</span>
-        </div>
+        <div className="mt-1.5 text-[11px] text-text-tertiary">Enter to send · Shift+Enter for a new line</div>
       </div>
     </>
   );
@@ -376,17 +373,92 @@ function MessageView({ message, historical, onApprove, onReject, canWrite }: { m
       </div>
     );
   }
+  // Group runs of read-only tool calls into one chip; collect pending writes for batch approval.
+  type Chunk = { kind: "text"; key: string; text: string } | { kind: "reads"; key: string; parts: Array<{ name: AgentToolName; part: ToolPartShape }> } | { kind: "write"; key: string; name: AgentToolName; part: ToolPartShape };
+  const chunks: Chunk[] = [];
+  message.parts.forEach((part, i) => {
+    if (part.type === "text") {
+      if (part.text.trim()) chunks.push({ kind: "text", key: `t${i}`, text: part.text });
+      return;
+    }
+    if (!part.type.startsWith("tool-")) return;
+    const name = part.type.slice(5) as AgentToolName;
+    const tp = part as unknown as ToolPartShape;
+    if (isWriteTool(name)) {
+      chunks.push({ kind: "write", key: tp.toolCallId ?? `w${i}`, name, part: tp });
+      return;
+    }
+    const last = chunks[chunks.length - 1];
+    if (last && last.kind === "reads") last.parts.push({ name, part: tp });
+    else chunks.push({ kind: "reads", key: tp.toolCallId ?? `r${i}`, parts: [{ name, part: tp }] });
+  });
+  const pendingWrites = chunks.filter((c): c is Extract<Chunk, { kind: "write" }> => c.kind === "write" && c.part.state === "input-available");
+  const showBatch = pendingWrites.length >= 2 && !historical && canWrite;
+
   return (
     <div className="flex flex-col gap-2">
-      {message.parts.map((part, i) => {
-        if (part.type === "text") return part.text.trim() ? <Markdown key={i} text={part.text} /> : null;
-        if (part.type.startsWith("tool-")) {
-          const name = part.type.slice(5) as AgentToolName;
-          const tp = part as unknown as ToolPartShape;
-          return <ToolPartView key={tp.toolCallId ?? i} name={name} part={tp} historical={historical} onApprove={onApprove} onReject={onReject} canWrite={canWrite} />;
-        }
-        return null;
+      {showBatch && <BatchApprovalBar count={pendingWrites.length} onApproveAll={async () => { for (const w of pendingWrites) await onApprove(w.name, w.part.toolCallId, w.part.input); }} onRejectAll={() => pendingWrites.forEach((w) => onReject(w.name, w.part.toolCallId))} />}
+      {chunks.map((c) => {
+        if (c.kind === "text") return <Markdown key={c.key} text={c.text} />;
+        if (c.kind === "reads") return c.parts.length === 1 ? <ReadToolChip key={c.key} label={TOOL_LABELS[c.parts[0]!.name] ?? c.parts[0]!.name} part={c.parts[0]!.part} /> : <ReadToolGroup key={c.key} parts={c.parts} />;
+        return <ProposalCard key={c.key} name={c.name} label={TOOL_LABELS[c.name] ?? c.name} part={c.part} historical={historical} onApprove={onApprove} onReject={onReject} canWrite={canWrite} />;
       })}
+    </div>
+  );
+}
+
+function BatchApprovalBar({ count, onApproveAll, onRejectAll }: { count: number; onApproveAll: () => Promise<void>; onRejectAll: () => void }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-[var(--radius)] border border-warning/40 bg-warning-soft/60 px-3 py-2 text-[12.5px]">
+      <span className="font-[550] text-warning">{count} changes waiting for approval</span>
+      <span className="flex-1" />
+      <Button size="sm" onClick={onRejectAll} disabled={busy}>
+        Reject all
+      </Button>
+      <Button
+        size="sm"
+        variant="primary"
+        loading={busy}
+        onClick={async () => {
+          setBusy(true);
+          try {
+            await onApproveAll();
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        Apply all {count}
+      </Button>
+    </div>
+  );
+}
+
+/** One chip for a run of read-only tool calls, expandable to the individual ones. */
+function ReadToolGroup({ parts }: { parts: Array<{ name: AgentToolName; part: ToolPartShape }> }) {
+  const [open, setOpen] = useState(false);
+  const done = parts.every((p) => p.part.state === "output-available" || p.part.state === "output-error");
+  const failed = parts.filter((p) => p.part.state === "output-error").length;
+  const counts = new Map<string, number>();
+  for (const p of parts) counts.set(TOOL_LABELS[p.name] ?? p.name, (counts.get(TOOL_LABELS[p.name] ?? p.name) ?? 0) + 1);
+  const summary = Array.from(counts.entries()).map(([l, n]) => (n > 1 ? `${l} ×${n}` : l)).join(", ");
+  return (
+    <div className="text-[12px]">
+      <button type="button" onClick={() => setOpen((o) => !o)} className={cn("inline-flex max-w-full items-center gap-1.5 rounded-full border border-border px-2 py-0.5 text-text-secondary hover:bg-surface-hover", failed > 0 && "border-critical/30")}>
+        {done ? open ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" /> : <Loader2 className="h-3 w-3 shrink-0 animate-spin" />}
+        <span className="truncate">
+          Looked up {parts.length} things · {summary}
+          {failed > 0 && ` · ${failed} failed`}
+        </span>
+      </button>
+      {open && (
+        <div className="mt-1.5 flex flex-col gap-1 pl-2">
+          {parts.map((p) => (
+            <ReadToolChip key={p.part.toolCallId} label={TOOL_LABELS[p.name] ?? p.name} part={p.part} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -399,12 +471,6 @@ interface ToolPartShape {
   errorText?: string;
 }
 
-function ToolPartView({ name, part, historical, onApprove, onReject, canWrite }: { name: AgentToolName; part: ToolPartShape; historical: boolean; onApprove: (name: AgentToolName, id: string, input: unknown) => void; onReject: (name: AgentToolName, id: string) => void; canWrite: boolean }) {
-  const write = isWriteTool(name);
-  const label = TOOL_LABELS[name] ?? name;
-  if (!write) return <ReadToolChip label={label} part={part} />;
-  return <ProposalCard name={name} label={label} part={part} historical={historical} onApprove={onApprove} onReject={onReject} canWrite={canWrite} />;
-}
 
 function ReadToolChip({ label, part }: { label: string; part: ToolPartShape }) {
   const [open, setOpen] = useState(false);
@@ -467,6 +533,20 @@ function ProposalCard({ name, label, part, historical, onApprove, onReject, canW
   const out = part.output as { ok?: boolean; summary?: string; rejected?: boolean } | undefined;
   const tone = part.state === "output-error" ? "critical" : out?.rejected ? "default" : part.state === "output-available" ? "success" : "warning";
   const destructive = name === "deleteItems";
+  const { preview, setPreview } = usePreview();
+  const previewable = PREVIEWABLE_TOOLS.includes(name);
+  const previewingThis = preview?.id === part.toolCallId;
+  const startPreview = async () => {
+    const patches = await previewPatches(name, part.input, { store, actor: { id: user.id, name: user.name } });
+    const how = desc?.lines.find((l) => !/^(Fields|Reason):/.test(l));
+    setPreview({
+      id: part.toolCallId,
+      label: desc ? `${desc.title}${how ? ` · ${how}` : ""}` : label,
+      patches,
+      showNew: true,
+      apply: () => onApprove(name, part.toolCallId, part.input),
+    });
+  };
 
   return (
     <div className={cn("rounded-[var(--radius)] border bg-surface", pending ? "border-warning/40 shadow-[0_0_0_3px_var(--warning-soft)]" : "border-border")}>
@@ -524,6 +604,11 @@ function ProposalCard({ name, label, part, historical, onApprove, onReject, canW
             <span className="text-[12px] text-text-tertiary">Viewers can&apos;t apply changes</span>
           ) : (
             <>
+              {previewable && (
+                <Button size="sm" variant={previewingThis ? "primary" : "tertiary"} icon={<Eye />} className="mr-auto" onClick={() => (previewingThis ? setPreview(null) : void startPreview())} disabled={applying}>
+                  {previewingThis ? "Previewing" : "Preview in table"}
+                </Button>
+              )}
               <Button size="sm" onClick={() => onReject(name, part.toolCallId)} disabled={applying}>
                 Reject
               </Button>
@@ -534,6 +619,7 @@ function ProposalCard({ name, label, part, historical, onApprove, onReject, canW
                 onClick={async () => {
                   setApplying(true);
                   await onApprove(name, part.toolCallId, part.input);
+                  if (previewingThis) setPreview(null);
                   setApplying(false);
                 }}
               >

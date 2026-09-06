@@ -41,6 +41,26 @@ export function OverviewTab({ item, supplier, movements, membersById }: { item: 
       ),
     },
     { label: "Expected waste", value: item.expectedWastePct !== undefined ? formatPercent(item.expectedWastePct, 1) : "—" },
+    ...(item.brand ? [{ label: "Brand", value: item.brand }] : []),
+    ...(item.weight !== undefined ? [{ label: "Weight", value: `${item.weight}${item.weightUnit ? ` ${item.weightUnit}` : ""}` }] : []),
+    ...(item.dimensions && [item.dimensions.length, item.dimensions.width, item.dimensions.height].some((v) => v !== undefined)
+      ? [{ label: "Dimensions", value: [item.dimensions.length, item.dimensions.width, item.dimensions.height].map((v) => (v === undefined ? "—" : String(v))).join(" × ") + (item.dimensions.unit ? ` ${item.dimensions.unit}` : "") }]
+      : []),
+    ...(item.imageUrl
+      ? [
+          {
+            label: "Image",
+            value: (
+              <a href={item.imageUrl} target="_blank" rel="noreferrer" className="truncate text-accent hover:underline">
+                {item.imageUrl.replace(/^https?:\/\//, "").slice(0, 60)}
+              </a>
+            ),
+          },
+        ]
+      : []),
+    ...(item.externalIds?.woocommerce ? [{ label: "WooCommerce id", value: <span className="font-mono text-[12.5px]">{item.externalIds.woocommerce}</span> }] : []),
+    ...(item.externalIds?.shopify ? [{ label: "Shopify id", value: <span className="font-mono text-[12.5px]">{item.externalIds.shopify}</span> }] : []),
+    ...Object.entries(item.attributes ?? {}).map(([k, v]) => ({ label: k, value: v })),
     {
       label: "Tags",
       value:

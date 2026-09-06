@@ -1,4 +1,4 @@
-import { TARGET_FIELDS, type ColumnMapping, type MappingTarget, type SourceKind, type TargetField } from "./types";
+import { TARGET_FIELDS, isCustomTarget, type ColumnMapping, type CustomTarget, type MappingTarget, type SourceKind, type TargetField } from "./types";
 
 /** Lower-case, drop parentheticals ("Cost (USD)" -> "cost") and collapse punctuation to single spaces. */
 export function normalizeHeader(header: string): string {
@@ -33,29 +33,53 @@ const SHOPIFY: Record<string, MappingTarget> = {
   "variant barcode": "barcode",
   "variant grams": "ignore",
   "variant weight unit": "ignore",
-  status: "ignore",
+  "image src": "imageUrl",
+  "variant image": "ignore",
+  status: "published",
 };
 
 const WOOCOMMERCE: Record<string, MappingTarget> = {
-  id: "ignore",
+  id: "externalId",
   type: "ignore",
   sku: "sku",
   "gtin upc ean or isbn": "barcode",
   name: "name",
-  published: "ignore",
+  published: "published",
   "is featured": "ignore",
   "visibility in catalog": "ignore",
   "short description": "description",
-  description: "description",
+  description: "ignore",
+  "date sale price starts": "ignore",
+  "date sale price ends": "ignore",
+  "tax status": "ignore",
+  "tax class": "ignore",
   "in stock": "ignore",
   stock: "qty",
   "low stock amount": "minQty",
+  "backorders allowed": "ignore",
+  "sold individually": "ignore",
+  weight: "weight",
+  length: "length",
+  width: "width",
+  height: "height",
+  "allow customer reviews": "ignore",
+  "purchase note": "ignore",
+  "sale price": "salePrice",
   "regular price": "price",
-  "sale price": "ignore",
   categories: "category",
   tags: "tags",
+  "shipping class": "ignore",
+  images: "imageUrl",
+  "download limit": "ignore",
+  "download expiry days": "ignore",
+  parent: "ignore",
+  "grouped products": "ignore",
+  upsells: "ignore",
+  "cross sells": "ignore",
+  "external url": "ignore",
+  "button text": "ignore",
   position: "ignore",
-  brands: "ignore",
+  brands: "brand",
 };
 
 // ---------------------------------------------------------------------------
@@ -99,7 +123,8 @@ const SYNONYMS: Array<[TargetField, string[]]> = [
     ],
   ],
   ["unitCost", ["unit cost", "unitcost", "cost", "cost per item", "cost price", "purchase price", "buy price", "buying price", "average cost", "avg cost", "standard cost", "std cost", "landed cost", "cost each"]],
-  ["price", ["price", "sell price", "selling price", "sale price", "sales price", "list price", "retail price", "unit price", "regular price", "variant price", "msrp", "rrp", "price each"]],
+  ["price", ["price", "sell price", "selling price", "sales price", "list price", "retail price", "unit price", "regular price", "variant price", "msrp", "rrp", "price each"]],
+  ["salePrice", ["sale price", "discount price", "promo price", "promotional price", "special price", "offer price"]],
   ["minQty", ["min", "min qty", "minqty", "minimum", "minimum qty", "min quantity", "minimum quantity", "min stock", "reorder point", "reorder level", "reorder at", "low stock", "low stock amount", "safety stock", "par", "par level", "min level"]],
   ["maxQty", ["max", "max qty", "maxqty", "maximum", "maximum qty", "max quantity", "maximum quantity", "max stock", "reorder to", "order up to", "max level", "target qty", "target quantity"]],
   ["leadTimeDays", ["lead time", "leadtime", "lead time days", "leadtimedays", "lead days", "lead time in days", "leadtime days", "days lead time"]],
@@ -107,6 +132,14 @@ const SYNONYMS: Array<[TargetField, string[]]> = [
   ["barcode", ["barcode", "bar code", "upc", "ean", "gtin", "isbn", "upc code", "ean code", "variant barcode", "gtin upc ean or isbn"]],
   ["supplierName", ["supplier", "supplier name", "suppliername", "vendor", "vendor name", "preferred supplier", "preferred vendor", "manufacturer", "source", "distributor"]],
   ["tags", ["tags", "tag", "labels", "label", "keywords"]],
+  ["brand", ["brand", "brands", "make", "brand name"]],
+  ["weight", ["weight", "unit weight", "item weight", "weight lbs", "weight kg", "net weight", "gross weight"]],
+  ["length", ["length", "depth"]],
+  ["width", ["width"]],
+  ["height", ["height"]],
+  ["imageUrl", ["image", "images", "image src", "image url", "photo", "picture", "thumbnail"]],
+  ["externalId", ["id", "product id", "external id", "shopify id", "woocommerce id", "post id"]],
+  ["published", ["published", "active", "enabled", "is active", "visible"]],
 ];
 
 const EXACT = new Map<string, TargetField>();
@@ -159,8 +192,10 @@ export function guessMapping(headers: string[]): GuessResult {
   const pending: Array<{ header: string; words: string[] }> = [];
 
   const assign = (header: string, target: MappingTarget) => {
-    if (target !== "ignore" && used.has(target)) target = "ignore";
-    if (target !== "ignore") used.add(target);
+    if (target !== "ignore" && !isCustomTarget(target)) {
+      if (used.has(target)) target = "ignore";
+      else used.add(target);
+    }
     mapping[header] = target;
   };
 
@@ -193,12 +228,22 @@ export function setMappingTarget(mapping: ColumnMapping, header: string, target:
 }
 
 export function isMappingTarget(value: unknown): value is MappingTarget {
-  return typeof value === "string" && (value === "ignore" || (TARGET_FIELDS as readonly string[]).includes(value));
+  return typeof value === "string" && (value === "ignore" || (TARGET_FIELDS as readonly string[]).includes(value) || isCustomTarget(value));
 }
 
-/** Target field -> source header for every mapped field. */
+/** Target field -> source header for every mapped built-in field. */
 export function invertMapping(mapping: ColumnMapping): Partial<Record<TargetField, string>> {
   const out: Partial<Record<TargetField, string>> = {};
-  for (const [header, target] of Object.entries(mapping)) if (target !== "ignore" && out[target] === undefined) out[target] = header;
+  for (const [header, target] of Object.entries(mapping)) {
+    if (target === "ignore" || isCustomTarget(target)) continue;
+    if (out[target] === undefined) out[target] = header;
+  }
+  return out;
+}
+
+/** Custom-field columns: attribute name -> source header. */
+export function customColumns(mapping: ColumnMapping): Array<{ name: string; header: string; target: CustomTarget }> {
+  const out: Array<{ name: string; header: string; target: CustomTarget }> = [];
+  for (const [header, target] of Object.entries(mapping)) if (isCustomTarget(target)) out.push({ name: target.slice(7), header, target });
   return out;
 }

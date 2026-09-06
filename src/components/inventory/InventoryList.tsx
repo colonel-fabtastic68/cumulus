@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Archive, Boxes, Download, FileDown, FilterX, Hammer, MoreHorizontal, Pencil, Plus, SlidersHorizontal, Sparkles, Trash2 } from "lucide-react";
 import type { Item } from "@/lib/types";
 import { deactivateItems, deleteItems, inventoryValue, isLowStock } from "@/lib/inventory";
-import { useCollection, useItems, useItemsById, useSettings, useStore } from "@/lib/store/provider";
+import { useCollection, useItems, useItemsById, usePreview, useSettings, useStore } from "@/lib/store/provider";
 import { canWrite, useCurrentUser } from "@/lib/auth";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { formatMoney, formatNumber, pluralize, toDateInput } from "@/lib/format";
@@ -42,6 +42,7 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
   const currency = settings.currency;
   const items = useItems();
   const byId = useItemsById();
+  const { preview } = usePreview();
   const suppliers = useCollection("suppliers");
 
   const [q, setQ] = useState(initialQuery);
@@ -239,6 +240,7 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
           rows={rows}
           columns={columns}
           rowKey={(i) => i.id}
+          rowClassName={(i) => (preview?.patches[i.id] ? "preview-row" : undefined)}
           onRowClick={(i) => router.push("/inventory/" + i.id)}
           selectable
           selected={selectedIds}

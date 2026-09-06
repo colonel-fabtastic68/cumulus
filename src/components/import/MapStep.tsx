@@ -2,19 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { ArrowLeft, ArrowRight, RotateCcw, Sparkles } from "lucide-react";
-import { Badge, Banner, Button, Card, Select, SimpleTable, useToast } from "@/components/ui";
-import { cn } from "@/lib/utils";
-import { guessMapping, invertMapping, isMappingTarget, setMappingTarget } from "./mapping";
-import { FIELD_LABELS, TARGET_FIELDS, type ColumnMapping, type MappingTarget, type ParsedSource, type TargetField } from "./types";
-
-const TARGET_OPTIONS: Array<{ value: MappingTarget; label: string }> = [
-  ...TARGET_FIELDS.map((f) => ({ value: f, label: FIELD_LABELS[f] })),
-  { value: "ignore", label: FIELD_LABELS.ignore },
-];
+import { Badge, Banner, Button, Card, Combobox, SimpleTable, useToast, type ComboboxOption } from "@/components/ui";
+import { customColumns, guessMapping, invertMapping, isMappingTarget, setMappingTarget } from "./mapping";
+import { FIELD_LABELS, TARGET_FIELDS, customTarget, isCustomTarget, targetLabel, type ColumnMapping, type MappingTarget, type ParsedSource, type TargetField } from "./types";
 
 const KIND_HINT = {
-  shopify: "This looks like a Shopify product export. Variant SKU, Title, Variant Inventory Qty and Cost per item were mapped automatically.",
-  woocommerce: "This looks like a WooCommerce product export. SKU, Name, Stock, Regular price and Categories were mapped automatically.",
+  shopify: "This looks like a Shopify product export. Variant SKU, Title, Variant Inventory Qty, Variant Price, Cost per item and Image Src were mapped automatically.",
+  woocommerce: "This looks like a WooCommerce product export. SKU, Name, Stock, Regular and Sale price, Categories, Tags, Brands, weight and dimensions were mapped automatically; the rest is ignored unless you map it.",
   generic: null,
 } as const;
 
@@ -37,7 +31,17 @@ export function MapStep({ source, mapping, onMappingChange, onBack, onContinue }
   const [aiHint, setAiHint] = useState<{ tone: "info" | "warning"; text: string } | null>(null);
 
   const cols = useMemo(() => invertMapping(mapping), [mapping]);
-  const mappedFields = useMemo(() => TARGET_FIELDS.filter((f) => cols[f] !== undefined), [cols]);
+  const custom = useMemo(() => customColumns(mapping), [mapping]);
+  const mappedFields = useMemo<MappingTarget[]>(() => [...TARGET_FIELDS.filter((f) => cols[f] !== undefined), ...custom.map((c) => c.target)], [cols, custom]);
+  const headerFor = (t: MappingTarget): string => (isCustomTarget(t) ? custom.find((c) => c.target === t)?.header ?? "" : (cols[t as TargetField] ?? ""));
+  const targetOptions = useMemo<ComboboxOption[]>(
+    () => [
+      ...TARGET_FIELDS.map((f) => ({ value: f, label: FIELD_LABELS[f] })),
+      ...custom.map((c) => ({ value: c.target, label: c.name, description: "Custom field" })),
+      { value: "ignore", label: FIELD_LABELS.ignore },
+    ],
+    [custom],
+  );
   const preview = useMemo(() => source.rows.slice(0, 5), [source.rows]);
   const samples = useMemo(() => {
     const out: Record<string, string> = {};
@@ -58,7 +62,7 @@ export function MapStep({ source, mapping, onMappingChange, onBack, onContinue }
         body: JSON.stringify({ headers: source.headers, sample: source.rows.slice(0, 5) }),
       });
       if (res.status === 503) {
-        setAiHint({ tone: "warning", text: "AI mapping needs a Gemini key. Add GOOGLE_GENERATIVE_AI_API_KEY to .env.local and restart the dev server, or keep mapping by hand." });
+        setAiHint({ tone: "warning", text: "Nimbus needs a Gemini key to map columns. Add GOOGLE_GENERATIVE_AI_API_KEY to the environment and restart, or keep mapping by hand." });
         return;
       }
       if (!res.ok) throw new Error(`Mapping service returned ${res.status}`);
@@ -73,10 +77,10 @@ export function MapStep({ source, mapping, onMappingChange, onBack, onContinue }
         if (m.field !== "ignore") applied++;
       }
       onMappingChange(next);
-      toast(`AI mapped ${applied} column${applied === 1 ? "" : "s"}`, "success");
+      toast(`Nimbus mapped ${applied} column${applied === 1 ? "" : "s"}`, "success");
       if (typeof data.notes === "string" && data.notes.trim()) setAiHint({ tone: "info", text: data.notes.trim() });
     } catch (err) {
-      toast(err instanceof Error ? err.message : "AI mapping failed", "critical");
+      toast(err instanceof Error ? err.message : "Nimbus could not map the columns", "critical");
     } finally {
       setAiBusy(false);
     }
@@ -97,7 +101,7 @@ export function MapStep({ source, mapping, onMappingChange, onBack, onContinue }
           <div>
             <h3 className="text-[13.5px] font-semibold text-text">Match columns to item fields</h3>
             <p className="mt-0.5 text-[12.5px] text-text-secondary">
-              {source.headers.length} columns in {source.name}. Each field can be used once; SKU is required.
+              {source.headers.length} columns in {source.name}. Each field can be used once; SKU is required. Type a name that isn&apos;t listed to create a custom field.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -105,7 +109,7 @@ export function MapStep({ source, mapping, onMappingChange, onBack, onContinue }
               Reset
             </Button>
             <Button size="sm" icon={<Sparkles />} loading={aiBusy} onClick={mapWithAi}>
-              Map with AI
+              Map with Nimbus
             </Button>
           </div>
         </div>
@@ -123,12 +127,14 @@ export function MapStep({ source, mapping, onMappingChange, onBack, onContinue }
                   <div className="truncate font-mono text-[12.5px] text-text">{h}</div>
                 </div>
                 <div className="min-w-0 truncate text-[12.5px] text-text-secondary">{samples[h] || <span className="text-text-tertiary">—</span>}</div>
-                <Select
+                <Combobox
                   aria-label={`Import ${h} as`}
                   value={target}
-                  options={TARGET_OPTIONS}
-                  onChange={(e) => onMappingChange(setMappingTarget(mapping, h, e.target.value as MappingTarget))}
-                  className={cn(target === "ignore" && "text-text-tertiary")}
+                  options={targetOptions}
+                  placeholder="Choose a field"
+                  onChange={(v) => onMappingChange(setMappingTarget(mapping, h, v as MappingTarget))}
+                  onCreate={(name) => onMappingChange(setMappingTarget(mapping, h, customTarget(name)))}
+                  createLabel={(q) => `Create field “${q}”`}
                 />
               </li>
             );
@@ -155,8 +161,8 @@ export function MapStep({ source, mapping, onMappingChange, onBack, onContinue }
           </div>
           <div className="flex flex-wrap gap-1.5">
             {mappedFields.map((f) => (
-              <Badge key={f} tone="accent">
-                {FIELD_LABELS[f]}
+              <Badge key={f} tone={isCustomTarget(f) ? "attention" : "accent"}>
+                {targetLabel(f)}
               </Badge>
             ))}
           </div>
@@ -170,7 +176,7 @@ export function MapStep({ source, mapping, onMappingChange, onBack, onContinue }
                 <tr>
                   <th className="w-10">#</th>
                   {mappedFields.map((f) => (
-                    <th key={f}>{FIELD_LABELS[f]}</th>
+                    <th key={f}>{targetLabel(f)}</th>
                   ))}
                 </tr>
               </thead>
@@ -178,9 +184,9 @@ export function MapStep({ source, mapping, onMappingChange, onBack, onContinue }
                 {preview.map((row, i) => (
                   <tr key={i}>
                     <td className="text-text-tertiary tabular">{i + 1}</td>
-                    {mappedFields.map((f: TargetField) => (
+                    {mappedFields.map((f) => (
                       <td key={f} className="max-w-[220px] truncate">
-                        {row[cols[f] ?? ""] || <span className="text-text-tertiary">—</span>}
+                        {row[headerFor(f)] || <span className="text-text-tertiary">—</span>}
                       </td>
                     ))}
                   </tr>

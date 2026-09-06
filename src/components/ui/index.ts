@@ -8,3 +8,4 @@ export * from "./Table";
 export * from "./Misc";
 export * from "./Markdown";
 export * from "./QueryParam";
+export * from "./Combobox";

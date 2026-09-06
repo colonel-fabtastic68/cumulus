@@ -71,6 +71,12 @@ export function itemDefaults(partial: Partial<Item> & { sku: string; name: strin
     expectedWastePct: partial.expectedWastePct,
     bom: partial.bom ?? [],
     externalIds: partial.externalIds,
+    brand: partial.brand,
+    weight: partial.weight,
+    weightUnit: partial.weightUnit,
+    dimensions: partial.dimensions,
+    imageUrl: partial.imageUrl,
+    attributes: partial.attributes,
     createdAt: partial.createdAt ?? now,
     updatedAt: now,
     updatedBy: partial.updatedBy,
@@ -971,6 +977,7 @@ export interface ImportRow {
   qty?: number;
   unitCost?: number;
   price?: number;
+  salePrice?: number;
   minQty?: number;
   maxQty?: number;
   leadTimeDays?: number;
@@ -978,6 +985,19 @@ export interface ImportRow {
   barcode?: string;
   supplierName?: string;
   tags?: string[];
+  brand?: string;
+  weight?: number;
+  length?: number;
+  width?: number;
+  height?: number;
+  imageUrl?: string;
+  /** Id in the source system (Shopify / WooCommerce product id). */
+  externalId?: string;
+  externalSource?: "shopify" | "woocommerce";
+  /** false marks the item inactive (unpublished / draft in the source). */
+  published?: boolean;
+  /** Custom fields mapped on import. */
+  attributes?: Record<string, string>;
 }
 
 export interface ImportResult {
@@ -1030,9 +1050,22 @@ export async function importItems(store: Store, actor: Actor, rows: ImportRow[],
     if (row.barcode) fields.barcode = row.barcode;
     if (supplierId) fields.supplierId = supplierId;
     if (row.tags?.length) fields.tags = row.tags;
+    if (row.salePrice !== undefined && Number.isFinite(row.salePrice)) fields.salePrice = row.salePrice;
+    if (row.brand) fields.brand = row.brand.trim();
+    if (row.weight !== undefined && Number.isFinite(row.weight)) fields.weight = row.weight;
+    if ([row.length, row.width, row.height].some((v) => v !== undefined && Number.isFinite(v))) {
+      fields.dimensions = { length: row.length, width: row.width, height: row.height };
+    }
+    if (row.imageUrl) fields.imageUrl = row.imageUrl.split(/[,|]/)[0]!.trim();
+    if (row.externalId && row.externalSource) fields.externalIds = { [row.externalSource]: row.externalId };
+    if (row.published === false) fields.status = "inactive";
 
     const existing = bySku.get(sku);
+    if (row.attributes && Object.keys(row.attributes).length) {
+      fields.attributes = { ...(existing?.attributes ?? {}), ...row.attributes };
+    }
     if (existing) {
+      if (fields.externalIds) fields.externalIds = { ...(existing.externalIds ?? {}), ...fields.externalIds };
       ops.push({ op: "patch", collection: "items", id: existing.id, patch: { ...fields, updatedAt: nowIso(), updatedBy: actor.id } });
       result.updated++;
       if (opts.setQuantities && row.qty !== undefined && Number.isFinite(row.qty)) qtyTargets.push({ itemId: existing.id, newQty: row.qty });

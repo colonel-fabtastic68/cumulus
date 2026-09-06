@@ -9,6 +9,7 @@ import { importItems, InventoryError, type ImportResult } from "@/lib/inventory"
 import { useItemsBySku, useSettings, useStore } from "@/lib/store/provider";
 import { matches } from "@/lib/utils";
 import { buildReviewRows } from "./convert";
+import { ImportChanges } from "./ImportChanges";
 import type { ColumnMapping, ParsedSource, ReviewRow, ReviewStatus } from "./types";
 
 type Filter = "all" | ReviewStatus;
@@ -37,7 +38,7 @@ export function ReviewStep({ source, mapping, onBack, onDone }: ReviewStepProps)
   const [query, setQuery] = useState("");
   const [importing, setImporting] = useState(false);
 
-  const reviewRows = useMemo(() => buildReviewRows(source.rows, mapping, itemsBySku), [source.rows, mapping, itemsBySku]);
+  const reviewRows = useMemo(() => buildReviewRows(source.rows, mapping, itemsBySku, source.kind === "generic" ? undefined : source.kind), [source.rows, mapping, itemsBySku, source.kind]);
   const counts = useMemo(() => {
     const c = { all: reviewRows.length, new: 0, update: 0, error: 0 };
     for (const r of reviewRows) c[r.status]++;
@@ -117,6 +118,7 @@ export function ReviewStep({ source, mapping, onBack, onDone }: ReviewStepProps)
         <SummaryTile label="Updates" value={counts.update} tone="info" />
         <SummaryTile label="Errors" value={counts.error} tone={counts.error ? "critical" : "default"} />
       </div>
+      <ImportChanges rows={reviewRows} />
 
       <Table
         rows={visible}

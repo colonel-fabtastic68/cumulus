@@ -5,7 +5,7 @@ import type { Item } from "@/lib/types";
 import { createItems, updateItem } from "@/lib/inventory";
 import { useCollection, useItems, useStore } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
-import { Button, FormGrid, Modal, Select, TextArea, TextField, useToast } from "@/components/ui";
+import { Button, Combobox, FormGrid, Modal, Select, TextArea, TextField, useToast } from "@/components/ui";
 
 interface FormState {
   sku: string;
@@ -28,6 +28,8 @@ interface FormState {
   tags: string;
   description: string;
   openingQty: string;
+  brand: string;
+  weight: string;
 }
 
 function fromItem(item?: Item | null, defaults?: Partial<Item>): FormState {
@@ -53,6 +55,8 @@ function fromItem(item?: Item | null, defaults?: Partial<Item>): FormState {
     tags: src?.tags?.join(", ") ?? "",
     description: src?.description ?? "",
     openingQty: "",
+    brand: src?.brand ?? "",
+    weight: src?.weight !== undefined ? String(src.weight) : "",
   };
 }
 
@@ -105,6 +109,7 @@ function ItemForm({ open, onClose, item, defaults, onSaved }: ItemFormModalProps
     leadTimeDays: numErr(f.leadTimeDays, true),
     expectedWastePct: numErr(f.expectedWastePct),
     openingQty: numErr(f.openingQty),
+    weight: numErr(f.weight),
   };
   const invalid = Object.values(errors).some(Boolean);
   const clearsBom = editing && !!item && item.type === "assembly" && f.type === "part" && item.bom.length > 0;
@@ -134,6 +139,8 @@ function ItemForm({ open, onClose, item, defaults, onSaved }: ItemFormModalProps
       expectedWastePct: num(f.expectedWastePct),
       tags: f.tags.split(",").map((t) => t.trim()).filter(Boolean),
       description: f.description.trim() || undefined,
+      brand: f.brand.trim() || undefined,
+      weight: num(f.weight),
       // Reactivating clears any stale supersession; dropping to a part drops the BOM with it.
       ...(f.status === "active" ? { supersededBy: undefined } : {}),
       ...(clearsBom ? { bom: [] } : {}),
@@ -178,14 +185,15 @@ function ItemForm({ open, onClose, item, defaults, onSaved }: ItemFormModalProps
             <TextField label="Name" value={f.name} onChange={set("name")} placeholder="1590B aluminium enclosure, raw" />
           </div>
           <Select label="Type" value={f.type} onChange={set("type")} options={[{ value: "part", label: "Part" }, { value: "assembly", label: "Assembly (has a BOM)" }]} help={clearsBom ? `Switching to a part removes its ${item!.bom.length}-line BOM` : undefined} />
-          <div>
-            <TextField label="Category" value={f.category} onChange={set("category")} list="cumulus-categories" placeholder="Electronics" />
-            <datalist id="cumulus-categories">
-              {categories.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
-          </div>
+          <Combobox
+            label="Category"
+            value={f.category}
+            options={[...categories, ...(f.category && !categories.includes(f.category) ? [f.category] : [])].map((c) => ({ value: c, label: c }))}
+            placeholder="Choose or create a category"
+            onChange={(v) => setF((p) => ({ ...p, category: v }))}
+            onCreate={(v) => setF((p) => ({ ...p, category: v }))}
+            createLabel={(q) => `Create category “${q}”`}
+          />
           <Select
             label="Status"
             value={f.status}
@@ -212,7 +220,9 @@ function ItemForm({ open, onClose, item, defaults, onSaved }: ItemFormModalProps
           <TextField label="Location" value={f.location} onChange={set("location")} placeholder="A-01" />
           <TextField label="Barcode" value={f.barcode} onChange={set("barcode")} />
         </FormGrid>
-        <FormGrid cols={editing ? 1 : 2}>
+        <FormGrid cols={editing ? 3 : 4}>
+          <TextField label="Brand" hint="(optional)" value={f.brand} onChange={set("brand")} placeholder="Hammond" />
+          <TextField label="Weight" hint="(optional)" type="number" step="any" min={0} value={f.weight} onChange={set("weight")} error={errors.weight} />
           <TextField label="Tags" hint="comma separated" value={f.tags} onChange={set("tags")} placeholder="shopify, bestseller" />
           {!editing && <TextField label="Opening quantity" hint="(optional)" type="number" step="any" min={0} value={f.openingQty} onChange={set("openingQty")} help="Recorded as an opening count in the ledger" error={errors.openingQty} />}
         </FormGrid>

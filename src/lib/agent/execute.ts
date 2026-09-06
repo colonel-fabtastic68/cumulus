@@ -98,22 +98,30 @@ function brief(i: Item, suppliers: Supplier[]) {
   };
 }
 
-async function resolveTargets(ctx: ExecContext, input: { skus?: string[]; filter?: Filter }): Promise<Item[]> {
+interface TargetInput {
+  skus?: string[];
+  filter?: Filter;
+  /** Every active item. */
+  all?: boolean;
+  /** Per-item lines target their own SKUs. */
+  lines?: Array<{ sku: string; set?: SetFields }>;
+}
+
+async function resolveTargets(ctx: ExecContext, input: TargetInput): Promise<Item[]> {
   const items = await ctx.store.list("items");
   const suppliers = await ctx.store.list("suppliers");
   const movements = await ctx.store.list("movements");
   const out = new Map<string, Item>();
-  if (input.skus?.length) {
-    for (const s of input.skus) {
-      const it = findItem(items, s);
-      if (!it) throw new InventoryError(`Unknown SKU ${s}`);
-      out.set(it.id, it);
-    }
+  for (const s of [...(input.skus ?? []), ...(input.lines ?? []).map((l) => l.sku)]) {
+    const it = findItem(items, s);
+    if (!it) throw new InventoryError(`Unknown SKU ${s}`);
+    out.set(it.id, it);
   }
   if (input.filter) {
     for (const it of applyFilter(items, input.filter, suppliers, movements)) out.set(it.id, it);
   }
-  if (!input.skus?.length && !input.filter) throw new InventoryError("Provide skus or a filter");
+  if (input.all) for (const it of items) if (it.status === "active") out.set(it.id, it);
+  if (out.size === 0 && !input.filter && !input.all) throw new InventoryError("Provide skus, a filter, lines, or all: true");
   return Array.from(out.values());
 }
 
@@ -162,6 +170,33 @@ function diff(item: Item, patch: ItemPatch): Record<string, { from: unknown; to:
   return out;
 }
 
+type BulkInput = TargetInput & { set?: SetFields; adjustPricePct?: number; adjustCostPct?: number; addTags?: string[]; removeTags?: string[] };
+
+interface BulkPlanRow {
+  item: Item;
+  changes: Record<string, { from: unknown; to: unknown }>;
+}
+
+/** Resolve one bulk update (targets, shared set, percentage adjustments, per-item lines) into per-item diffs. Side-effect free apart from supplier lookups. */
+async function bulkPlan(ctx: ExecContext, input: BulkInput): Promise<BulkPlanRow[]> {
+  const targets = await resolveTargets(ctx, input);
+  const base = await fieldsToPatch(ctx, input.set);
+  const perItem = new Map<string, ItemPatch>();
+  if (input.lines?.length) {
+    const items = await ctx.store.list("items");
+    for (const l of input.lines) {
+      const it = findItem(items, l.sku);
+      if (!it) throw new InventoryError(`Unknown SKU ${l.sku}`);
+      perItem.set(it.id, { ...(perItem.get(it.id) ?? {}), ...(await fieldsToPatch(ctx, l.set)) });
+    }
+  }
+  return targets.map((item) => ({ item, changes: diff(item, { ...computeBulkPatch(item, base, input), ...(perItem.get(item.id) ?? {}) }) }));
+}
+
+function patchFromChanges(changes: BulkPlanRow["changes"]): ItemPatch {
+  return Object.fromEntries(Object.entries(changes).map(([k, v]) => [k, v.to])) as ItemPatch;
+}
+
 // ---------------------------------------------------------------------------
 
 export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: ExecContext): Promise<unknown> {
@@ -198,6 +233,11 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
     case "searchItems": {
       const [items, suppliers, movements] = await Promise.all([store.list("items"), store.list("suppliers"), store.list("movements")]);
       let rows = applyFilter(items, input.filter as Filter | undefined, suppliers, movements);
+      const skus = input.skus as string[] | undefined;
+      if (skus?.length) {
+        const want = new Set(skus.map((s) => s.trim().toUpperCase()));
+        rows = rows.filter((i) => want.has(i.sku.toUpperCase()));
+      }
       const sortBy = input.sortBy as string | undefined;
       if (sortBy === "onHand") rows = [...rows].sort((a, b) => b.onHand - a.onHand);
       else if (sortBy === "value") rows = [...rows].sort((a, b) => b.onHand * b.unitCost - a.onHand * a.unitCost);
@@ -310,27 +350,24 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
     }
 
     case "previewBulkUpdate": {
-      const targets = await resolveTargets(ctx, input as { skus?: string[]; filter?: Filter });
-      const base = await fieldsToPatch(ctx, input.set as SetFields | undefined);
+      const plan = await bulkPlan(ctx, input as BulkInput);
+      const changing = plan.filter((p) => Object.keys(p.changes).length > 0);
       return {
-        matched: targets.length,
-        items: targets.slice(0, 50).map((i) => ({ sku: i.sku, name: i.name, changes: diff(i, base) })),
-        truncated: targets.length > 50 ? targets.length - 50 : 0,
+        matched: plan.length,
+        wouldChange: changing.length,
+        items: plan.slice(0, 50).map((p) => ({ sku: p.item.sku, name: p.item.name, changes: p.changes })),
+        truncated: plan.length > 50 ? plan.length - 50 : 0,
       };
     }
 
     // ---- WRITE ---------------------------------------------------------------
 
     case "bulkUpdateItems": {
-      const targets = await resolveTargets(ctx, input as { skus?: string[]; filter?: Filter });
-      if (targets.length === 0) return { ok: true, updated: 0, summary: "No items matched." };
-      const base = await fieldsToPatch(ctx, input.set as SetFields | undefined);
-      const patches = targets
-        .map((i) => ({ id: i.id, patch: computeBulkPatch(i, base, input as Parameters<typeof computeBulkPatch>[2]) }))
-        .map((p) => ({ ...p, patch: Object.fromEntries(Object.entries(diff(targets.find((t) => t.id === p.id)!, p.patch)).map(([k, v]) => [k, v.to])) as ItemPatch }))
-        .filter((p) => Object.keys(p.patch).length > 0);
-      const n = await bulkPatchItems(store, actor, patches, String(input.reason ?? "Agent bulk update"));
-      return { ok: true, updated: n, skus: targets.slice(0, 30).map((t) => t.sku), summary: `Updated ${n} item${n === 1 ? "" : "s"}` };
+      const plan = await bulkPlan(ctx, input as BulkInput);
+      if (plan.length === 0) return { ok: true, updated: 0, summary: "No items matched." };
+      const changing = plan.filter((p) => Object.keys(p.changes).length > 0);
+      const n = changing.length ? await bulkPatchItems(store, actor, changing.map((p) => ({ id: p.item.id, patch: patchFromChanges(p.changes) })), String(input.reason ?? "Agent bulk update")) : 0;
+      return { ok: true, updated: n, unchanged: plan.length - changing.length, skus: changing.slice(0, 30).map((p) => p.item.sku), summary: `Updated ${n} item${n === 1 ? "" : "s"}` };
     }
 
     case "createItems": {
@@ -526,6 +563,75 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
   }
 }
 
+/** Tools whose effect can be overlaid on the item tables before applying. */
+export const PREVIEWABLE_TOOLS: AgentToolName[] = ["bulkUpdateItems", "deactivateItems", "adjustStock", "receiveStock", "updateBom"];
+
+/**
+ * Side-effect-free: the per-item field patches a write tool would apply, so
+ * the app can overlay them on tables as a live preview.
+ */
+export async function previewPatches(name: AgentToolName, rawInput: unknown, ctx: ExecContext): Promise<Record<string, Partial<Item>>> {
+  const input = (rawInput ?? {}) as Record<string, unknown>;
+  const items = await ctx.store.list("items");
+  const out: Record<string, Partial<Item>> = {};
+  switch (name) {
+    case "bulkUpdateItems": {
+      for (const p of await bulkPlan(ctx, input as BulkInput)) if (Object.keys(p.changes).length) out[p.item.id] = patchFromChanges(p.changes) as Partial<Item>;
+      return out;
+    }
+    case "deactivateItems": {
+      const targets = await resolveTargets(ctx, input as TargetInput);
+      const base = { status: input.supersededBySku ? "superseded" : "inactive" } as ItemPatch;
+      for (const it of targets) {
+        const changes = diff(it, base);
+        if (Object.keys(changes).length) out[it.id] = patchFromChanges(changes) as Partial<Item>;
+      }
+      return out;
+    }
+    case "adjustStock": {
+      for (const a of (input.adjustments as Array<Record<string, unknown>>) ?? []) {
+        const it = findItem(items, String(a.sku));
+        if (!it) continue;
+        const next = a.newQty !== undefined ? Number(a.newQty) : it.onHand + Number(a.qtyDelta ?? 0);
+        if (Number.isFinite(next) && next !== it.onHand) out[it.id] = { onHand: round(next, 3) };
+      }
+      return out;
+    }
+    case "receiveStock": {
+      for (const l of (input.lines as Array<Record<string, unknown>>) ?? []) {
+        const it = findItem(items, String(l.sku));
+        if (!it) continue;
+        const prev = out[it.id]?.onHand ?? it.onHand;
+        out[it.id] = { ...(out[it.id] ?? {}), onHand: round(prev + Number(l.qty ?? 0), 3), ...(l.unitCost !== undefined ? { unitCost: Number(l.unitCost) } : {}) };
+      }
+      return out;
+    }
+    case "updateBom": {
+      const asm = findItem(items, String(input.sku ?? ""));
+      if (!asm) return out;
+      const mode = (input.mode as string) ?? "merge";
+      const lines = (input.lines as Array<{ sku: string; qty?: number; wastePct?: number }>) ?? [];
+      let bom = [...asm.bom];
+      for (const l of lines) {
+        const comp = findItem(items, l.sku);
+        if (!comp) continue;
+        if (mode === "remove") bom = bom.filter((b) => b.itemId !== comp.id);
+        else {
+          const idx = bom.findIndex((b) => b.itemId === comp.id);
+          const line = { itemId: comp.id, qty: l.qty ?? bom[idx]?.qty ?? 1, wastePct: l.wastePct ?? bom[idx]?.wastePct };
+          if (idx >= 0) bom[idx] = line;
+          else bom.push(line);
+        }
+      }
+      if (mode === "replace") bom = lines.map((l) => ({ itemId: findItem(items, l.sku)?.id ?? "", qty: l.qty ?? 1, wastePct: l.wastePct })).filter((b) => b.itemId);
+      out[asm.id] = { bom, type: "assembly" };
+      return out;
+    }
+    default:
+      return out;
+  }
+}
+
 /** Side-effect-free description of what a write tool would do, for proposal cards. */
 export async function describeProposal(name: AgentToolName, rawInput: unknown, ctx: ExecContext): Promise<{ title: string; lines: string[]; affected?: Array<{ sku: string; name: string; changes?: Record<string, { from: unknown; to: unknown }> }> }> {
   const input = (rawInput ?? {}) as Record<string, unknown>;
@@ -533,13 +639,29 @@ export async function describeProposal(name: AgentToolName, rawInput: unknown, c
   const skuOf = (s: unknown) => findItem(items, String(s ?? ""))?.sku ?? String(s);
   try {
     switch (name) {
-      case "bulkUpdateItems":
+      case "bulkUpdateItems": {
+        const plan = await bulkPlan(ctx, input as BulkInput);
+        const changing = plan.filter((p) => Object.keys(p.changes).length > 0);
+        const fields = Array.from(new Set(changing.flatMap((p) => Object.keys(p.changes))));
+        const lineCount = Array.isArray(input.lines) ? input.lines.length : 0;
+        const pct = (v: unknown) => `${Number(v) > 0 ? "+" : ""}${Number(v)}%`;
+        const how = [
+          input.adjustPricePct ? `Price ${pct(input.adjustPricePct)}` : null,
+          input.adjustCostPct ? `Unit cost ${pct(input.adjustCostPct)}` : null,
+          lineCount ? `${lineCount} per-item value${lineCount === 1 ? "" : "s"}` : null,
+          plan.length > changing.length ? `${plan.length - changing.length} matched item${plan.length - changing.length === 1 ? " is" : "s are"} already up to date` : null,
+        ].filter((s): s is string => Boolean(s));
+        return {
+          title: `Update ${changing.length} item${changing.length === 1 ? "" : "s"}`,
+          lines: [fields.length ? `Fields: ${fields.join(", ")}` : "No field changes", ...how, ...(input.reason ? [`Reason: ${input.reason}`] : [])],
+          affected: changing.slice(0, 40).map((p) => ({ sku: p.item.sku, name: p.item.name, changes: p.changes })),
+        };
+      }
       case "deactivateItems": {
-        const targets = await resolveTargets(ctx, input as { skus?: string[]; filter?: Filter });
-        const base = name === "deactivateItems" ? ({ status: input.supersededBySku ? "superseded" : "inactive" } as ItemPatch) : await fieldsToPatch(ctx, input.set as SetFields | undefined);
-        const affected = targets.slice(0, 40).map((i) => ({ sku: i.sku, name: i.name, changes: diff(i, name === "bulkUpdateItems" ? computeBulkPatch(i, base, input as Parameters<typeof computeBulkPatch>[2]) : base) }));
-        const fields = Array.from(new Set(affected.flatMap((a) => Object.keys(a.changes ?? {}))));
-        return { title: `${name === "deactivateItems" ? "Deactivate" : "Update"} ${targets.length} item${targets.length === 1 ? "" : "s"}`, lines: [fields.length ? `Fields: ${fields.join(", ")}` : "No field changes", ...(input.reason ? [`Reason: ${input.reason}`] : [])], affected };
+        const targets = await resolveTargets(ctx, input as TargetInput);
+        const base = { status: input.supersededBySku ? "superseded" : "inactive" } as ItemPatch;
+        const affected = targets.slice(0, 40).map((i) => ({ sku: i.sku, name: i.name, changes: diff(i, base) }));
+        return { title: `Deactivate ${targets.length} item${targets.length === 1 ? "" : "s"}`, lines: input.reason ? [`Reason: ${input.reason}`] : [], affected };
       }
       case "createItems": {
         const specs = (input.items as Array<Record<string, unknown>>) ?? [];

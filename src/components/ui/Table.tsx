@@ -26,6 +26,8 @@ export interface TableProps<T> {
   onRowClick?: (row: T) => void;
   /** Accessible label for a row's checkbox and keyboard target; defaults to the row key. */
   rowLabel?: (row: T) => string;
+  /** Extra classes per row (e.g. a preview highlight). */
+  rowClassName?: (row: T) => string | undefined;
   selectable?: boolean;
   selected?: Set<string>;
   onSelectedChange?: (next: Set<string>) => void;
@@ -44,7 +46,7 @@ export interface TableProps<T> {
 
 const hideCls = { sm: "hidden sm:table-cell", md: "hidden md:table-cell", lg: "hidden lg:table-cell" };
 
-export function Table<T>({ rows, columns, rowKey, rowLabel, onRowClick, selectable, selected, onSelectedChange, emptyState, pageSize = 50, defaultSort, toolbar, bulkActions, footer, dense, className, stickyHeader = false }: TableProps<T>) {
+export function Table<T>({ rows, columns, rowKey, rowLabel, rowClassName, onRowClick, selectable, selected, onSelectedChange, emptyState, pageSize = 50, defaultSort, toolbar, bulkActions, footer, dense, className, stickyHeader = false }: TableProps<T>) {
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(defaultSort ?? null);
   const [page, setPage] = useState(0);
 
@@ -167,7 +169,7 @@ export function Table<T>({ rows, columns, rowKey, rowLabel, onRowClick, selectab
                           }
                         : undefined
                     }
-                    className={cn("border-b border-border last:border-b-0 focus-visible:bg-surface-hover focus-visible:outline-none", onRowClick && "cursor-pointer", isSel ? "bg-surface-selected" : "hover:bg-surface-hover/70")}
+                    className={cn("border-b border-border last:border-b-0 focus-visible:bg-surface-hover focus-visible:outline-none", onRowClick && "cursor-pointer", isSel ? "bg-surface-selected" : "hover:bg-surface-hover/70", rowClassName?.(row))}
                   >
                     {selectable && (
                       <td className={cn(cellPad)} onClick={(e) => e.stopPropagation()}>

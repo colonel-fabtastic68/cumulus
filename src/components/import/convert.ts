@@ -1,7 +1,7 @@
 import type { ImportRow } from "@/lib/inventory";
 import type { Item } from "@/lib/types";
 import { uniq } from "@/lib/utils";
-import { invertMapping } from "./mapping";
+import { customColumns, invertMapping } from "./mapping";
 import { FIELD_LABELS, type ColumnMapping, type ReviewRow, type TargetField } from "./types";
 
 export interface NumberParse {
@@ -43,7 +43,7 @@ export function splitTags(raw: string | undefined): string[] {
   );
 }
 
-const TEXT_FIELDS: Array<Exclude<TargetField, "qty" | "unitCost" | "price" | "minQty" | "maxQty" | "leadTimeDays" | "type" | "tags" | "sku">> = [
+const TEXT_FIELDS: Array<"name" | "description" | "category" | "unit" | "location" | "barcode" | "supplierName" | "brand" | "imageUrl" | "externalId"> = [
   "name",
   "description",
   "category",
@@ -51,12 +51,24 @@ const TEXT_FIELDS: Array<Exclude<TargetField, "qty" | "unitCost" | "price" | "mi
   "location",
   "barcode",
   "supplierName",
+  "brand",
+  "imageUrl",
+  "externalId",
 ];
 
-const NUMBER_FIELDS: Array<"qty" | "unitCost" | "price" | "minQty" | "maxQty" | "leadTimeDays"> = ["qty", "unitCost", "price", "minQty", "maxQty", "leadTimeDays"];
+const NUMBER_FIELDS: Array<"qty" | "unitCost" | "price" | "salePrice" | "minQty" | "maxQty" | "leadTimeDays" | "weight" | "length" | "width" | "height"> = ["qty", "unitCost", "price", "salePrice", "minQty", "maxQty", "leadTimeDays", "weight", "length", "width", "height"];
+
+/** "1", "true", "yes", "published" → true; "0", "-1", "false", "no", "draft", "private" → false; anything else → undefined. */
+export function parsePublished(raw: string | undefined): boolean | undefined {
+  const s = (raw ?? "").trim().toLowerCase();
+  if (!s) return undefined;
+  if (["1", "true", "yes", "y", "published", "active", "enabled", "visible"].includes(s)) return true;
+  if (["0", "-1", "false", "no", "n", "draft", "private", "pending", "inactive", "disabled", "hidden", "archived"].includes(s)) return false;
+  return undefined;
+}
 
 /** Convert one source row into an ImportRow using the target->header map. Unparsable numbers are dropped and reported. */
-export function convertRow(src: Record<string, string>, cols: Partial<Record<TargetField, string>>): { row: ImportRow; errors: string[] } {
+export function convertRow(src: Record<string, string>, cols: Partial<Record<TargetField, string>>, custom: Array<{ name: string; header: string }> = [], source?: "shopify" | "woocommerce"): { row: ImportRow; errors: string[] } {
   const errors: string[] = [];
   const read = (field: TargetField): string | undefined => {
     const header = cols[field];
@@ -83,16 +95,47 @@ export function convertRow(src: Record<string, string>, cols: Partial<Record<Tar
     const tags = splitTags(read("tags"));
     if (tags.length) row.tags = tags;
   }
+  if (cols.published !== undefined) {
+    const p = parsePublished(read("published"));
+    if (p !== undefined) row.published = p;
+  }
+  if (row.externalId && source) row.externalSource = source;
+  if (custom.length) {
+    const attrs: Record<string, string> = {};
+    for (const c of custom) {
+      const v = src[c.header];
+      if (v !== undefined && String(v).trim() !== "") attrs[c.name] = String(v).trim();
+    }
+    if (Object.keys(attrs).length) row.attributes = attrs;
+  }
   return { row, errors };
 }
 
+const COMPARABLE: Array<keyof ImportRow & keyof Item> = ["name", "description", "category", "type", "unit", "unitCost", "price", "salePrice", "minQty", "maxQty", "leadTimeDays", "location", "barcode", "brand", "weight", "imageUrl"];
+
+/** Fields whose incoming value differs from what the existing item has. */
+export function changedFields(row: ImportRow, existing: Item): string[] {
+  const out: string[] = [];
+  for (const f of COMPARABLE) {
+    const incoming = row[f];
+    if (incoming === undefined) continue;
+    const current = existing[f];
+    if (typeof incoming === "number" ? Number(current ?? NaN) !== incoming : String(current ?? "").trim() !== String(incoming).trim()) out.push(f);
+  }
+  if (row.tags && row.tags.join("|") !== existing.tags.join("|")) out.push("tags");
+  if (row.published === false && existing.status !== "inactive") out.push("status");
+  for (const [k, v] of Object.entries(row.attributes ?? {})) if ((existing.attributes?.[k] ?? "") !== v) out.push(`custom:${k}`);
+  return out;
+}
+
 /** Turn source rows into review rows with a New / Update / Error status. */
-export function buildReviewRows(rows: Record<string, string>[], mapping: ColumnMapping, itemsBySku: Map<string, Item>): ReviewRow[] {
+export function buildReviewRows(rows: Record<string, string>[], mapping: ColumnMapping, itemsBySku: Map<string, Item>, source?: "shopify" | "woocommerce"): ReviewRow[] {
   const cols = invertMapping(mapping);
+  const custom = customColumns(mapping);
   const seen = new Map<string, number>();
   return rows.map((src, i) => {
     const line = i + 1;
-    const { row, errors } = convertRow(src, cols);
+    const { row, errors } = convertRow(src, cols, custom, source);
     const sku = row.sku.trim().toUpperCase();
     const existing = sku ? itemsBySku.get(sku) : undefined;
     if (!sku) errors.unshift("Missing SKU");
@@ -103,6 +146,6 @@ export function buildReviewRows(rows: Record<string, string>[], mapping: ColumnM
     }
     if (sku && !existing && !row.name?.trim()) errors.push("Name is required for new items");
     const status: ReviewRow["status"] = errors.length ? "error" : existing ? "update" : "new";
-    return { line, sku, status, message: errors.length ? errors.join("; ") : undefined, row, existing };
+    return { line, sku, status, message: errors.length ? errors.join("; ") : undefined, row, existing, changedFields: existing && !errors.length ? changedFields(row, existing) : [] };
   });
 }
