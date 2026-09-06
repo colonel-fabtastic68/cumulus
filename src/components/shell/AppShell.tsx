@@ -11,6 +11,7 @@ import { Onboarding } from "./Onboarding";
 import { PreviewBar } from "./PreviewBar";
 import { Banner, Button, Skeleton } from "@/components/ui";
 import { SignInCard } from "./SignInCard";
+import { useNavArrowKeys } from "./useNavArrowKeys";
 
 function LoadingSkeleton({ note }: { note?: ReactNode }) {
   return (
@@ -58,6 +59,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const settings = useSettings();
   const [mobileNav, setMobileNav] = useState(false);
   const [slow, setSlow] = useState(false);
+  // Shift+↑/↓ walk the sidebar once the workspace is open (not on sign-in, loading or onboarding screens).
+  useNavArrowKeys(ready && !!user && !!settings.companyName.trim());
 
   // Flag a slow Firestore connection so the skeleton never looks frozen.
   useEffect(() => {

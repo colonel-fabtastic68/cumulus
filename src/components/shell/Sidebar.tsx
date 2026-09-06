@@ -1,34 +1,17 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Boxes, ClipboardList, Download, FileBarChart2, Hammer, Home, PackageCheck, Plug, RotateCcw, Settings, ShoppingCart, Sparkles, Truck, Users } from "lucide-react";
+import { Kbd } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { useCollection, useSettings } from "@/lib/store/provider";
 import { isLowStock } from "@/lib/inventory";
-
-const NAV = [
-  { href: "/", label: "Home", icon: Home },
-  { href: "/inventory", label: "Inventory", icon: Boxes },
-  { href: "/receiving", label: "Receiving", icon: PackageCheck },
-  { href: "/builds", label: "Builds", icon: Hammer },
-  { href: "/orders", label: "Orders", icon: ShoppingCart },
-  { href: "/rmas", label: "Returns", icon: RotateCcw },
-  { href: "/suppliers", label: "Suppliers", icon: Truck },
-  { href: "/reports", label: "Reports", icon: FileBarChart2 },
-];
-
-const NAV_SECONDARY = [
-  { href: "/agents", label: "Nimbus", icon: Sparkles },
-  { href: "/import", label: "Import", icon: Download },
-  { href: "/integrations", label: "Integrations", icon: Plug },
-  { href: "/team", label: "Team", icon: Users },
-  { href: "/activity", label: "Activity", icon: ClipboardList },
-  { href: "/settings", label: "Settings", icon: Settings },
-];
+import { isNavActive, NAV, NAV_SECONDARY, type NavItem } from "./nav";
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const navRef = useRef<HTMLElement>(null);
   const settings = useSettings();
   const items = useCollection("items");
   const orders = useCollection("orders");
@@ -38,17 +21,21 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const openRmas = rmas.filter((r) => r.status === "open" || r.status === "inspecting").length;
   const counts: Record<string, number> = { "/inventory": lowCount, "/orders": openOrders, "/rmas": openRmas };
 
-  const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/"));
+  // Keep the active entry visible when the page changes from the keyboard (Shift+↑/↓) on short windows.
+  useEffect(() => {
+    navRef.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest" });
+  }, [pathname]);
 
-  const renderLink = (n: { href: string; label: string; icon: typeof Home }) => {
+  const renderLink = (n: NavItem) => {
     const Icon = n.icon;
-    const active = isActive(n.href);
+    const active = isNavActive(n.href, pathname);
     const count = counts[n.href];
     return (
       <Link
         key={n.href}
         href={n.href}
         onClick={onNavigate}
+        aria-current={active ? "page" : undefined}
         className={cn(
           "group flex h-8 items-center gap-2.5 rounded-[var(--radius-sm)] px-2.5 text-[13px] font-[550] transition-colors",
           active ? "bg-surface text-text shadow-[var(--shadow-100),0_0_0_1px_rgba(26,26,26,0.07)]" : "text-text hover:bg-[rgba(0,0,0,0.04)]",
@@ -72,11 +59,17 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           <div className="text-[11px] text-text-tertiary">Cumulus</div>
         </div>
       </div>
-      <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 pb-3">
+      <nav ref={navRef} className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 pb-3">
         {NAV.map(renderLink)}
         <div className="mt-4 mb-1 px-2.5 text-[12px] font-[550] text-text-secondary">Workspace</div>
         {NAV_SECONDARY.map(renderLink)}
       </nav>
+      <div className="flex items-center gap-1.5 border-t border-border px-4 py-2 text-[11px] text-text-tertiary" title="Hold Shift and press the up or down arrow to move between pages">
+        <Kbd>⇧</Kbd>
+        <Kbd>↑</Kbd>
+        <Kbd>↓</Kbd>
+        <span>switch pages</span>
+      </div>
     </aside>
   );
 }

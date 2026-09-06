@@ -30,7 +30,7 @@ To use Firestore: create a Firebase project, enable **Firestore**, enable **Emai
 
 Nimbus, the agent, is Gemini Flash via the Vercel AI SDK (`/api/agent`). It has read tools (search, item detail, BOM explosion, where-used, reports) and write tools (bulk update, create items, adjust/receive/build, BOM edits, deactivate, orders, RMAs, suppliers). All tools execute **in the browser** against the active store, so the server never holds your data. Write tools render as proposal cards you approve or reject; flip **Settings → Agent → Auto-apply** to skip approvals.
 
-Open it with the **Nimbus** button or `⌘J`. `⌘K` is global search; typing a question with no matches hands it to the agent. If Gemini answers 503 "high demand", the route automatically retries on the models in `GEMINI_FALLBACK_MODELS` (default `gemini-3.7-flash,gemini-3.5-flash,gemini-3.5-flash-lite,gemini-3.6-flash`), and any model that takes more than 15 s to start answering is skipped.
+Open it with the **Nimbus** button or `⌘J`. `⌘K` is global search, and `Shift+↑` / `Shift+↓` move between the sidebar pages; typing a question with no matches hands it to the agent. If Gemini answers 503 "high demand", the route automatically retries on the models in `GEMINI_FALLBACK_MODELS` (default `gemini-3.7-flash,gemini-3.5-flash,gemini-3.5-flash-lite,gemini-3.6-flash`), and any model that takes more than 15 s to start answering is skipped.
 
 ### MCP endpoint (for other agents)
 
