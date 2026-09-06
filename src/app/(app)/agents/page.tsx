@@ -3,7 +3,7 @@
 import { useEffect, type ReactNode } from "react";
 import { Page } from "@/components/ui";
 import { useAgent } from "@/components/agent/AgentProvider";
-import { AgentStatusCard, AutomationsCard, ConversationsTable, DataHealthCard } from "@/components/agents";
+import { AutomationsCard, ConversationsTable, DataHealthCard } from "@/components/agents";
 
 function SectionHeading({ title, description }: { title: ReactNode; description?: ReactNode }) {
   return (
@@ -24,8 +24,6 @@ export default function AgentsPage() {
   return (
     <Page title="Agents" subtitle="Delegate bulk work. The agent reads everything, proposes changes, and applies them after you approve.">
       <div className="flex flex-col gap-4">
-        <AgentStatusCard />
-
         <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-2">
           <DataHealthCard />
           <AutomationsCard />

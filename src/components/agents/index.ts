@@ -1,4 +1,3 @@
-export * from "./AgentStatusCard";
 export * from "./AutomationModal";
 export * from "./AutomationsCard";
 export * from "./ConversationsTable";
