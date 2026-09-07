@@ -21,7 +21,6 @@ export function Hero({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
       </div>
       <Reveal className="mt-14 md:mt-20">
         <ProductPreview className="shadow-[var(--shadow-bevel),var(--shadow-400)]" />
-        <p className="mt-3 text-[12.5px] text-text-tertiary">A price change proposed by Nimbus, previewed in the table before anyone approves it.</p>
       </Reveal>
     </section>
   );
