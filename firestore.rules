@@ -21,7 +21,7 @@ service cloud.firestore {
       return isMember(ws) && get(memberPath(ws)).data.role in ['owner', 'admin'];
     }
     function tokenEmail() {
-      return request.auth.token.email != null ? string(request.auth.token.email).lower() : '';
+      return ('email' in request.auth.token) ? string(request.auth.token.email).lower() : '';
     }
     function invite(id) {
       return get(/databases/$(database)/documents/invites/$(id)).data;
@@ -67,7 +67,7 @@ service cloud.firestore {
       // Codes are unguessable: any signed-in account may look one up to redeem it.
       allow get: if signedIn();
       // Listing is limited to your own email or to workspaces you manage.
-      allow list: if signedIn() && (resource.data.email == tokenEmail() || canManage(resource.data.workspaceId));
+      allow list: if signedIn() && (('email' in resource.data && resource.data.email == tokenEmail()) || canManage(resource.data.workspaceId));
       allow create: if signedIn() && request.resource.data.id == code && request.resource.data.status == 'pending' && canManage(request.resource.data.workspaceId);
       allow update: if signedIn() && (
         canManage(resource.data.workspaceId)
