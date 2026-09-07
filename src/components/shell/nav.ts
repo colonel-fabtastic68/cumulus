@@ -7,7 +7,7 @@ export interface NavItem {
 }
 
 export const NAV: NavItem[] = [
-  { href: "/", label: "Home", icon: Home },
+  { href: "/home", label: "Home", icon: Home },
   { href: "/inventory", label: "Inventory", icon: Boxes },
   { href: "/receiving", label: "Receiving", icon: PackageCheck },
   { href: "/builds", label: "Builds", icon: Hammer },
@@ -31,7 +31,7 @@ export const NAV_ORDER: readonly string[] = [...NAV, ...NAV_SECONDARY].map((n) =
 
 /** Whether a sidebar entry is the one for this path (an item page counts as Inventory, etc.). */
 export function isNavActive(href: string, pathname: string): boolean {
-  return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
+  return pathname === href || pathname.startsWith(href + "/");
 }
 
 /** The sidebar entry `step` rows below (1) or above (-1) the current page. Null at either end, or when the page is not in the sidebar. */

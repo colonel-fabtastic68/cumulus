@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
@@ -10,7 +11,7 @@ import { useSettings, useStoreContext } from "@/lib/store/provider";
 import { Onboarding } from "./Onboarding";
 import { PreviewBar } from "./PreviewBar";
 import { Banner, Button, Skeleton } from "@/components/ui";
-import { SignInCard } from "./SignInCard";
+import { signInHref } from "@/lib/auth-routes";
 import { useNavArrowKeys } from "./useNavArrowKeys";
 
 function LoadingSkeleton({ note }: { note?: ReactNode }) {
@@ -59,8 +60,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   const settings = useSettings();
   const [mobileNav, setMobileNav] = useState(false);
   const [slow, setSlow] = useState(false);
+  const router = useRouter();
+  const pathname = usePathname();
   // Shift+↑/↓ walk the sidebar once the workspace is open (not on sign-in, loading or onboarding screens).
   useNavArrowKeys(ready && !!user && !!settings.companyName.trim());
+
+  // Firestore mode: accounts live on their own pages. Send signed-out visitors there and bring them back afterwards.
+  const needsSignIn = mode === "firestore" && !loading && !signedIn;
+  useEffect(() => {
+    if (needsSignIn) router.replace(signInHref(pathname));
+  }, [needsSignIn, pathname, router]);
 
   // Flag a slow Firestore connection so the skeleton never looks frozen.
   useEffect(() => {
@@ -71,13 +80,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   if (loading) return <LoadingSkeleton />;
 
-  if (mode === "firestore" && !signedIn) {
-    return (
-      <CenterCard>
-        <SignInCard />
-      </CenterCard>
-    );
-  }
+  if (mode === "firestore" && !signedIn) return <LoadingSkeleton />;
 
   if (storeError) {
     return (

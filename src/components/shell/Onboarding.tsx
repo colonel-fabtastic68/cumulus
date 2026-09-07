@@ -6,8 +6,7 @@ import { buildSeed } from "@/lib/seed";
 import { nowIso } from "@/lib/utils";
 import { useCollection, useSettings, useStore } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
-import { Banner, Button, Select, TextField } from "@/components/ui";
-import { CloudMark } from "./Sidebar";
+import { Banner, Button, CloudMark, Select, TextField } from "@/components/ui";
 
 const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "NZD", "MXN"];
 
