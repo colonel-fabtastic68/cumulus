@@ -2,15 +2,20 @@
 
 import { useEffect, useRef } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { CloudMark, Kbd } from "@/components/ui";
+import { usePathname, useRouter } from "next/navigation";
+import { Building2, Check, ChevronsUpDown, Mail, Plus } from "lucide-react";
+import { CloudMark, Kbd, Menu, type MenuItem } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { useCollection, useSettings } from "@/lib/store/provider";
 import { isLowStock } from "@/lib/inventory";
+import { useSession } from "@/lib/session";
+import { APP_HOME } from "@/lib/auth-routes";
 import { isNavActive, NAV, NAV_SECONDARY, type NavItem } from "./nav";
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const session = useSession();
   const navRef = useRef<HTMLElement>(null);
   const settings = useSettings();
   const items = useCollection("items");
@@ -50,15 +55,49 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <aside className="flex h-full w-[232px] shrink-0 flex-col border-r border-border bg-nav-bg">
-      <div className="flex h-14 items-center gap-2.5 px-4">
-        <span className="flex h-7 w-7 items-center justify-center rounded-[8px] bg-primary text-white">
-          <CloudMark />
-        </span>
-        <div className="min-w-0 leading-tight">
-          <div className="truncate text-[13.5px] font-semibold text-text">{settings.companyName}</div>
-          <div className="text-[11px] text-text-tertiary">Cumulus</div>
+      {session.mode === "firestore" ? (
+        <Menu
+          align="left"
+          className="w-full"
+          trigger={
+            <button type="button" className="flex h-14 w-full items-center gap-2.5 px-4 text-left hover:bg-[rgba(0,0,0,0.04)]" aria-label="Switch workspace">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-primary text-white">
+                <CloudMark />
+              </span>
+              <span className="min-w-0 flex-1 leading-tight">
+                <span className="block truncate text-[13.5px] font-semibold text-text">{settings.companyName}</span>
+                <span className="block text-[11px] text-text-tertiary">{session.pendingInvites.length ? `${session.pendingInvites.length} pending invite${session.pendingInvites.length === 1 ? "" : "s"}` : "Cumulus"}</span>
+              </span>
+              <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-text-tertiary" />
+            </button>
+          }
+          items={[
+            ...session.workspaces.map<MenuItem>((w) => ({
+              label: w.name,
+              icon: w.id === session.workspaceId ? <Check /> : <Building2 />,
+              onSelect: () => {
+                if (w.id === session.workspaceId) return;
+                session.switchWorkspace(w.id);
+                router.push(APP_HOME);
+                onNavigate?.();
+              },
+            })),
+            "divider",
+            { label: session.pendingInvites.length ? `Invites (${session.pendingInvites.length})` : "Workspaces and invites", icon: <Mail />, href: "/workspaces" },
+            { label: "Create a workspace", icon: <Plus />, href: "/workspaces#create" },
+          ]}
+        />
+      ) : (
+        <div className="flex h-14 items-center gap-2.5 px-4">
+          <span className="flex h-7 w-7 items-center justify-center rounded-[8px] bg-primary text-white">
+            <CloudMark />
+          </span>
+          <div className="min-w-0 leading-tight">
+            <div className="truncate text-[13.5px] font-semibold text-text">{settings.companyName}</div>
+            <div className="text-[11px] text-text-tertiary">Cumulus</div>
+          </div>
         </div>
-      </div>
+      )}
       <nav ref={navRef} className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 pb-3">
         {NAV.map(renderLink)}
         <div className="mt-4 mb-1 px-2.5 text-[12px] font-[550] text-text-secondary">Workspace</div>

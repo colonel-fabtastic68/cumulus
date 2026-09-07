@@ -1,10 +1,83 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Pilot rules: any signed-in Google account can read and write the workspace.
-    // Tighten per workspace/member before a wider rollout.
-    match /workspaces/{workspaceId}/{document=**} {
-      allow read, write: if request.auth != null;
+    function signedIn() {
+      return request.auth != null;
+    }
+    function uid() {
+      return request.auth.uid;
+    }
+    function memberPath(ws) {
+      return /databases/$(database)/documents/workspaces/$(ws)/members/$(request.auth.uid);
+    }
+    function isMember(ws) {
+      return signedIn() && exists(memberPath(ws));
+    }
+    // Same check for writes that land in the batch that creates the member record.
+    function isMemberAfter(ws) {
+      return signedIn() && existsAfter(memberPath(ws));
+    }
+    function canManage(ws) {
+      return isMember(ws) && get(memberPath(ws)).data.role in ['owner', 'admin'];
+    }
+    function tokenEmail() {
+      return request.auth.token.email != null ? string(request.auth.token.email).lower() : '';
+    }
+    function invite(id) {
+      return get(/databases/$(database)/documents/invites/$(id)).data;
+    }
+
+    // Each account reads and writes only its own profile (workspaces it belongs to).
+    match /users/{userId} {
+      allow read, write: if signedIn() && uid() == userId;
+    }
+
+    match /workspaces/{ws} {
+      // The workspace document: created by its owner, readable by members, renamed by managers.
+      allow read: if isMember(ws);
+      allow create: if signedIn() && request.resource.data.ownerId == uid() && request.resource.data.id == ws;
+      allow update: if canManage(ws);
+      allow delete: if false;
+
+      match /members/{memberId} {
+        allow read: if isMember(ws);
+        // Your own record appears when you create the workspace or redeem a pending invite for it; managers add others.
+        allow create: if canManage(ws)
+          || (signedIn() && memberId == uid() && (
+               getAfter(/databases/$(database)/documents/workspaces/$(ws)).data.ownerId == uid()
+               || (request.resource.data.inviteId is string
+                   && invite(request.resource.data.inviteId).workspaceId == ws
+                   && invite(request.resource.data.inviteId).status == 'pending'
+                   && invite(request.resource.data.inviteId).role == request.resource.data.role)
+             ));
+        // Presence and profile details on your own record; roles and removal are for managers.
+        allow update: if canManage(ws)
+          || (signedIn() && memberId == uid() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSeenAt', 'status', 'name', 'color', 'email']));
+        allow delete: if canManage(ws) || (signedIn() && memberId == uid());
+      }
+
+      // Everything else in a workspace is shared by its members.
+      match /{collection}/{docId} {
+        allow read: if collection != 'members' && isMember(ws);
+        allow write: if collection != 'members' && isMemberAfter(ws);
+      }
+    }
+
+    match /invites/{code} {
+      // Codes are unguessable: any signed-in account may look one up to redeem it.
+      allow get: if signedIn();
+      // Listing is limited to your own email or to workspaces you manage.
+      allow list: if signedIn() && (resource.data.email == tokenEmail() || canManage(resource.data.workspaceId));
+      allow create: if signedIn() && request.resource.data.id == code && request.resource.data.status == 'pending' && canManage(request.resource.data.workspaceId);
+      allow update: if signedIn() && (
+        canManage(resource.data.workspaceId)
+        || (resource.data.status == 'pending'
+            && request.resource.data.status == 'accepted'
+            && request.resource.data.acceptedById == uid()
+            && (!('email' in resource.data) || resource.data.email == tokenEmail())
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'acceptedById', 'acceptedByName', 'acceptedAt']))
+      );
+      allow delete: if signedIn() && canManage(resource.data.workspaceId);
     }
   }
 }

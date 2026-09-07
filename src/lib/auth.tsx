@@ -1,10 +1,11 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Member } from "@/lib/types";
-import { newId, nowIso } from "@/lib/utils";
+import { nowIso } from "@/lib/utils";
 import { useCollection, useStoreContext } from "@/lib/store/provider";
 import { getFirebaseApp, readFirebaseConfig } from "@/lib/store/firestore";
+import { setPendingSignUpName, useSession } from "@/lib/session";
 
 const LOCAL_USER_KEY = "cumulus:currentUser";
 const PRESENCE_INTERVAL_MS = 45_000;
@@ -35,17 +36,13 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const AVATAR_COLORS = ["#1f5f8b", "#7a3e9d", "#2e7d4f", "#b5541c", "#8b1f4f", "#3e6b9d", "#5c7a1f"];
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { store, ready } = useStoreContext();
   const members = useCollection("members");
+  const session = useSession();
   const mode = store.kind;
   const [savedLocalUserId, setSavedLocalUserId] = useState<string | null>(() => (typeof localStorage !== "undefined" ? localStorage.getItem(LOCAL_USER_KEY) : null));
-  const [firebaseUid, setFirebaseUid] = useState<string | null | undefined>(undefined);
   const [authError, setAuthError] = useState<string | null>(null);
-  /** Display name chosen on the sign-up form; read when the member record is first created. */
-  const pendingName = useRef<string | null>(null);
 
   // ---- Local mode: saved member, else the owner, else the first member
   const localUserId = useMemo(() => {
@@ -53,61 +50,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return (members.find((m) => m.role === "owner") ?? members[0])?.id ?? null;
   }, [members, savedLocalUserId]);
 
-  // ---- Firestore mode: Firebase Auth
-  useEffect(() => {
-    if (mode !== "firestore") return;
-    let unsub = () => {};
-    (async () => {
-      const cfg = readFirebaseConfig();
-      if (!cfg) return;
-      const { getAuth, onAuthStateChanged } = await import("firebase/auth");
-      const auth = getAuth(getFirebaseApp(cfg));
-      unsub = onAuthStateChanged(auth, async (u) => {
-        if (!u) {
-          setFirebaseUid(null);
-          return;
-        }
-        // Ensure a member record exists for this account.
-        const existing = await store.get("members", u.uid);
-        if (!existing) {
-          const all = await store.list("members");
-          const guest = u.isAnonymous;
-          const name = pendingName.current?.trim() || u.displayName || (guest ? `Guest ${u.uid.slice(0, 4).toUpperCase()}` : u.email?.split("@")[0]) || "Teammate";
-          pendingName.current = null;
-          const member: Member = {
-            id: u.uid,
-            name,
-            email: u.email ?? "",
-            role: all.length === 0 ? "owner" : "member",
-            color: AVATAR_COLORS[all.length % AVATAR_COLORS.length]!,
-            status: "active",
-            guest: guest || undefined,
-            lastSeenAt: nowIso(),
-            createdAt: nowIso(),
-          };
-          await store.put("members", member);
-          await store.put("activity", {
-            id: newId("act"),
-            type: "member.joined",
-            message: `${member.name} joined the workspace`,
-            actorId: member.id,
-            actorName: member.name,
-            entityType: "member",
-            entityId: member.id,
-            createdAt: nowIso(),
-          });
-        }
-        setFirebaseUid(u.uid);
-      });
-    })();
-    return () => unsub();
-  }, [mode, store]);
+  // ---- Firestore mode: the account and workspace come from the session. Member
+  // records are written when a workspace is created or an invite is redeemed.
+  const firebaseUid = session.account?.uid ?? null;
 
   const userId = mode === "local" ? localUserId : firebaseUid ?? null;
   const user = useMemo(() => members.find((m) => m.id === userId) ?? null, [members, userId]);
   const signedIn = mode === "local" ? true : !!firebaseUid;
-  // In Firestore mode the store only initialises after sign-in, so auth state resolves first.
-  const loading = mode === "firestore" ? firebaseUid === undefined : !ready;
+  // In Firestore mode the session resolves the account (and its workspaces) before the store opens.
+  const loading = mode === "firestore" ? session.status === "loading" : !ready;
 
   // ---- Presence heartbeat
   useEffect(() => {
@@ -154,7 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (name: string, email: string, password: string) =>
       runAuth(async (auth) => {
         const { createUserWithEmailAndPassword, updateProfile } = await import("firebase/auth");
-        pendingName.current = name;
+        setPendingSignUpName(name);
         const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
         if (name.trim()) await updateProfile(cred.user, { displayName: name.trim() });
       }),

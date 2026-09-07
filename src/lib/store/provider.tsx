@@ -43,8 +43,8 @@ export function usePreview(): PreviewContextValue {
   return useContext(PreviewContext);
 }
 
-export function StoreProvider({ children }: { children: ReactNode }) {
-  const [store] = useState<Store>(() => createStore());
+export function StoreProvider({ children, workspaceId = null }: { children: ReactNode; workspaceId?: string | null }) {
+  const [store] = useState<Store>(() => createStore(workspaceId));
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

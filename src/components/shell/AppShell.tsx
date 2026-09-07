@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { Sidebar } from "./Sidebar";
@@ -12,6 +12,8 @@ import { Onboarding } from "./Onboarding";
 import { PreviewBar } from "./PreviewBar";
 import { Banner, Button, Skeleton } from "@/components/ui";
 import { signInHref } from "@/lib/auth-routes";
+import { useSession } from "@/lib/session";
+import { WorkspaceHub } from "@/components/workspace/hub";
 import { useNavArrowKeys } from "./useNavArrowKeys";
 
 function LoadingSkeleton({ note }: { note?: ReactNode }) {
@@ -57,6 +59,7 @@ const FIRESTORE_HINTS = (
 export function AppShell({ children }: { children: ReactNode }) {
   const { ready, error: storeError } = useStoreContext();
   const { user, signedIn, loading, mode } = useAuth();
+  const session = useSession();
   const settings = useSettings();
   const [mobileNav, setMobileNav] = useState(false);
   const [slow, setSlow] = useState(false);
@@ -82,6 +85,15 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   if (mode === "firestore" && !signedIn) return <LoadingSkeleton />;
 
+  // Signed in, but not in any workspace yet: create one or redeem an invite.
+  if (mode === "firestore" && session.status === "no-workspace") {
+    return (
+      <Suspense>
+        <WorkspaceHub standalone />
+      </Suspense>
+    );
+  }
+
   if (storeError) {
     return (
       <CenterCard>
@@ -95,6 +107,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           Try again
         </Button>
       </CenterCard>
+    );
+  }
+
+  // The profile lists this workspace but the member record is gone (removed by an admin).
+  if (mode === "firestore" && ready && !user) {
+    return (
+      <Suspense>
+        <WorkspaceHub standalone notice={`You no longer have access to ${session.workspace?.name ?? "that workspace"}. Open another workspace, create one, or ask to be invited again.`} />
+      </Suspense>
     );
   }
 

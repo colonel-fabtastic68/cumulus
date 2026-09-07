@@ -263,8 +263,60 @@ export interface Member {
   status: "active" | "invited";
   /** Signed in anonymously (Firestore mode). */
   guest?: boolean;
+  /** Firestore mode: the invite this member joined through (checked by the security rules). */
+  inviteId?: string;
   lastSeenAt?: string;
   createdAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Accounts and workspaces (Firestore mode). These live outside the workspace:
+// users/{uid}, workspaces/{id} (the document itself) and invites/{code}.
+// ---------------------------------------------------------------------------
+
+export interface WorkspaceMembership {
+  id: ID;
+  name: string;
+  role: MemberRole;
+  joinedAt: string;
+}
+
+export interface UserProfile {
+  id: ID;
+  email: string;
+  name: string;
+  guest?: boolean;
+  /** Workspaces this account belongs to, by workspace id. */
+  workspaces: Record<ID, WorkspaceMembership>;
+  lastWorkspaceId?: ID;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkspaceDoc {
+  id: ID;
+  name: string;
+  ownerId: ID;
+  createdAt: string;
+}
+
+export type InviteStatus = "pending" | "accepted" | "revoked";
+
+export interface WorkspaceInvite {
+  /** The invite code. */
+  id: ID;
+  workspaceId: ID;
+  workspaceName: string;
+  /** Lower-case address the invite is for; absent for a link anyone can use. */
+  email?: string;
+  role: MemberRole;
+  invitedById: ID;
+  invitedByName: string;
+  status: InviteStatus;
+  createdAt: string;
+  acceptedById?: ID;
+  acceptedByName?: string;
+  acceptedAt?: string;
 }
 
 export type ActivityType =

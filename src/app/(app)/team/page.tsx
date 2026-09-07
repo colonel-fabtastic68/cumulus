@@ -7,7 +7,7 @@ import { useCollection } from "@/lib/store/provider";
 import { useAuth, useCurrentUser } from "@/lib/auth";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { Banner, Button, Page, PageLayout } from "@/components/ui";
-import { InviteMemberModal, MembersTable, OnlineCard, RolesCard, canManageTeam } from "@/components/workspace/team";
+import { InviteMemberModal, MembersTable, OnlineCard, PendingInvitesCard, RolesCard, canManageTeam } from "@/components/workspace/team";
 
 export default function TeamPage() {
   const members = useCollection("members");
@@ -43,6 +43,7 @@ export default function TeamPage() {
           aside={
             <>
               <OnlineCard members={members} />
+              {mode === "firestore" && canManage && <PendingInvitesCard />}
               <RolesCard />
             </>
           }
