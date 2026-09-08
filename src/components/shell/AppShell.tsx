@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { Sidebar } from "./Sidebar";
@@ -75,6 +75,20 @@ export function AppShell({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, companyName, session.workspace?.id]);
 
+  // A workspace on the profile that refuses every read means the member record was removed. Drop it and show the hub.
+  const refused = mode === "firestore" && !!storeError && /permission denied/i.test(storeError) ? (session.workspace?.id ?? null) : null;
+  const checked = useRef<string | null>(null);
+  /** Set when the refusal was not a removed membership, so the plain error card shows. */
+  const [stillMember, setStillMember] = useState<string | null>(null);
+  useEffect(() => {
+    if (!refused || checked.current === refused) return;
+    checked.current = refused;
+    session.forgetWorkspace(refused).then((dropped) => {
+      if (!dropped) setStillMember(refused);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refused]);
+
   // Firestore mode: accounts live on their own pages. Send signed-out visitors there and bring them back afterwards.
   const needsSignIn = mode === "firestore" && !loading && !signedIn;
   useEffect(() => {
@@ -92,14 +106,16 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   if (mode === "firestore" && !signedIn) return <LoadingSkeleton />;
 
-  // Signed in, but not in any workspace yet: create one or redeem an invite.
+  // Signed in, but not in any workspace yet: create one or join one you were invited to.
   if (mode === "firestore" && session.status === "no-workspace") {
     return (
       <Suspense>
-        <WorkspaceHub standalone />
+        <WorkspaceHub standalone notice={session.notice ?? undefined} />
       </Suspense>
     );
   }
+
+  if (refused && stillMember !== refused) return <LoadingSkeleton />;
 
   if (storeError) {
     return (

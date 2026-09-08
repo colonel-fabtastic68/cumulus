@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import type { FirebaseApp } from "firebase/app";
 import type { MemberRole, UserProfile, WorkspaceInvite, WorkspaceMembership } from "@/lib/types";
 import { getFirebaseApp, readFirebaseConfig } from "@/lib/store/firestore";
-import { acceptInvite as acceptInviteDoc, createInvite as createInviteDoc, createWorkspace as createWorkspaceDoc, loadOrCreateProfile, rememberWorkspace, revokeInvite as revokeInviteDoc, subscribeInvitesForEmail, subscribeProfile, subscribeWorkspaceInvites, updateWorkspaceName as updateWorkspaceNameDoc, type CreateWorkspaceOptions } from "@/lib/workspaces";
+import { acceptInvite as acceptInviteDoc, createInvite as createInviteDoc, createWorkspace as createWorkspaceDoc, hasMembership, loadOrCreateProfile, rememberWorkspace, removeWorkspaceFromProfile, revokeInvite as revokeInviteDoc, subscribeInvitesForEmail, subscribeProfile, subscribeWorkspaceInvites, updateWorkspaceName as updateWorkspaceNameDoc, type CreateWorkspaceOptions } from "@/lib/workspaces";
 
 export type SessionStatus = "loading" | "signed-out" | "no-workspace" | "ready";
 
@@ -31,6 +31,9 @@ export interface SessionValue {
   pendingInvites: WorkspaceInvite[];
   /** Why the last profile load failed, if it did. */
   error: string | null;
+  /** Something the hub should tell the person, e.g. that a workspace dropped them. Cleared when read. */
+  notice: string | null;
+  clearNotice: () => void;
   switchWorkspace: (id: string) => void;
   createWorkspace: (opts: CreateWorkspaceOptions) => Promise<WorkspaceMembership>;
   acceptInvite: (code: string) => Promise<WorkspaceMembership>;
@@ -39,6 +42,12 @@ export interface SessionValue {
   subscribeWorkspaceInvites: (cb: (invites: WorkspaceInvite[]) => void) => () => void;
   /** Called when the open workspace's company name differs from what the profile remembers. */
   updateWorkspaceName: (id: string, name: string) => void;
+  /**
+   * The open workspace refused access. Confirms the member record is gone, then
+   * drops the workspace from the profile. Resolves false when access still exists
+   * (a transient failure), so the caller can retry instead.
+   */
+  forgetWorkspace: (id: string) => Promise<boolean>;
 }
 
 const LOCAL_SESSION: SessionValue = {
@@ -52,6 +61,8 @@ const LOCAL_SESSION: SessionValue = {
   workspace: null,
   pendingInvites: [],
   error: null,
+  notice: null,
+  clearNotice: () => {},
   switchWorkspace: () => {},
   createWorkspace: () => Promise.reject(new Error("Local mode has a single workspace.")),
   acceptInvite: () => Promise.reject(new Error("Local mode has no invites.")),
@@ -59,6 +70,7 @@ const LOCAL_SESSION: SessionValue = {
   revokeInvite: () => Promise.reject(new Error("Local mode has no invites.")),
   subscribeWorkspaceInvites: () => () => {},
   updateWorkspaceName: () => {},
+  forgetWorkspace: () => Promise.resolve(false),
 };
 
 const SessionContext = createContext<SessionValue>(LOCAL_SESSION);
@@ -99,6 +111,7 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
   const [account, setAccount] = useState<SessionUser | null | undefined>(undefined);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [chosen, setChosen] = useState<string | null>(null);
   const [inviteFeed, setInviteFeed] = useState<{ email: string; invites: WorkspaceInvite[] }>({ email: "", invites: [] });
 
@@ -216,6 +229,30 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
 
   const revokeInvite = useCallback((id: string) => revokeInviteDoc(app, id), [app]);
 
+  const forgetWorkspace = useCallback(
+    async (id: string) => {
+      if (!profile?.workspaces[id]) return false;
+      if (await hasMembership(app, profile.id, id)) return false;
+      const name = profile.workspaces[id]!.name;
+      setNotice(`You no longer have access to ${name}. Open another workspace, create one, or ask an owner to invite you again.`);
+      setProfile((p) => {
+        if (!p) return p;
+        const rest = { ...p.workspaces };
+        delete rest[id];
+        return { ...p, workspaces: rest, lastWorkspaceId: p.lastWorkspaceId === id ? undefined : p.lastWorkspaceId };
+      });
+      try {
+        if (readSavedWorkspace(profile.id) === id) localStorage.removeItem(savedWorkspaceKey(profile.id));
+      } catch {}
+      setChosen(null);
+      await removeWorkspaceFromProfile(app, profile, id).catch(() => {});
+      return true;
+    },
+    [app, profile],
+  );
+
+  const clearNotice = useCallback(() => setNotice(null), []);
+
   const updateWorkspaceName = useCallback(
     (id: string, name: string) => {
       if (!profile?.workspaces[id] || !name.trim() || profile.workspaces[id].name === name) return;
@@ -250,6 +287,8 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
       workspace: workspaceId ? (profile?.workspaces[workspaceId] ?? null) : null,
       pendingInvites,
       error,
+      notice,
+      clearNotice,
       switchWorkspace,
       createWorkspace,
       acceptInvite,
@@ -257,8 +296,9 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
       revokeInvite,
       subscribeWorkspaceInvites: subscribeInvites,
       updateWorkspaceName,
+      forgetWorkspace,
     }),
-    [app, status, account, profile, workspaces, workspaceId, pendingInvites, error, switchWorkspace, createWorkspace, acceptInvite, createInvite, revokeInvite, subscribeInvites, updateWorkspaceName],
+    [app, status, account, profile, workspaces, workspaceId, pendingInvites, error, notice, clearNotice, switchWorkspace, createWorkspace, acceptInvite, createInvite, revokeInvite, subscribeInvites, updateWorkspaceName, forgetWorkspace],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

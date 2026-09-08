@@ -27,6 +27,7 @@ export function WorkspaceHub({ standalone = false, notice }: { standalone?: bool
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const profile = session.profile;
+  const shownNotice = notice ?? session.notice ?? undefined;
 
   const join = async (id: string) => {
     setBusy(id);
@@ -57,9 +58,9 @@ export function WorkspaceHub({ standalone = false, notice }: { standalone?: bool
 
   const body = (
     <div className="flex flex-col gap-4">
-      {notice && (
-        <Banner tone="warning" title="Workspace unavailable">
-          {notice}
+      {shownNotice && (
+        <Banner tone="warning" title="Workspace unavailable" onDismiss={session.notice ? session.clearNotice : undefined}>
+          {shownNotice}
         </Banner>
       )}
       {session.error && (

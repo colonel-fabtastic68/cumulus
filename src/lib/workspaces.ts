@@ -5,7 +5,7 @@
  */
 import type { FirebaseApp } from "firebase/app";
 import type { User } from "firebase/auth";
-import { collection, doc, getDoc, onSnapshot, query, setDoc, updateDoc, where, writeBatch, type Firestore } from "firebase/firestore";
+import { collection, deleteField, doc, getDoc, onSnapshot, query, setDoc, updateDoc, where, writeBatch, type Firestore } from "firebase/firestore";
 import { getRuntimeConfig } from "@/lib/firebase-config";
 import { sendMagicLink } from "@/lib/auth-link";
 import { getDb } from "@/lib/store/firestore";
@@ -150,6 +150,23 @@ export function inviteLink(id: string): string {
 export async function sendInviteEmail(app: FirebaseApp, invite: WorkspaceInvite): Promise<void> {
   if (!invite.email) throw new WorkspaceError("This invite has no email address.");
   await sendMagicLink(app, invite.email, joinPath(invite.id));
+}
+
+/** True when this account still has a member record in the workspace (false on any refusal). */
+export async function hasMembership(app: FirebaseApp, uid: string, workspaceId: string): Promise<boolean> {
+  try {
+    const snap = await getDoc(doc(db(app), "workspaces", workspaceId, "members", uid));
+    return snap.exists();
+  } catch {
+    return false;
+  }
+}
+
+/** Drop a workspace the account was removed from, so the app stops trying to open it. */
+export async function removeWorkspaceFromProfile(app: FirebaseApp, profile: UserProfile, workspaceId: string): Promise<void> {
+  const patch: Record<string, unknown> = { [`workspaces.${workspaceId}`]: deleteField(), updatedAt: nowIso() };
+  if (profile.lastWorkspaceId === workspaceId) patch.lastWorkspaceId = deleteField();
+  await updateDoc(doc(db(app), "users", profile.id), patch);
 }
 
 /** Keep the workspace name on the profile in step with the company name in settings. */
