@@ -145,8 +145,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 /** Plain-language messages for the Firebase Auth error codes a pilot user is likely to hit. */
-function describeAuthError(e: unknown): string {
+export function describeAuthError(e: unknown): string {
   const code = (e as { code?: string })?.code ?? "";
+  if (code.includes("invalid-action-code") || code.includes("expired-action-code")) return "This sign-in link has expired or was already used. Ask for a new one.";
+  if (code.includes("unauthorized-continue-uri") || code.includes("unauthorized-domain")) return "This site's address is not authorised for sign-in links yet. In the Firebase console open Authentication → Settings → Authorized domains and add it.";
+  if (code.includes("requires-recent-login")) return "For security, sign in again (a fresh emailed link works) and then set the password.";
+  if (code.includes("invalid-continue-uri") || code.includes("missing-continue-uri")) return "The sign-in link could not be built for this address. Reload and try again.";
   if (code.includes("invalid-credential") || code.includes("wrong-password") || code.includes("user-not-found")) return "Email or password is incorrect.";
   if (code.includes("invalid-email")) return "That email address doesn't look right.";
   if (code.includes("email-already-in-use")) return "An account with that email already exists. Sign in instead.";
@@ -154,7 +158,7 @@ function describeAuthError(e: unknown): string {
   if (code.includes("missing-password")) return "Enter a password.";
   if (code.includes("too-many-requests")) return "Too many attempts. Wait a few minutes and try again.";
   if (code.includes("admin-restricted-operation")) return "Guest access is not enabled for this Firebase project. Enable Anonymous under Authentication → Sign-in method.";
-  if (code.includes("operation-not-allowed")) return "Email/password sign-in is not enabled for this Firebase project. Enable it under Authentication → Sign-in method.";
+  if (code.includes("operation-not-allowed")) return "This sign-in method is not enabled for the Firebase project. Under Authentication → Sign-in method → Email/Password, enable it and turn on Email link (passwordless sign-in).";
   if (code.includes("unauthorized-domain")) return "This domain is not authorised for sign-in. Add it under Authentication → Settings → Authorized domains.";
   if (code.includes("api-key-not-valid") || code.includes("invalid-api-key")) return "Firebase rejected the Web API key. Copy apiKey from Firebase console → Project settings → Your apps (no quotes or commas) into FIREBASE_API_KEY and restart the dev server.";
   if (code.includes("network-request-failed")) return "Could not reach Firebase. Check your connection and the FIREBASE_* settings.";

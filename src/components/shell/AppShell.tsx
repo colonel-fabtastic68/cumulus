@@ -68,6 +68,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Shift+↑/↓ walk the sidebar once the workspace is open (not on sign-in, loading or onboarding screens).
   useNavArrowKeys(ready && !!user && !!settings.companyName.trim());
 
+  // The profile remembers each workspace's name for the switcher; follow renames made in Settings.
+  const companyName = settings.companyName;
+  useEffect(() => {
+    if (ready && session.workspace && companyName.trim()) session.updateWorkspaceName(session.workspace.id, companyName.trim());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, companyName, session.workspace?.id]);
+
   // Firestore mode: accounts live on their own pages. Send signed-out visitors there and bring them back afterwards.
   const needsSignIn = mode === "firestore" && !loading && !signedIn;
   useEffect(() => {

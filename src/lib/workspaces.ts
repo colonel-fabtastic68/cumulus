@@ -7,6 +7,7 @@ import type { FirebaseApp } from "firebase/app";
 import type { User } from "firebase/auth";
 import { collection, doc, getDoc, onSnapshot, query, setDoc, updateDoc, where, writeBatch, type Firestore } from "firebase/firestore";
 import { getRuntimeConfig } from "@/lib/firebase-config";
+import { sendMagicLink } from "@/lib/auth-link";
 import { getDb } from "@/lib/store/firestore";
 import { buildSeed, freshWorkspace, seedSettings } from "@/lib/seed";
 import { COLLECTIONS, type ActivityEvent, type Member, type MemberRole, type UserProfile, type WorkspaceDoc, type WorkspaceInvite, type WorkspaceMembership, type WorkspaceSettings, type WorkspaceSnapshot } from "@/lib/types";
@@ -107,12 +108,14 @@ export function subscribeWorkspaceInvites(app: FirebaseApp, workspaceId: string,
   return onSnapshot(q, (snap) => cb(snap.docs.map((d) => d.data() as WorkspaceInvite)), () => cb([]));
 }
 
-export async function createInvite(app: FirebaseApp, actor: { id: string; name: string }, workspace: { id: string; name: string }, opts: { email?: string; role: MemberRole }): Promise<WorkspaceInvite> {
+export async function createInvite(app: FirebaseApp, actor: { id: string; name: string }, workspace: { id: string; name: string }, opts: { email: string; role: MemberRole }): Promise<WorkspaceInvite> {
+  const email = opts.email.trim().toLowerCase();
+  if (!email) throw new WorkspaceError("Enter the teammate's email address.");
   const invite: WorkspaceInvite = {
     id: newId("inv"),
     workspaceId: workspace.id,
     workspaceName: workspace.name,
-    email: opts.email?.trim().toLowerCase() || undefined,
+    email,
     role: opts.role,
     invitedById: actor.id,
     invitedByName: actor.name,
@@ -127,10 +130,31 @@ export async function revokeInvite(app: FirebaseApp, id: string): Promise<void> 
   await updateDoc(doc(db(app), "invites", id), { status: "revoked" });
 }
 
-/** The link a teammate opens to join. Sign-in happens first, then the code is redeemed on the Workspaces page. */
-export function inviteLink(code: string): string {
+/** Anyone with the link can read an invite (ids are unguessable); the join page shows who invited whom before sign-in. */
+export async function getInvite(app: FirebaseApp, id: string): Promise<WorkspaceInvite | null> {
+  const snap = await getDoc(doc(db(app), "invites", id));
+  return snap.exists() ? (snap.data() as WorkspaceInvite) : null;
+}
+
+export function joinPath(id: string): string {
+  return `/join/${encodeURIComponent(id)}`;
+}
+
+/** The link a teammate opens to join: it signs them in (creating the account if needed) and lands them in the workspace. */
+export function inviteLink(id: string): string {
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  return `${origin}/workspaces?code=${encodeURIComponent(code)}`;
+  return `${origin}${joinPath(id)}`;
+}
+
+/** Mail the invite as a Firebase sign-in link that returns to the join page. */
+export async function sendInviteEmail(app: FirebaseApp, invite: WorkspaceInvite): Promise<void> {
+  if (!invite.email) throw new WorkspaceError("This invite has no email address.");
+  await sendMagicLink(app, invite.email, joinPath(invite.id));
+}
+
+/** Keep the workspace name on the profile in step with the company name in settings. */
+export async function updateWorkspaceName(app: FirebaseApp, uid: string, workspaceId: string, name: string): Promise<void> {
+  await updateDoc(doc(db(app), "users", uid), { [`workspaces.${workspaceId}.name`]: name, updatedAt: nowIso() });
 }
 
 /**

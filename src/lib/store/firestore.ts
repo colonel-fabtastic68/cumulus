@@ -14,6 +14,7 @@ import {
   writeBatch,
   deleteDoc,
   deleteField,
+  waitForPendingWrites,
   type Firestore,
 } from "firebase/firestore";
 import { COLLECTIONS, type CollectionMap, type CollectionName, type WorkspaceSnapshot } from "@/lib/types";
@@ -120,6 +121,9 @@ export class FirestoreStore implements Store {
    */
   private async init() {
     await this.waitForSignIn();
+    // Joining a workspace writes the member record and the profile in one batch; the profile listener
+    // fires before the server has acknowledged it. Reading before that acknowledgement is refused.
+    await waitForPendingWrites(this.db).catch(() => {});
     for (const name of COLLECTIONS) {
       const unsub = onSnapshot(
         this.col(name),

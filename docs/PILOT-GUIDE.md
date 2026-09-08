@@ -32,11 +32,11 @@ Work through as many as you like. After each one, note: did it do what you expec
 
 ### Accounts, workspaces and invites (Firestore mode)
 
-1. Sign up at `/sign-up`. A new account lands on the Workspaces hub.
+1. Sign up at `/sign-up`. A new account lands on its Account page.
 2. **Create a workspace** with the company name and currency (tick *Start with sample data* to explore first). You become its owner.
-3. Invite the team from **Team → Invite teammate**: enter their email (the invite appears on their hub after they sign in) or leave it blank for a link anyone can use. Copy the link or the code.
-4. A teammate who signs in with no workspace sees their pending invites and a field for an invite code. Joining puts them straight into the workspace with the role you picked.
-5. Switch between workspaces from the company name at the top of the sidebar, or manage them at `/workspaces`.
+3. Invite the team from **Team → Invite teammate**: enter their email and role. They get an email with a sign-in link; opening it signs them in (or creates their account) and drops them into the workspace. The invite also waits on their Account page, and you can resend or revoke it from Team.
+4. One-time Firebase setup for the emails: enable *Email link (passwordless sign-in)* under Authentication → Sign-in method → Email/Password, and add the site's domain under Authentication → Settings → Authorized domains.
+5. Switch between workspaces from the company name at the top of the sidebar, or at `/account`, where accounts that arrived by link can also set a password.
 
 ### 5. Let Nimbus do the bulk work (⌘J)
 Try these, in your own words:

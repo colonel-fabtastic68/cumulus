@@ -83,8 +83,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
               },
             })),
             "divider",
-            { label: session.pendingInvites.length ? `Invites (${session.pendingInvites.length})` : "Workspaces and invites", icon: <Mail />, href: "/workspaces" },
-            { label: "Create a workspace", icon: <Plus />, href: "/workspaces#create" },
+            { label: session.pendingInvites.length ? `Invites (${session.pendingInvites.length})` : "Account and workspaces", icon: <Mail />, href: "/account" },
+            { label: "Create a workspace", icon: <Plus />, href: "/account#create" },
           ]}
         />
       ) : (

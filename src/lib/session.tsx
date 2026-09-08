@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import type { FirebaseApp } from "firebase/app";
 import type { MemberRole, UserProfile, WorkspaceInvite, WorkspaceMembership } from "@/lib/types";
 import { getFirebaseApp, readFirebaseConfig } from "@/lib/store/firestore";
-import { acceptInvite as acceptInviteDoc, createInvite as createInviteDoc, createWorkspace as createWorkspaceDoc, loadOrCreateProfile, rememberWorkspace, revokeInvite as revokeInviteDoc, subscribeInvitesForEmail, subscribeProfile, subscribeWorkspaceInvites, type CreateWorkspaceOptions } from "@/lib/workspaces";
+import { acceptInvite as acceptInviteDoc, createInvite as createInviteDoc, createWorkspace as createWorkspaceDoc, loadOrCreateProfile, rememberWorkspace, revokeInvite as revokeInviteDoc, subscribeInvitesForEmail, subscribeProfile, subscribeWorkspaceInvites, updateWorkspaceName as updateWorkspaceNameDoc, type CreateWorkspaceOptions } from "@/lib/workspaces";
 
 export type SessionStatus = "loading" | "signed-out" | "no-workspace" | "ready";
 
@@ -18,6 +18,8 @@ export interface SessionUser {
 export interface SessionValue {
   mode: "local" | "firestore";
   status: SessionStatus;
+  /** The Firebase app in Firestore mode, for auth helpers. */
+  app: FirebaseApp | null;
   /** The Firebase account, once auth state is known. */
   account: SessionUser | null;
   profile: UserProfile | null;
@@ -32,14 +34,17 @@ export interface SessionValue {
   switchWorkspace: (id: string) => void;
   createWorkspace: (opts: CreateWorkspaceOptions) => Promise<WorkspaceMembership>;
   acceptInvite: (code: string) => Promise<WorkspaceMembership>;
-  createInvite: (opts: { email?: string; role: MemberRole }) => Promise<WorkspaceInvite>;
+  createInvite: (opts: { email: string; role: MemberRole }) => Promise<WorkspaceInvite>;
   revokeInvite: (id: string) => Promise<void>;
   subscribeWorkspaceInvites: (cb: (invites: WorkspaceInvite[]) => void) => () => void;
+  /** Called when the open workspace's company name differs from what the profile remembers. */
+  updateWorkspaceName: (id: string, name: string) => void;
 }
 
 const LOCAL_SESSION: SessionValue = {
   mode: "local",
   status: "ready",
+  app: null,
   account: null,
   profile: null,
   workspaces: [],
@@ -53,6 +58,7 @@ const LOCAL_SESSION: SessionValue = {
   createInvite: () => Promise.reject(new Error("Local mode has no invites.")),
   revokeInvite: () => Promise.reject(new Error("Local mode has no invites.")),
   subscribeWorkspaceInvites: () => () => {},
+  updateWorkspaceName: () => {},
 };
 
 const SessionContext = createContext<SessionValue>(LOCAL_SESSION);
@@ -200,7 +206,7 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
   );
 
   const createInvite = useCallback(
-    (opts: { email?: string; role: MemberRole }) => {
+    (opts: { email: string; role: MemberRole }) => {
       const ws = workspaceId ? profile?.workspaces[workspaceId] : undefined;
       if (!profile || !ws) return Promise.reject(new Error("Open a workspace first."));
       return createInviteDoc(app, { id: profile.id, name: profile.name }, { id: ws.id, name: ws.name }, opts);
@@ -209,6 +215,15 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
   );
 
   const revokeInvite = useCallback((id: string) => revokeInviteDoc(app, id), [app]);
+
+  const updateWorkspaceName = useCallback(
+    (id: string, name: string) => {
+      if (!profile?.workspaces[id] || !name.trim() || profile.workspaces[id].name === name) return;
+      setProfile((p) => (p && p.workspaces[id] ? { ...p, workspaces: { ...p.workspaces, [id]: { ...p.workspaces[id]!, name } } } : p));
+      void updateWorkspaceNameDoc(app, profile.id, id, name).catch(() => {});
+    },
+    [app, profile],
+  );
 
   const subscribeInvites = useCallback(
     (cb: (invites: WorkspaceInvite[]) => void) => {
@@ -227,6 +242,7 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
     () => ({
       mode: "firestore",
       status,
+      app,
       account: account ?? null,
       profile,
       workspaces,
@@ -240,8 +256,9 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
       createInvite,
       revokeInvite,
       subscribeWorkspaceInvites: subscribeInvites,
+      updateWorkspaceName,
     }),
-    [status, account, profile, workspaces, workspaceId, pendingInvites, error, switchWorkspace, createWorkspace, acceptInvite, createInvite, revokeInvite, subscribeInvites],
+    [app, status, account, profile, workspaces, workspaceId, pendingInvites, error, switchWorkspace, createWorkspace, acceptInvite, createInvite, revokeInvite, subscribeInvites, updateWorkspaceName],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

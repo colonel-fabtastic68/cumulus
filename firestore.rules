@@ -44,7 +44,7 @@ service cloud.firestore {
         // Your own record appears when you create the workspace or redeem a pending invite for it; managers add others.
         allow create: if canManage(ws)
           || (signedIn() && memberId == uid() && (
-               getAfter(/databases/$(database)/documents/workspaces/$(ws)).data.ownerId == uid()
+               (existsAfter(/databases/$(database)/documents/workspaces/$(ws)) && getAfter(/databases/$(database)/documents/workspaces/$(ws)).data.ownerId == uid())
                || (request.resource.data.inviteId is string
                    && invite(request.resource.data.inviteId).workspaceId == ws
                    && invite(request.resource.data.inviteId).status == 'pending'
@@ -64,8 +64,8 @@ service cloud.firestore {
     }
 
     match /invites/{code} {
-      // Codes are unguessable: any signed-in account may look one up to redeem it.
-      allow get: if signedIn();
+      // Ids are unguessable: the join page shows who invited whom before sign-in.
+      allow get: if true;
       // Listing is limited to your own email or to workspaces you manage.
       allow list: if signedIn() && (('email' in resource.data && resource.data.email == tokenEmail()) || canManage(resource.data.workspaceId));
       allow create: if signedIn() && request.resource.data.id == code && request.resource.data.status == 'pending' && canManage(request.resource.data.workspaceId);

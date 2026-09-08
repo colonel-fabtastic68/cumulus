@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Banner, Button, TextField } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
 import { signInHref } from "@/lib/auth-routes";
@@ -11,8 +12,9 @@ import { PasswordField, emailError, passwordError } from "./fields";
 export function SignUpForm() {
   const { signUp, authError } = useAuth();
   const next = useNextPath();
+  const params = useSearchParams();
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => params.get("email") ?? "");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string }>({});
   const [busy, setBusy] = useState(false);

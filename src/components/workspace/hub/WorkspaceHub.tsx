@@ -1,42 +1,38 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { Building2, Check, KeyRound, LogOut, Mail, Sparkles } from "lucide-react";
-import { Badge, Banner, Button, CloudMark, Select, TextField, Toggle, useToast } from "@/components/ui";
-import { useAuth } from "@/lib/auth";
+import { Avatar, Badge, Banner, Button, CloudMark, Select, TextField, Toggle, useToast } from "@/components/ui";
+import { describeAuthError, useAuth } from "@/lib/auth";
+import { setPassword } from "@/lib/auth-link";
 import { APP_HOME } from "@/lib/auth-routes";
 import { useSession } from "@/lib/session";
 import { describeWorkspaceError } from "@/lib/workspaces";
 import { roleLabel } from "@/components/workspace/team/teamUtils";
+import { passwordError } from "@/components/auth/fields";
+import { PasswordField } from "@/components/auth/fields";
 
 const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "NZD", "MXN"];
 
 /**
- * Where an account lands with no workspace, and the Workspaces page inside the
- * app: create a company, redeem an invite, or open another workspace.
+ * The Account page inside the app, and the page an account lands on with no
+ * workspace: switch or open a workspace, create a company, join an invite.
  */
 export function WorkspaceHub({ standalone = false, notice }: { standalone?: boolean; notice?: string }) {
   const session = useSession();
   const { signOut } = useAuth();
   const router = useRouter();
-  const params = useSearchParams();
   const toast = useToast();
-  const codeParam = params.get("code") ?? "";
-
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const autoTried = useRef(false);
-
   const profile = session.profile;
-  const canJoin = !!profile && session.mode === "firestore";
 
-  const join = async (code: string) => {
-    if (!canJoin) return;
-    setBusy(code);
+  const join = async (id: string) => {
+    setBusy(id);
     setError(null);
     try {
-      const membership = await session.acceptInvite(code);
+      const membership = await session.acceptInvite(id);
       toast(`Welcome to ${membership.name}`, "success");
       router.replace(APP_HOME);
     } catch (e) {
@@ -45,14 +41,6 @@ export function WorkspaceHub({ standalone = false, notice }: { standalone?: bool
       setBusy(null);
     }
   };
-
-  // A link with ?code= redeems itself once the profile is ready.
-  useEffect(() => {
-    if (!codeParam || autoTried.current || !canJoin) return;
-    autoTried.current = true;
-    void join(codeParam);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [codeParam, canJoin]);
 
   const open = (id: string) => {
     session.switchWorkspace(id);
@@ -85,6 +73,8 @@ export function WorkspaceHub({ standalone = false, notice }: { standalone?: bool
         </Banner>
       )}
 
+      {!standalone && <AccountCard />}
+
       {session.workspaces.length > 0 && (
         <section className="card p-0">
           <div className="border-b border-border px-4 py-3">
@@ -114,8 +104,8 @@ export function WorkspaceHub({ standalone = false, notice }: { standalone?: bool
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">
+        <InvitesCard busy={busy} onJoin={join} />
         <CreateWorkspaceCard busy={busy} setBusy={setBusy} setError={setError} />
-        <InvitesCard busy={busy} onJoin={join} initialCode={codeParam} />
       </div>
     </div>
   );
@@ -141,10 +131,70 @@ export function WorkspaceHub({ standalone = false, notice }: { standalone?: bool
       </header>
       <main className="mx-auto w-full max-w-[880px] px-4 pb-16 pt-4 sm:px-6 sm:pt-8">
         <h1 className="text-[22px] font-semibold leading-8 text-text">{session.workspaces.length ? "Your workspaces" : `Welcome, ${profile?.name?.split(" ")[0] ?? "there"}`}</h1>
-        <p className="mt-1 mb-6 text-[13.5px] text-text-secondary">{session.workspaces.length ? "Pick a workspace to open, or start another company." : "You're signed in but not in a workspace yet. Create your company's workspace, or join one you were invited to."}</p>
+        <p className="mt-1 mb-6 text-[13.5px] text-text-secondary">
+          {session.workspaces.length ? "Pick a workspace to open, or start another company." : "You're signed in but not in a workspace yet. Join one you were invited to, or create your company's workspace."}
+        </p>
         {body}
       </main>
     </div>
+  );
+}
+
+function AccountCard() {
+  const session = useSession();
+  const { signOut } = useAuth();
+  const toast = useToast();
+  const [password, setPw] = useState("");
+  const [pwError, setPwError] = useState<string | undefined>();
+  const [saving, setSaving] = useState(false);
+  const profile = session.profile;
+
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    const err = passwordError(password);
+    setPwError(err);
+    if (err || !session.app) return;
+    setSaving(true);
+    try {
+      await setPassword(session.app, password);
+      setPw("");
+      toast("Password set. You can sign in with it from now on.", "success");
+    } catch (err2) {
+      setPwError(describeAuthError(err2));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="card p-5">
+      <div className="flex flex-wrap items-center gap-3">
+        <Avatar member={{ name: profile?.name ?? "?", color: "#1f5f8b" }} size={40} />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[14px] font-semibold text-text">{profile?.name ?? "…"}</div>
+          <div className="truncate text-[12.5px] text-text-secondary">{profile?.email || (profile?.guest ? "Guest session on this browser" : "")}</div>
+        </div>
+        <Button size="sm" icon={<LogOut />} onClick={() => void signOut()}>
+          Sign out
+        </Button>
+      </div>
+      {!profile?.guest && (
+        <form onSubmit={save} noValidate className="mt-5 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-end">
+          <PasswordField
+            label="Set a password"
+            value={password}
+            onChange={(e) => setPw(e.target.value)}
+            error={pwError}
+            autoComplete="new-password"
+            help={pwError ? undefined : "Accounts that arrived from an emailed link have none yet. With one set, you can sign in without a link."}
+            containerClassName="flex-1"
+          />
+          <Button type="submit" icon={<KeyRound />} loading={saving} disabled={saving} className="sm:mb-[22px]">
+            Save password
+          </Button>
+        </form>
+      )}
+    </section>
   );
 }
 
@@ -193,9 +243,8 @@ function CreateWorkspaceCard({ busy, setBusy, setError }: { busy: string | null;
   );
 }
 
-function InvitesCard({ busy, onJoin, initialCode }: { busy: string | null; onJoin: (code: string) => Promise<void>; initialCode: string }) {
+function InvitesCard({ busy, onJoin }: { busy: string | null; onJoin: (id: string) => Promise<void> }) {
   const session = useSession();
-  const [code, setCode] = useState(initialCode);
   const email = session.profile?.email;
   const invites = session.pendingInvites;
 
@@ -220,28 +269,16 @@ function InvitesCard({ busy, onJoin, initialCode }: { busy: string | null; onJoi
           ))}
         </ul>
       ) : (
-        <p className="mt-1 text-[12.5px] text-text-secondary">
+        <p className="mt-1 text-[12.5px] leading-5 text-text-secondary">
           {email ? (
             <>
-              No pending invites for <span className="font-medium text-text">{email}</span>. When an owner or admin invites that address, the workspace appears here.
+              No pending invites for <span className="font-medium text-text">{email}</span>. When an owner or admin invites that address, the workspace appears here and a sign-in link lands in your inbox.
             </>
           ) : (
-            "Guest sessions have no email to invite, so join with an invite code from a teammate, or create an account with your email."
+            "Guest sessions have no email address to invite. Create an account with your email to receive invites."
           )}
         </p>
       )}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void onJoin(code);
-        }}
-        className="mt-4 flex flex-col gap-2"
-      >
-        <TextField label="Have an invite code or link?" value={code} onChange={(e) => setCode(e.target.value.trim().replace(/^.*[?&]code=/, ""))} placeholder="inv_…" autoComplete="off" />
-        <Button type="submit" icon={<KeyRound />} loading={busy === code && code !== ""} disabled={!code.trim() || (busy !== null && busy !== code)} className="self-start">
-          Join with code
-        </Button>
-      </form>
     </section>
   );
 }

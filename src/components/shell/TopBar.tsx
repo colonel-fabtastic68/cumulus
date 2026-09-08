@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, ChevronDown, LogOut, Menu as MenuIcon, Search, Sparkles, UserRound } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Menu as MenuIcon, Search, Settings2, Sparkles, UserRound } from "lucide-react";
 import { Avatar, AvatarStack, Button, IconButton, Kbd, Menu, Modal } from "@/components/ui";
 import { isOnline, useAuth, useCurrentUser } from "@/lib/auth";
 import { useCollection } from "@/lib/store/provider";
@@ -78,7 +78,10 @@ export function TopBar({ onMenu }: { onMenu?: () => void }) {
                 { label: <span className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">Switch user (demo)</span>, disabled: true },
                 ...members.map((m) => ({ label: `${m.name}${m.id === user.id ? " ✓" : ""}`, onSelect: () => switchUser(m.id) })),
               ]
-            : [{ label: "Sign out", onSelect: () => signOut(), icon: <LogOut /> }]),
+            : [
+                { label: "Account and workspaces", href: "/account", icon: <Settings2 /> },
+                { label: "Sign out", onSelect: () => signOut(), icon: <LogOut /> },
+              ]),
         ]}
       />
       <GlobalSearch key={searchNonce} open={searchOpen} onClose={() => setSearchOpen(false)} />
