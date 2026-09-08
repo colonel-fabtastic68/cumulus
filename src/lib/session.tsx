@@ -3,7 +3,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { FirebaseApp } from "firebase/app";
 import type { MemberRole, UserProfile, WorkspaceInvite, WorkspaceMembership } from "@/lib/types";
-import { getFirebaseApp, readFirebaseConfig } from "@/lib/store/firestore";
+import { debugLog } from "@/lib/debug";
+import { getFirebaseApp, getFirebaseAuth, readFirebaseConfig } from "@/lib/store/firestore";
 import { acceptInvite as acceptInviteDoc, createInvite as createInviteDoc, createWorkspace as createWorkspaceDoc, hasMembership, loadOrCreateProfile, rememberWorkspace, removeWorkspaceFromProfile, revokeInvite as revokeInviteDoc, subscribeInvitesForEmail, subscribeProfile, subscribeWorkspaceInvites, updateWorkspaceName as updateWorkspaceNameDoc, type CreateWorkspaceOptions } from "@/lib/workspaces";
 
 export type SessionStatus = "loading" | "signed-out" | "no-workspace" | "ready";
@@ -121,9 +122,10 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
     let cancelled = false;
     let unsubAuth = () => {};
     (async () => {
-      const { getAuth, onAuthStateChanged } = await import("firebase/auth");
+      const { onAuthStateChanged } = await import("firebase/auth");
       if (cancelled) return;
-      unsubAuth = onAuthStateChanged(getAuth(app), async (user) => {
+      unsubAuth = onAuthStateChanged(getFirebaseAuth(app), async (user) => {
+        debugLog(user ? "auth: signed in" : "auth: signed out");
         unsubProfile();
         unsubProfile = () => {};
         if (!user) {
@@ -135,6 +137,7 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
         setAccount({ uid: user.uid, email: (user.email ?? "").toLowerCase(), name: user.displayName ?? "", isAnonymous: user.isAnonymous });
         try {
           const loaded = await loadOrCreateProfile(app, user, pendingSignUpName);
+          debugLog(`profile: loaded (${Object.keys(loaded.workspaces).length} workspaces)`);
           pendingSignUpName = null;
           setProfile(loaded);
           setError(null);

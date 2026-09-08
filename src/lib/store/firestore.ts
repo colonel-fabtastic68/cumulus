@@ -1,5 +1,5 @@
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
-import { getAuth, onAuthStateChanged } from "firebase/auth";
+import { browserLocalPersistence, getAuth, indexedDBLocalPersistence, initializeAuth, onAuthStateChanged, type Auth } from "firebase/auth";
 import {
   getFirestore,
   initializeFirestore,
@@ -19,6 +19,7 @@ import {
 } from "firebase/firestore";
 import { COLLECTIONS, type CollectionMap, type CollectionName, type WorkspaceSnapshot } from "@/lib/types";
 import { getRuntimeConfig, type FirebaseConfig } from "@/lib/firebase-config";
+import { debugLog } from "@/lib/debug";
 import type { Store, WriteOp } from "./types";
 
 export type { FirebaseConfig } from "@/lib/firebase-config";
@@ -30,6 +31,27 @@ export function readFirebaseConfig(): FirebaseConfig | null {
 
 export function getFirebaseApp(config: FirebaseConfig): FirebaseApp {
   return getApps()[0] ?? initializeApp(config);
+}
+
+const auths = new WeakMap<FirebaseApp, Auth>();
+
+/**
+ * Firebase Auth without a popup/redirect resolver. The default getAuth() loads
+ * the auth iframe and Google's gapi at start-up to look for redirect results,
+ * and the first auth state waits for it; Cumulus only signs in with passwords
+ * and email links, so none of that is needed.
+ */
+export function getFirebaseAuth(app: FirebaseApp): Auth {
+  const existing = auths.get(app);
+  if (existing) return existing;
+  let auth: Auth;
+  try {
+    auth = initializeAuth(app, { persistence: [indexedDBLocalPersistence, browserLocalPersistence] });
+  } catch {
+    auth = getAuth(app);
+  }
+  auths.set(app, auth);
+  return auth;
 }
 
 const dbs = new WeakMap<FirebaseApp, Firestore>();
@@ -45,7 +67,11 @@ export function getDb(app: FirebaseApp): Firestore {
   if (existing) return existing;
   let db: Firestore;
   try {
-    db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+    db = initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+      // Fall back to long polling when a proxy, extension or Safari blocks the streaming channel.
+      experimentalAutoDetectLongPolling: true,
+    });
   } catch {
     // Already initialised without these settings (or persistence unavailable): keep going without the disk cache.
     db = getFirestore(app);
@@ -104,7 +130,7 @@ export class FirestoreStore implements Store {
   /** Resolves once Firebase Auth reports a signed-in user. Rules require auth, so reads must wait. */
   private waitForSignIn(): Promise<void> {
     return new Promise((resolve) => {
-      const unsub = onAuthStateChanged(getAuth(this.app), (user) => {
+      const unsub = onAuthStateChanged(getFirebaseAuth(this.app), (user) => {
         if (user) {
           unsub();
           resolve();
@@ -124,12 +150,18 @@ export class FirestoreStore implements Store {
     // Joining a workspace writes the member record and the profile in one batch; the profile listener
     // fires before the server has acknowledged it. Reading before that acknowledgement is refused.
     await waitForPendingWrites(this.db).catch(() => {});
+    debugLog(`store ${this.workspaceId}: subscribing`);
     for (const name of COLLECTIONS) {
+      let first = true;
       const unsub = onSnapshot(
         this.col(name),
         (snap) => {
           (this.cache as Record<string, unknown[]>)[name] = snap.docs.map((d) => d.data());
           this.emit(name);
+          if (first) {
+            first = false;
+            debugLog(`store ${name}: ${snap.size} docs (${snap.metadata.fromCache ? "cache" : "server"})`);
+          }
           this.firstLoadResolve.get(name)?.();
           // A workspace with no settings on the server (pre-account era) is seeded once. Never decide that from the cache.
           if (name === "settings" && snap.empty && !snap.metadata.fromCache && !this.seeded) {
@@ -142,6 +174,7 @@ export class FirestoreStore implements Store {
       this.unsubs.push(unsub);
     }
     await Promise.all(CORE_COLLECTIONS.map((name) => this.firstLoad.get(name)));
+    debugLog(`store ${this.workspaceId}: ready`);
   }
 
   private emit(name: CollectionName) {

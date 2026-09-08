@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui";
 import { setRuntimeConfig, type RuntimeConfig } from "@/lib/firebase-config";
-import { getFirebaseApp } from "@/lib/store/firestore";
+import { getFirebaseApp, getFirebaseAuth } from "@/lib/store/firestore";
 import { APP_HOME } from "@/lib/auth-routes";
 
 type Session = "none" | "signed-out" | "signed-in";
@@ -24,9 +24,9 @@ export function SessionCta({ runtimeConfig, placement }: { runtimeConfig: Runtim
     let unsub = () => {};
     let cancelled = false;
     (async () => {
-      const { getAuth, onAuthStateChanged } = await import("firebase/auth");
+      const { onAuthStateChanged } = await import("firebase/auth");
       if (cancelled) return;
-      unsub = onAuthStateChanged(getAuth(getFirebaseApp(runtimeConfig.firebase!)), (u) => setSession(u ? "signed-in" : "signed-out"));
+      unsub = onAuthStateChanged(getFirebaseAuth(getFirebaseApp(runtimeConfig.firebase!)), (u) => setSession(u ? "signed-in" : "signed-out"));
     })();
     return () => {
       cancelled = true;

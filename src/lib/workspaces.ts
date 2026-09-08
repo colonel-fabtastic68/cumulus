@@ -5,7 +5,7 @@
  */
 import type { FirebaseApp } from "firebase/app";
 import type { User } from "firebase/auth";
-import { collection, deleteField, doc, getDoc, onSnapshot, query, setDoc, updateDoc, where, writeBatch, type Firestore } from "firebase/firestore";
+import { collection, deleteField, doc, getDoc, getDocFromCache, onSnapshot, query, setDoc, updateDoc, where, writeBatch, type Firestore } from "firebase/firestore";
 import { getRuntimeConfig } from "@/lib/firebase-config";
 import { sendMagicLink } from "@/lib/auth-link";
 import { getDb } from "@/lib/store/firestore";
@@ -53,6 +53,9 @@ export function displayNameFor(user: User, preferred?: string | null): string {
  */
 export async function loadOrCreateProfile(app: FirebaseApp, user: User, preferredName?: string | null): Promise<UserProfile> {
   const ref = doc(db(app), "users", user.uid);
+  // A returning visitor's profile is on disk; the live listener that follows brings in any change.
+  const cached = await getDocFromCache(ref).catch(() => null);
+  if (cached?.exists()) return cached.data() as UserProfile;
   const snap = await getDoc(ref);
   if (snap.exists()) return snap.data() as UserProfile;
 

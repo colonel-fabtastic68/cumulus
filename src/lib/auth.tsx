@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import type { Member } from "@/lib/types";
 import { nowIso } from "@/lib/utils";
 import { useCollection, useStoreContext } from "@/lib/store/provider";
-import { getFirebaseApp, readFirebaseConfig } from "@/lib/store/firestore";
+import { getFirebaseApp, getFirebaseAuth, readFirebaseConfig } from "@/lib/store/firestore";
 import { setPendingSignUpName, useSession } from "@/lib/session";
 
 const LOCAL_USER_KEY = "cumulus:currentUser";
@@ -83,8 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!cfg) return false;
     setAuthError(null);
     try {
-      const { getAuth } = await import("firebase/auth");
-      await action(getAuth(getFirebaseApp(cfg)));
+      await action(getFirebaseAuth(getFirebaseApp(cfg)));
       return true;
     } catch (e) {
       setAuthError(describeAuthError(e));
@@ -133,8 +132,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     const cfg = readFirebaseConfig();
     if (!cfg) return;
-    const { getAuth, signOut: fbSignOut } = await import("firebase/auth");
-    await fbSignOut(getAuth(getFirebaseApp(cfg)));
+    const { signOut: fbSignOut } = await import("firebase/auth");
+    await fbSignOut(getFirebaseAuth(getFirebaseApp(cfg)));
   }, []);
 
   const value = useMemo<AuthContextValue>(
