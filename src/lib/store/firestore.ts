@@ -2,6 +2,9 @@ import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import {
   getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   collection,
   doc,
   onSnapshot,
@@ -28,6 +31,31 @@ export function getFirebaseApp(config: FirebaseConfig): FirebaseApp {
   return getApps()[0] ?? initializeApp(config);
 }
 
+const dbs = new WeakMap<FirebaseApp, Firestore>();
+
+/**
+ * The Firestore instance, created once per app with the IndexedDB cache on so
+ * repeat page loads render from disk while the live snapshots catch up. Every
+ * Firestore call in the browser must go through here: initializing twice with
+ * different settings throws, and a plain getFirestore() would lose the cache.
+ */
+export function getDb(app: FirebaseApp): Firestore {
+  const existing = dbs.get(app);
+  if (existing) return existing;
+  let db: Firestore;
+  try {
+    db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+  } catch {
+    // Already initialised without these settings (or persistence unavailable): keep going without the disk cache.
+    db = getFirestore(app);
+  }
+  dbs.set(app, db);
+  return db;
+}
+
+/** Collections the app needs before it can render. The history-heavy ones stream in behind them. */
+const CORE_COLLECTIONS: CollectionName[] = ["settings", "members", "items", "suppliers", "orders", "rmas", "integrations"];
+
 /**
  * Firestore-backed store. Every collection lives under
  * `workspaces/{workspaceId}/{collection}` and is mirrored into memory via
@@ -40,17 +68,31 @@ export class FirestoreStore implements Store {
   private listeners = new Map<CollectionName, Set<(rows: unknown[]) => void>>();
   private unsubs: Array<() => void> = [];
   private readyPromise: Promise<void>;
+  /** Resolves per collection once its first snapshot (cache or server) has landed. */
+  private firstLoad = new Map<CollectionName, Promise<void>>();
+  private firstLoadResolve = new Map<CollectionName, () => void>();
+  private firstLoadReject = new Map<CollectionName, (e: Error) => void>();
+  private seeded = false;
 
   constructor(
     private app: FirebaseApp,
     private workspaceId: string,
     private seed: () => WorkspaceSnapshot,
   ) {
-    this.db = getFirestore(app);
+    this.db = getDb(app);
     this.cache = {
       items: [], movements: [], lots: [], suppliers: [], receipts: [], builds: [], orders: [],
       rmas: [], members: [], activity: [], integrations: [], settings: [], agentSessions: [],
     };
+    for (const name of COLLECTIONS) {
+      const p = new Promise<void>((resolve, reject) => {
+        this.firstLoadResolve.set(name, resolve);
+        this.firstLoadReject.set(name, reject);
+      });
+      // Awaited on demand; a failure surfaces through ready() or list(), not as an unhandled rejection.
+      p.catch(() => {});
+      this.firstLoad.set(name, p);
+    }
     this.readyPromise = this.init();
   }
 
@@ -70,28 +112,32 @@ export class FirestoreStore implements Store {
     });
   }
 
+  /**
+   * Subscribe to every collection at once. The first snapshot of each comes from
+   * the disk cache when there is one, so a returning visitor renders straight
+   * away; the server snapshot follows and re-emits. ready() waits only for the
+   * core collections, so a large movement history never blocks first paint.
+   */
   private async init() {
     await this.waitForSignIn();
-    // Seed an empty workspace on first use.
-    const settingsSnap = await getDocs(this.col("settings")).catch((e: unknown) => {
-      throw new Error(describeFirestoreError(e));
-    });
-    if (settingsSnap.empty) {
-      await this.replaceAll(this.seed());
-    }
-    const firstLoads: Promise<void>[] = [];
     for (const name of COLLECTIONS) {
-      let resolveFirst!: () => void;
-      firstLoads.push(new Promise<void>((r) => (resolveFirst = r)));
-      const unsub = onSnapshot(this.col(name), (snap) => {
-        const rows = snap.docs.map((d) => d.data());
-        (this.cache as Record<string, unknown[]>)[name] = rows;
-        this.emit(name);
-        resolveFirst();
-      });
+      const unsub = onSnapshot(
+        this.col(name),
+        (snap) => {
+          (this.cache as Record<string, unknown[]>)[name] = snap.docs.map((d) => d.data());
+          this.emit(name);
+          this.firstLoadResolve.get(name)?.();
+          // A workspace with no settings on the server (pre-account era) is seeded once. Never decide that from the cache.
+          if (name === "settings" && snap.empty && !snap.metadata.fromCache && !this.seeded) {
+            this.seeded = true;
+            void this.replaceAll(this.seed()).catch(() => {});
+          }
+        },
+        (e) => this.firstLoadReject.get(name)?.(new Error(describeFirestoreError(e))),
+      );
       this.unsubs.push(unsub);
     }
-    await Promise.all(firstLoads);
+    await Promise.all(CORE_COLLECTIONS.map((name) => this.firstLoad.get(name)));
   }
 
   private emit(name: CollectionName) {
@@ -109,12 +155,12 @@ export class FirestoreStore implements Store {
   }
 
   async list<C extends CollectionName>(name: C): Promise<CollectionMap[C][]> {
-    await this.readyPromise;
+    await this.firstLoad.get(name);
     return this.cache[name] as CollectionMap[C][];
   }
 
   async get<C extends CollectionName>(name: C, id: string): Promise<CollectionMap[C] | null> {
-    await this.readyPromise;
+    await this.firstLoad.get(name);
     const cached = (this.cache[name] as CollectionMap[C][]).find((r) => r.id === id);
     if (cached) return cached;
     const snap = await getDoc(doc(this.col(name), id));
@@ -129,7 +175,7 @@ export class FirestoreStore implements Store {
     }
     const l = listener as (rows: unknown[]) => void;
     set.add(l);
-    this.readyPromise.then(() => l(this.cache[name] as unknown[]));
+    this.firstLoad.get(name)?.then(() => l(this.cache[name] as unknown[])).catch(() => {});
     return () => {
       set!.delete(l);
     };
@@ -175,7 +221,7 @@ export class FirestoreStore implements Store {
   }
 
   async snapshot(): Promise<WorkspaceSnapshot> {
-    await this.readyPromise;
+    await Promise.all(COLLECTIONS.map((name) => this.firstLoad.get(name)));
     return JSON.parse(JSON.stringify(this.cache)) as WorkspaceSnapshot;
   }
 

@@ -5,8 +5,9 @@
  */
 import type { FirebaseApp } from "firebase/app";
 import type { User } from "firebase/auth";
-import { collection, doc, getDoc, getFirestore, onSnapshot, query, setDoc, updateDoc, where, writeBatch, type Firestore } from "firebase/firestore";
+import { collection, doc, getDoc, onSnapshot, query, setDoc, updateDoc, where, writeBatch, type Firestore } from "firebase/firestore";
 import { getRuntimeConfig } from "@/lib/firebase-config";
+import { getDb } from "@/lib/store/firestore";
 import { buildSeed, freshWorkspace, seedSettings } from "@/lib/seed";
 import { COLLECTIONS, type ActivityEvent, type Member, type MemberRole, type UserProfile, type WorkspaceDoc, type WorkspaceInvite, type WorkspaceMembership, type WorkspaceSettings, type WorkspaceSnapshot } from "@/lib/types";
 import { newId, nowIso } from "@/lib/utils";
@@ -23,7 +24,7 @@ function clean<T extends object>(value: T): T {
 }
 
 function db(app: FirebaseApp): Firestore {
-  return getFirestore(app);
+  return getDb(app);
 }
 
 export function avatarColor(seed: string): string {
