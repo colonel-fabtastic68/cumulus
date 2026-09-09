@@ -4,6 +4,9 @@ import { useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import type { Item, Receipt } from "@/lib/types";
 import { receiveStock } from "@/lib/inventory";
+import { useDefaultLocation, useLocations } from "@/lib/locations";
+import { findItemByCode } from "@/lib/scan";
+import { ScanField } from "@/components/scan";
 import { useCollection, useItems, useSettings, useStore } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
 import { formatMoney, formatNumber, fromDateInput, pluralize, toDateInput } from "@/lib/format";
@@ -25,7 +28,7 @@ export function ReceiveDrawer(props: ReceiveDrawerProps) {
 }
 
 function newLine(autoFocus = false): LineDraft {
-  return { key: newId("ln"), item: null, qty: "", unitCost: "", autoFocus };
+  return { key: newId("ln"), item: null, qty: "", unitCost: "", bin: "", autoFocus };
 }
 
 const activeOnly = (item: Item) => item.status === "active";
@@ -38,6 +41,9 @@ function ReceiveForm({ open, onClose, onReceived }: ReceiveDrawerProps) {
   const suppliers = useCollection("suppliers");
   const items = useItems();
 
+  const locations = useLocations();
+  const home = useDefaultLocation();
+  const [locationId, setLocationId] = useState(home.id);
   const [supplierId, setSupplierId] = useState("");
   const [reference, setReference] = useState("");
   const [date, setDate] = useState(() => toDateInput());
@@ -82,6 +88,19 @@ function ReceiveForm({ open, onClose, onReceived }: ReceiveDrawerProps) {
     if (item) requestAnimationFrame(() => qtyInputs.current.get(key)?.focus());
   };
   const removeLine = (key: string) => setLines((ls) => (ls.length === 1 ? [newLine()] : ls.filter((l) => l.key !== key)));
+  /** Factor 32: each scan adds a unit of the matching item, or starts a new line for it. */
+  const onScan = (code: string) => {
+    const match = findItemByCode(items, code);
+    if (!match) return toast(`No item matches ${code}`, "critical");
+    const item = match.item;
+    setLines((ls) => {
+      const existing = ls.find((l) => l.item?.id === item.id);
+      if (existing) return ls.map((l) => (l === existing ? { ...l, qty: String((Number(l.qty) || 0) + 1) } : l));
+      const blank = ls.find((l) => !l.item);
+      const fresh = { ...newLine(), item, qty: "1", unitCost: String(item.unitCost) };
+      return blank ? ls.map((l) => (l === blank ? fresh : l)) : [...ls, fresh];
+    });
+  };
   const addLine = () => setLines((ls) => [...ls, newLine(true)]);
   const registerQtyInput = (key: string) => (el: HTMLInputElement | null) => {
     if (el) qtyInputs.current.set(key, el);
@@ -90,7 +109,7 @@ function ReceiveForm({ open, onClose, onReceived }: ReceiveDrawerProps) {
 
   const submit = async () => {
     setError(null);
-    const payload: Array<{ itemId: string; qty: number; unitCost?: number }> = [];
+    const payload: Array<{ itemId: string; qty: number; unitCost?: number; locationId?: string; bin?: string }> = [];
     for (const [i, l] of lines.entries()) {
       if (!l.item) {
         if (l.qty.trim() || l.unitCost.trim()) return setError(`Choose an item for line ${i + 1}`);
@@ -100,7 +119,7 @@ function ReceiveForm({ open, onClose, onReceived }: ReceiveDrawerProps) {
       if (!l.qty.trim() || !Number.isFinite(qty) || qty <= 0) return setError(`Enter a quantity for ${l.item.sku}`);
       const unitCost = l.unitCost.trim() === "" ? undefined : Number(l.unitCost);
       if (unitCost !== undefined && (!Number.isFinite(unitCost) || unitCost < 0)) return setError(`Enter a valid unit cost for ${l.item.sku}`);
-      payload.push({ itemId: l.item.id, qty, unitCost });
+      payload.push({ itemId: l.item.id, qty, unitCost, locationId: locationId !== home.id ? locationId : undefined, bin: l.bin.trim() || undefined });
     }
     if (payload.length === 0) return setError("Add at least one item to receive");
     setBusy(true);
@@ -165,6 +184,9 @@ function ReceiveForm({ open, onClose, onReceived }: ReceiveDrawerProps) {
           options={supplierOptions}
           help={supplierHelp}
         />
+        {locations.length > 1 && (
+          <Select label="Receive into" value={locationId} onChange={(e) => setLocationId(e.target.value)} options={locations.map((l) => ({ value: l.id, label: l.code ? `${l.name} (${l.code})` : l.name }))} help="Stock lands at this location; set a bin per line for put-away." />
+        )}
         <FormGrid cols={2}>
           <TextField label="Reference" hint="(optional)" placeholder="PO or packing slip number" value={reference} onChange={(e) => setReference(e.target.value)} />
           <TextField
@@ -190,10 +212,14 @@ function ReceiveForm({ open, onClose, onReceived }: ReceiveDrawerProps) {
             <span>Item</span>
             <span className="text-right">Qty</span>
             <span className="text-right">Unit cost</span>
+            <span>Bin</span>
             <span className="text-right">Total</span>
             <span />
           </div>
           <div className="flex flex-col gap-2">
+            <div className="px-3 pt-3">
+              <ScanField label="Scan to add" placeholder="Scan a barcode or type a SKU and press Enter" onScan={onScan} />
+            </div>
             {lines.map((line) => (
               <ReceiveLineRow
                 key={line.key}

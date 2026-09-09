@@ -564,6 +564,9 @@ function generate(overrides: Map<string, { min: number; max: number }>, behind: 
     ],
     settings: [settings],
     agentSessions: [],
+    locations: [],
+    transfers: [],
+    shipments: [],
   };
 }
 
@@ -633,9 +636,14 @@ export function freshWorkspace(opts: { members?: Member[]; companyName?: string;
       { id: "woocommerce", status: "not_connected", createdAt: iso(0) },
       { id: "quickbooks", status: "not_connected", createdAt: iso(0) },
       { id: "square", status: "not_connected", createdAt: iso(0) },
+      { id: "shippo", status: "not_connected", createdAt: iso(0) },
+      { id: "easypost", status: "not_connected", createdAt: iso(0) },
     ],
     settings: [{ ...settings, companyName: opts.companyName ?? "", currency: opts.currency ?? settings.currency, automations: settings.automations.map((a) => ({ ...a, enabled: false })) }],
     agentSessions: [],
+    locations: [],
+    transfers: [],
+    shipments: [],
   };
 }
 

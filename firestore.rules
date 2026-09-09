@@ -56,10 +56,15 @@ service cloud.firestore {
         allow delete: if canManage(ws) || (signedIn() && memberId == uid());
       }
 
+      // Connection secrets (API tokens) are written and read by the server only.
+      match /secrets/{docId} {
+        allow read, write: if false;
+      }
+
       // Everything else in a workspace is shared by its members.
       match /{collection}/{docId} {
-        allow read: if collection != 'members' && isMember(ws);
-        allow write: if collection != 'members' && isMemberAfter(ws);
+        allow read: if collection != 'members' && collection != 'secrets' && isMember(ws);
+        allow write: if collection != 'members' && collection != 'secrets' && isMemberAfter(ws);
       }
     }
 

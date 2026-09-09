@@ -1,4 +1,5 @@
 import type { Item } from "@/lib/types";
+import { crossRefText } from "@/lib/scan";
 import { isLowStock } from "@/lib/inventory";
 import { matches } from "@/lib/utils";
 
@@ -32,7 +33,7 @@ export function matchesView(item: Item, view: InventoryView): boolean {
 }
 
 export function matchesSearch(item: Item, q: string): boolean {
-  return matches(q, item.sku, item.name, item.category, item.tags.join(" "), item.barcode, item.location);
+  return matches(q, item.sku, item.name, item.category, item.tags.join(" "), item.barcode, item.location, crossRefText(item));
 }
 
 export interface InventoryFilters {

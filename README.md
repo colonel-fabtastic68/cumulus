@@ -62,11 +62,28 @@ Set `CUMULUS_MCP_TOKEN` to require a bearer token. To serve the **live workspace
 | 16 · Deactivating old part numbers | Superseded status with replacement link; agent sweep for inactive parts; bulk deactivate. |
 | 21 · Min/Max | Per item; Home + Reports → Low stock with reorder quantities grouped by supplier. |
 | Import / migration | Import → CSV with AI column mapping, preview, upsert by SKU. |
-| Integrations | Integrations page with Shopify / WooCommerce / QuickBooks / Square placeholders (not wired yet). |
+| 24 · Cross-referencing / part interchange | Item → Cross-references: OEM, aftermarket, competitor, supplier numbers and nicknames. Search, scan and Nimbus all match them; superseded numbers resolve to the replacement. |
+| 29 · Bins and locations | Settings → Locations (warehouses, stores, trucks, trailers). Stock is held per location with a bin per item; Item → Locations, inventory list filter by location, put-away bin on receiving. |
+| 30 · Warehouse transfers | Transfers page: pick, scan or paste a list, send between locations (in transit at neither end), receive with shortfalls written off. |
+| 32 · Barcode scanning | Scan button / ⌘/ in the top bar: phone camera or a USB/Bluetooth scanner typing into the page (keyboard wedge). Scan into receiving, transfers and search; matches barcodes, SKUs and cross-references. |
+| 34 · Backorders | Ship part of an order; the rest stays open and shows under Orders → Backordered and Reports → Backorders with expected dates from supplier lead times. Receiving flags which backorders it covers. |
+| 38 · KPI dashboards | Reports → KPIs: inventory turnover, days on hand, fill rate and stockouts, company-wide and by category or SKU, for 30 / 90 / 365 days. |
+| 40 · Multi-channel sales sync | Integrations → Shopify and WooCommerce: products in, open orders in, stock levels out, with webhooks and a scheduled reconciliation. Credentials are verified with the platform and kept server-side. |
+| 41 · Shipping carriers | Integrations → Shippo or EasyPost: rate-shop the carriers on your account when shipping an order, buy the label, track it. Manual carrier and tracking entry always works. |
 
-Not yet: live vendor price feeds (6b), product configurators (15a/b), automatic sourcing search (14), scheduled automations actually running on a schedule (they're defined on the Agents page and can be run on demand), and live Shopify/WooCommerce sync (CSV import covers migration for now).
+Not yet: live vendor price feeds (6b), product configurators (15a/b), automatic sourcing search (14), scheduled automations actually running on a schedule (they're defined on the Agents page and can be run on demand), and QuickBooks / Square sync (CSV import covers migration for now).
 
 Pilot testers: start with [docs/PILOT-GUIDE.md](docs/PILOT-GUIDE.md).
+
+### Live connections (stores and carriers)
+
+Channels and carriers run through the app's own API routes, so they only work in Firestore mode with a service account on the server (`FIREBASE_SERVICE_ACCOUNT_JSON`, the same one the MCP endpoint uses). Nothing is pre-filled: each workspace connects its own accounts under Integrations.
+
+- **Shopify**: create a custom app in Shopify admin (Settings → Apps and sales channels → Develop apps) with `read_products`, `read_inventory`, `write_inventory`, `read_orders`, `read_locations`, install it and paste the Admin API access token. The API secret key is optional and lets webhooks be signature-checked.
+- **WooCommerce**: WooCommerce → Settings → Advanced → REST API → Add key (Read/Write); paste the consumer key and secret. The site must be https.
+- **Shippo / EasyPost**: paste the API token (test tokens buy free sample labels). Set a ship-from address and default parcel under Settings → Shipping and scanning.
+
+Credentials are verified with the platform on connect, then stored in `workspaces/{ws}/secrets/{integration}`, which `firestore.rules` denies to every client (redeploy the rules after pulling this: `firebase deploy --only firestore:rules`). Webhooks are registered at connect time against `APP_URL` (or the request's origin). `vercel.json` schedules a daily reconciliation at `/api/integrations/cron`; set `CRON_SECRET` on Vercel so only the scheduler can call it. What a channel syncs is per connection: products in, orders in, stock out, accept counts from the store, and which Cumulus location mirrors it.
 
 ## Architecture
 
@@ -74,7 +91,12 @@ Pilot testers: start with [docs/PILOT-GUIDE.md](docs/PILOT-GUIDE.md).
 src/
   lib/types.ts          domain model (Item, StockMovement, Lot, Receipt, Build, SalesOrder, Rma, …)
   lib/store/            Store interface + LocalStore (localStorage) + FirestoreStore
-  lib/inventory.ts      all mutations & reports (BOM explosion, receiving, builds, RMAs, imports…)
+  lib/inventory.ts      all mutations & reports (BOM explosion, receiving, builds, transfers, shipping, imports…)
+  lib/kpis.ts           turnover, days on hand, fill rate, stockouts from the ledger
+  lib/scan.ts           barcode / SKU / cross-reference matching
+  lib/integrations/     server-side channel + carrier clients (Shopify, WooCommerce, Shippo, EasyPost)
+  app/api/integrations  connect / disconnect / sync / webhook / push-stock / cron routes
+  app/api/shipping      rates / buy label / track / carrier webhooks
   lib/agent/tools.ts    tool schemas shared by server and client
   lib/agent/execute.ts  client-side tool execution against the store
   app/api/agent         streamText + Gemini (no data access; tools run on the client)

@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
-import type { Item, OrderSource, SalesOrder } from "@/lib/types";
+import { MapPin, Plus, Trash2 } from "lucide-react";
+import type { Address, Item, OrderSource, SalesOrder } from "@/lib/types";
 import { createOrder, InventoryError, priceForQty } from "@/lib/inventory";
 import { useCollection, useSettings, useStore } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
@@ -50,6 +50,10 @@ function NewOrderForm({ open, onClose, onCreated }: NewOrderModalProps) {
   const symbol = currencySymbol(currency);
 
   const [customer, setCustomer] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [addressOpen, setAddressOpen] = useState(false);
+  const [shipTo, setShipTo] = useState<Address>({ street1: "", city: "", state: "", zip: "", country: "US" });
+  const setA = (k: keyof Address) => (e: React.ChangeEvent<HTMLInputElement>) => setShipTo((a) => ({ ...a, [k]: e.target.value }));
   const [source, setSource] = useState<OrderSource>("manual");
   const [lines, setLines] = useState<LineState[]>(() => [newLine()]);
   const [note, setNote] = useState("");
@@ -102,8 +106,11 @@ function NewOrderForm({ open, onClose, onCreated }: NewOrderModalProps) {
     setBusy(true);
     setError(null);
     try {
+      const address = shipTo.street1.trim() ? { ...shipTo, name: shipTo.name?.trim() || customer.trim() || undefined, country: shipTo.country.trim().toUpperCase() || "US" } : undefined;
       const order = await createOrder(store, user, {
         customer: customer.trim(),
+        customerEmail: customerEmail.trim() || undefined,
+        shipTo: address,
         source,
         note: note.trim() || undefined,
         lines: validLines.map((l) => ({ itemId: l.item!.id, qty: Number(l.qty), unitPrice: Number(l.unitPrice) })),
@@ -155,6 +162,31 @@ function NewOrderForm({ open, onClose, onCreated }: NewOrderModalProps) {
           </div>
           <Select label="Source" value={source} onChange={(e) => setSource(e.target.value as OrderSource)} options={SOURCE_OPTIONS} />
         </FormGrid>
+        <FormGrid cols={3}>
+          <div className="sm:col-span-2">
+            <TextField label="Customer email" hint="(optional)" type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="For carrier notifications" />
+          </div>
+          <div className="flex items-end">
+            <Button size="md" variant="plain" icon={<MapPin />} onClick={() => setAddressOpen((v) => !v)}>
+              {addressOpen ? "Hide shipping address" : "Add shipping address"}
+            </Button>
+          </div>
+        </FormGrid>
+        {addressOpen && (
+          <div className="rounded-[var(--radius)] border border-border p-3">
+            <FormGrid cols={2}>
+              <TextField label="Recipient" value={shipTo.name ?? ""} onChange={setA("name")} placeholder={customer || "Name on the label"} />
+              <TextField label="Company" hint="(optional)" value={shipTo.company ?? ""} onChange={setA("company")} />
+              <TextField label="Street" value={shipTo.street1} onChange={setA("street1")} />
+              <TextField label="Street 2" hint="(optional)" value={shipTo.street2 ?? ""} onChange={setA("street2")} />
+              <TextField label="City" value={shipTo.city} onChange={setA("city")} />
+              <TextField label="State / region" value={shipTo.state ?? ""} onChange={setA("state")} />
+              <TextField label="Postal code" value={shipTo.zip} onChange={setA("zip")} />
+              <TextField label="Country" value={shipTo.country} onChange={setA("country")} maxLength={2} help="Two-letter code" />
+              <TextField label="Phone" hint="(optional)" value={shipTo.phone ?? ""} onChange={setA("phone")} />
+            </FormGrid>
+          </div>
+        )}
 
         <div>
           <div className="mb-1.5 flex items-center justify-between">

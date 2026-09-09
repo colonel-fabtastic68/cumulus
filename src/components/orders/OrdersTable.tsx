@@ -1,13 +1,14 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { Eye, MoreHorizontal, PackageCheck, ShoppingCart, XCircle } from "lucide-react";
+import { Eye, MoreHorizontal, PackageCheck, ShoppingCart, Truck, XCircle } from "lucide-react";
 import type { Item, SalesOrder } from "@/lib/types";
+import { isOrderOpen, orderIsBackordered } from "@/lib/inventory";
 import { useItemsById, useSettings } from "@/lib/store/provider";
 import { formatDate, formatDateTime, formatMoney, formatRelative } from "@/lib/format";
 import { matches } from "@/lib/utils";
 import { Badge, Button, EmptyState, IconButton, Menu, SearchField, Segmented, StatusBadge, Table, type Column } from "@/components/ui";
-import { describeShortages, orderAvailability, orderTotal, SourceBadge, type OrderFilter } from "./orderUtils";
+import { describeShortages, orderAvailability, orderOpenUnits, orderShippedUnits, orderTotal, orderUnits, SourceBadge, type OrderFilter } from "./orderUtils";
 
 interface OrdersTableProps {
   orders: SalesOrder[];
@@ -21,18 +22,20 @@ interface OrdersTableProps {
 
 const FILTERS: Array<{ value: OrderFilter; label: string }> = [
   { value: "open", label: "Open" },
+  { value: "partial", label: "Partly shipped" },
+  { value: "backordered", label: "Backordered" },
   { value: "fulfilled", label: "Fulfilled" },
   { value: "cancelled", label: "Cancelled" },
   { value: "all", label: "All" },
 ];
 
 function AvailabilityCell({ order, byId }: { order: SalesOrder; byId: Map<string, Item> }) {
-  if (order.status !== "open") return <span className="text-text-tertiary">—</span>;
+  if (!isOrderOpen(order)) return <span className="text-text-tertiary">—</span>;
   const a = orderAvailability(order, byId);
   if (a.ready) return <Badge tone="success">Ready</Badge>;
   return (
     <span title={describeShortages(a.short)}>
-      <Badge tone="warning">Short</Badge>
+      <Badge tone="warning">Backordered</Badge>
     </span>
   );
 }
@@ -44,13 +47,16 @@ export function OrdersTable({ orders, canWrite, busyId, onSelect, onFulfil, onCa
   const [q, setQ] = useState("");
 
   const counts = useMemo(() => {
-    const c = { open: 0, fulfilled: 0, cancelled: 0, all: orders.length };
-    for (const o of orders) c[o.status]++;
+    const c = { open: 0, partial: 0, backordered: 0, fulfilled: 0, cancelled: 0, all: orders.length };
+    for (const o of orders) {
+      c[o.status]++;
+      if (orderIsBackordered(o, byId)) c.backordered++;
+    }
     return c;
-  }, [orders]);
+  }, [orders, byId]);
 
   const rows = useMemo(() => {
-    let list = filter === "all" ? orders : orders.filter((o) => o.status === filter);
+    let list = filter === "all" ? orders : filter === "backordered" ? orders.filter((o) => orderIsBackordered(o, byId)) : orders.filter((o) => o.status === filter);
     if (q.trim()) {
       list = list.filter((o) => matches(q, o.number, o.customer) || o.lines.some((l) => matches(q, byId.get(l.itemId)?.sku)));
     }
@@ -82,7 +88,7 @@ export function OrdersTable({ orders, canWrite, busyId, onSelect, onFulfil, onCa
       {
         key: "lines",
         header: "Lines",
-        render: (o) => o.lines.length,
+        render: (o) => (o.status === "partial" ? <span title={`${orderShippedUnits(o)} of ${orderUnits(o)} units shipped`}>{o.lines.length} · <span className="text-text-secondary">{orderOpenUnits(o)} open</span></span> : o.lines.length),
         sortValue: (o) => o.lines.length,
         align: "right",
         hideBelow: "sm",
@@ -98,7 +104,7 @@ export function OrdersTable({ orders, canWrite, busyId, onSelect, onFulfil, onCa
         key: "availability",
         header: "Availability",
         render: (o) => <AvailabilityCell order={o} byId={byId} />,
-        sortValue: (o) => (o.status !== "open" ? null : orderAvailability(o, byId).ready ? 1 : 0),
+        sortValue: (o) => (!isOrderOpen(o) ? null : orderAvailability(o, byId).ready ? 1 : 0),
         hideBelow: "md",
       },
       {
@@ -131,7 +137,7 @@ export function OrdersTable({ orders, canWrite, busyId, onSelect, onFulfil, onCa
         width: "44px",
         align: "right",
         render: (o) => {
-          const open = o.status === "open";
+          const open = isOrderOpen(o);
           return (
             <div onClick={(e) => e.stopPropagation()} className="flex justify-end">
               <Menu
@@ -145,7 +151,7 @@ export function OrdersTable({ orders, canWrite, busyId, onSelect, onFulfil, onCa
                   ...(open && canWrite
                     ? ([
                         "divider",
-                        { label: "Fulfil", icon: <PackageCheck />, onSelect: () => onFulfil(o), disabled: busyId === o.id },
+                        { label: o.status === "partial" ? "Ship the rest" : "Ship", icon: <Truck />, onSelect: () => onFulfil(o), disabled: busyId === o.id },
                         { label: "Cancel order", icon: <XCircle />, destructive: true, onSelect: () => onCancel(o), disabled: busyId === o.id },
                       ] as const)
                     : []),
@@ -171,6 +177,10 @@ export function OrdersTable({ orders, canWrite, busyId, onSelect, onFulfil, onCa
         action={onNew ? <Button variant="primary" size="sm" onClick={onNew}>New order</Button> : undefined}
       />
     );
+  } else if (filter === "partial") {
+    empty = <EmptyState icon={<Truck />} title="No partly shipped orders" description="Orders shipped in part stay here until the last line goes out." />;
+  } else if (filter === "backordered") {
+    empty = <EmptyState icon={<PackageCheck />} title="Nothing on backorder" description="Every open line can ship from what is on the shelf. Short lines show up here, and on the Backorders report with expected dates." />;
   } else if (filter === "fulfilled") {
     empty = <EmptyState icon={<PackageCheck />} title="Nothing shipped yet" description="Fulfilled orders appear here with the date they shipped." />;
   } else if (filter === "cancelled") {

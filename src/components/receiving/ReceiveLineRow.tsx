@@ -12,12 +12,14 @@ export interface LineDraft {
   item: Item | null;
   qty: string;
   unitCost: string;
+  /** Aisle / rack / bin to put the line away in. */
+  bin: string;
   /** Focus the picker when the row mounts (rows added after the first). */
   autoFocus: boolean;
 }
 
 /** Column template shared by the header row and each line so they stay aligned. */
-export const LINE_GRID = "sm:grid-cols-[minmax(0,1fr)_84px_116px_92px_32px]";
+export const LINE_GRID = "sm:grid-cols-[minmax(0,1fr)_76px_104px_88px_84px_32px]";
 
 interface ReceiveLineRowProps {
   line: LineDraft;
@@ -44,7 +46,7 @@ export function ReceiveLineRow({ line, currency, symbol, supplierId, suppliersBy
         <div className="min-w-0">
           <ItemPicker value={line.item} onChange={onPick} filter={filter} autoFocus={line.autoFocus} placeholder="Search SKU or name" />
         </div>
-        <div className="grid grid-cols-[1fr_1fr_1fr_32px] items-center gap-2 sm:contents">
+        <div className="grid grid-cols-[1fr_1fr_1fr_1fr_32px] items-center gap-2 sm:contents">
           <TextField
             ref={qtyRef}
             type="number"
@@ -68,6 +70,7 @@ export function ReceiveLineRow({ line, currency, symbol, supplierId, suppliersBy
             onChange={(e) => onChange({ unitCost: e.target.value })}
             className="text-right"
           />
+          <TextField placeholder="Bin" aria-label="Bin" value={line.bin} onChange={(e) => onChange({ bin: e.target.value })} />
           <div className="text-right text-[13px] font-medium tabular">{line.item && qty > 0 ? formatMoney(total, currency) : <span className="text-text-tertiary">—</span>}</div>
           <IconButton variant="plain" onClick={onRemove} aria-label="Remove line" className="text-text-tertiary hover:text-critical">
             <Trash2 className="h-4 w-4" />

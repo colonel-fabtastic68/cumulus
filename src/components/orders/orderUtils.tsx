@@ -2,10 +2,11 @@
 
 import type { Item, OrderSource, SalesOrder } from "@/lib/types";
 import { formatMoney } from "@/lib/format";
+import { openQty } from "@/lib/inventory";
 import { round, sum } from "@/lib/utils";
 import { Badge, type BadgeTone } from "@/components/ui";
 
-export type OrderFilter = "open" | "fulfilled" | "cancelled" | "all";
+export type OrderFilter = "open" | "partial" | "backordered" | "fulfilled" | "cancelled" | "all";
 
 export const SOURCE_LABEL: Record<OrderSource, string> = {
   manual: "Manual",
@@ -35,6 +36,16 @@ export function orderUnits(order: SalesOrder): number {
   return sum(order.lines.map((l) => l.qty));
 }
 
+/** Units still to ship. */
+export function orderOpenUnits(order: SalesOrder): number {
+  return sum(order.lines.map(openQty));
+}
+
+/** Units already shipped. */
+export function orderShippedUnits(order: SalesOrder): number {
+  return sum(order.lines.map((l) => l.shipped ?? 0));
+}
+
 export interface ShortLine {
   sku: string;
   have: number;
@@ -47,14 +58,16 @@ export interface OrderAvailability {
   short: ShortLine[];
 }
 
-/** Whether every line can ship from what is on the shelf right now. */
+/** Whether every open line can ship from what is on the shelf right now. */
 export function orderAvailability(order: SalesOrder, byId: Map<string, Item>): OrderAvailability {
   const short: ShortLine[] = [];
   for (const line of order.lines) {
+    const need = openQty(line);
+    if (need <= 0) continue;
     const item = byId.get(line.itemId);
     const have = item?.onHand ?? 0;
-    if (have < line.qty) {
-      short.push({ sku: item?.sku ?? line.itemId, have, need: line.qty, isAssembly: !!item && item.type === "assembly" && item.bom.length > 0 });
+    if (have < need) {
+      short.push({ sku: item?.sku ?? line.itemId, have, need, isAssembly: !!item && item.type === "assembly" && item.bom.length > 0 });
     }
   }
   return { ready: short.length === 0, short };

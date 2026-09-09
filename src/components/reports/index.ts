@@ -8,3 +8,5 @@ export * from "./DeadStockReport";
 export * from "./ConsumptionReport";
 export * from "./SeasonalityReport";
 export * from "./WriteOffsReport";
+export * from "./KpiReport";
+export * from "./BackorderReport";

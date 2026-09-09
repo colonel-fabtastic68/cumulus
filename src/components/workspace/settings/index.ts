@@ -5,3 +5,5 @@ export * from "./InventoryPolicySection";
 export * from "./AgentSection";
 export * from "./DataSection";
 export * from "./AboutSection";
+export * from "./LocationsSection";
+export * from "./ShippingSection";

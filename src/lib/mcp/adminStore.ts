@@ -3,7 +3,7 @@ import { FieldValue, getFirestore, type Firestore } from "firebase-admin/firesto
 import { COLLECTIONS, type CollectionMap, type CollectionName, type WorkspaceSnapshot } from "@/lib/types";
 import type { Store, WriteOp } from "@/lib/store/types";
 
-interface ServiceAccount {
+export interface ServiceAccount {
   project_id: string;
   client_email: string;
   private_key: string;
@@ -35,7 +35,8 @@ export function readServiceAccount(): ServiceAccount | null {
 
 let app: App | null = null;
 
-function adminApp(sa: ServiceAccount): App {
+/** The one Admin SDK app for this process (Firestore and Auth share it). */
+export function adminApp(sa: ServiceAccount): App {
   if (app) return app;
   app = getApps()[0] ?? initializeApp({ credential: cert({ projectId: sa.project_id, clientEmail: sa.client_email, privateKey: sa.private_key }), projectId: sa.project_id });
   return app;

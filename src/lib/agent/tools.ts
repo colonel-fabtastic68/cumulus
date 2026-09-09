@@ -92,9 +92,9 @@ export const agentTools = {
     inputSchema: z.object({ sku: z.string() }),
   }),
   getReport: tool({
-    description: "Run a built-in report. lowStock: items below min with reorder qty and days of cover. valuation: inventory value by category. shelfLife: oldest batches on the shelf. deadStock: no consumption in N days. consumption: usage by layer (sold / consumed in builds / written off) over N days. seasonality: monthly sales & consumption. openOrders, openRmas, recentActivity, suppliers.",
+    description: "Run a built-in report. lowStock: items below min with reorder qty and days of cover. valuation: inventory value by category. shelfLife: oldest batches on the shelf. deadStock: no consumption in N days. consumption: usage by layer (sold / consumed in builds / written off) over N days. seasonality: monthly sales & consumption. backorders: open order lines short on stock with when they could ship. kpis: turnover, days on hand, fill rate, stockouts over N days. transfers: stock moving between locations. openOrders, openRmas, recentActivity, suppliers.",
     inputSchema: z.object({
-      report: z.enum(["lowStock", "valuation", "shelfLife", "deadStock", "consumption", "seasonality", "openOrders", "openRmas", "recentActivity", "suppliers", "recentReceipts", "recentBuilds"]),
+      report: z.enum(["lowStock", "valuation", "shelfLife", "deadStock", "consumption", "seasonality", "backorders", "kpis", "transfers", "openOrders", "openRmas", "recentActivity", "suppliers", "recentReceipts", "recentBuilds"]),
       days: z.number().optional().describe("Window in days for consumption/deadStock (default 90 / 120)"),
       sku: z.string().optional().describe("Restrict seasonality/consumption to one item"),
       limit: z.number().optional(),

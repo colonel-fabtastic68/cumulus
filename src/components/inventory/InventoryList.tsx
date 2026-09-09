@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, Boxes, Download, FileDown, FilterX, Hammer, MoreHorizontal, Pencil, Plus, SlidersHorizontal, Sparkles, Trash2 } from "lucide-react";
+import { Archive, ArrowLeftRight, Boxes, Download, FileDown, FilterX, Hammer, MoreHorizontal, Pencil, Plus, SlidersHorizontal, Sparkles, Trash2 } from "lucide-react";
 import type { Item } from "@/lib/types";
-import { deactivateItems, deleteItems, inventoryValue, isLowStock } from "@/lib/inventory";
+import { deactivateItems, deleteItems, inventoryValue, isLowStock, qtyAt } from "@/lib/inventory";
+import { useDefaultLocation, useLocations } from "@/lib/locations";
+import { TransferDrawer } from "@/components/transfers";
 import { useCollection, useItems, useItemsById, usePreview, useSettings, useStore } from "@/lib/store/provider";
 import { canWrite, useCurrentUser } from "@/lib/auth";
 import { useAgent } from "@/components/agent/AgentProvider";
@@ -49,21 +51,36 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
   const [view, setView] = useState<InventoryView>(initialView);
   const [category, setCategory] = useState("");
   const [supplierId, setSupplierId] = useState("");
+  const [locationId, setLocationId] = useState("");
+  const [transferOpen, setTransferOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [dialog, setDialog] = useState<Dialog>(null);
   const [busy, setBusy] = useState(false);
+  const locations = useLocations();
+  const home = useDefaultLocation();
+  const location = useMemo(() => {
+    const loc = locationId ? locations.find((l) => l.id === locationId) : undefined;
+    return loc ? { id: loc.id, name: loc.name, homeId: home.id } : undefined;
+  }, [locationId, locations, home.id]);
 
   const supplierById = useMemo(() => new Map(suppliers.map((s) => [s.id, s.name])), [suppliers]);
   const supplierName = useCallback((id?: string) => (id ? supplierById.get(id) : undefined), [supplierById]);
-  const columns = useInventoryColumns({ currency, supplierName });
+  const columns = useInventoryColumns({ currency, supplierName, location });
 
   const categories = useMemo(() => Array.from(new Set(items.map((i) => i.category).filter((c): c is string => !!c))).sort((a, b) => a.localeCompare(b)), [items]);
   const supplierOptions = useMemo(() => [...suppliers].sort((a, b) => a.name.localeCompare(b.name)).map((s) => ({ value: s.id, label: s.name })), [suppliers]);
 
-  // Search + category + supplier apply to every view; the view counts reflect them.
+  // Search + category + supplier + location apply to every view; the view counts reflect them.
+  // A location filter keeps the items that hold stock (or a bin) there.
   const base = useMemo(
-    () => items.filter((i) => matchesSearch(i, q) && (!category || i.category === category) && (!supplierId || i.supplierId === supplierId)),
-    [items, q, category, supplierId],
+    () =>
+      items.filter((i) => {
+        if (!matchesSearch(i, q) || (category && i.category !== category) || (supplierId && i.supplierId !== supplierId)) return false;
+        if (!location) return true;
+        const entry = i.stock?.[location.id];
+        return qtyAt(i, location.id, location.homeId) !== 0 || !!entry?.bin;
+      }),
+    [items, q, category, supplierId, location],
   );
   const counts = useMemo(() => {
     const out: Record<InventoryView, number> = { all: 0, active: 0, low: 0, assemblies: 0, inactive: 0 };
@@ -75,7 +92,7 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
   const lowCount = useMemo(() => items.filter(isLowStock).length, [items]);
   const totalValue = useMemo(() => inventoryValue(items), [items]);
   const viewValue = useMemo(() => inventoryValue(rows), [rows]);
-  const filtersActive = q.trim() !== "" || view !== "all" || category !== "" || supplierId !== "";
+  const filtersActive = q.trim() !== "" || view !== "all" || category !== "" || supplierId !== "" || locationId !== "";
 
   // Selection pruned to items that still exist.
   const selectedIds = useMemo(() => new Set(Array.from(selected).filter((id) => byId.has(id))), [selected, byId]);
@@ -93,6 +110,7 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
     setView("all");
     setCategory("");
     setSupplierId("");
+    setLocationId("");
   };
 
   const exportCsv = () => {
@@ -169,12 +187,15 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
 
   const toolbar = (
     <div className="flex flex-1 flex-wrap items-center gap-2">
-      <SearchField value={q} onChange={setQ} placeholder="Search SKU, name, tag, barcode, location" className="w-full sm:w-72" />
+      <SearchField value={q} onChange={setQ} placeholder="Search SKU, name, tag, barcode, cross-reference" className="w-full sm:w-72" />
       <div className="max-w-full overflow-x-auto">
         <Segmented value={view} onChange={setView} options={INVENTORY_VIEWS.map((v) => ({ value: v.value, label: v.label, count: counts[v.value] }))} />
       </div>
       <Select value={category} onChange={(e) => setCategory(e.target.value)} placeholder="All categories" options={categories.map((c) => ({ value: c, label: c }))} containerClassName="w-full sm:w-44" aria-label="Category" />
       <Select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} placeholder="All suppliers" options={supplierOptions} containerClassName="w-full sm:w-48" aria-label="Supplier" />
+      {locations.length > 1 && (
+        <Select value={locationId} onChange={(e) => setLocationId(e.target.value)} placeholder="All locations" options={locations.map((l) => ({ value: l.id, label: l.name }))} containerClassName="w-full sm:w-44" aria-label="Location" />
+      )}
     </div>
   );
 
@@ -184,6 +205,9 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
         <>
           <Button size="sm" icon={<Pencil />} onClick={() => setDialog("bulk")}>
             Edit fields
+          </Button>
+          <Button size="sm" icon={<ArrowLeftRight />} onClick={() => setTransferOpen(true)}>
+            Transfer
           </Button>
           <Button size="sm" icon={<Archive />} onClick={() => setDialog("deactivate")}>
             Deactivate
@@ -269,6 +293,7 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
       <AdjustStockModal open={dialog === "adjust"} onClose={closeDialog} />
       <BuildModal open={dialog === "build"} onClose={closeDialog} />
       <BulkEditModal open={dialog === "bulk"} onClose={closeDialog} items={selectedItems} onDone={() => setSelected(new Set())} />
+      <TransferDrawer open={transferOpen} onClose={() => setTransferOpen(false)} initialItems={selectedItems} onCreated={() => setSelected(new Set())} />
       <ConfirmDialog
         open={dialog === "deactivate"}
         onClose={closeDialog}

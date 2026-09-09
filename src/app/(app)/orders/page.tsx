@@ -3,12 +3,12 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import type { SalesOrder } from "@/lib/types";
-import { cancelOrder, fulfillOrder } from "@/lib/inventory";
+import { cancelOrder } from "@/lib/inventory";
 import { useCollection, useItemsById, useStore } from "@/lib/store/provider";
 import { canWrite, useCurrentUser } from "@/lib/auth";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { Button, ConfirmDialog, Page, QueryParamEffect, useToast } from "@/components/ui";
-import { NewOrderModal, OrderDetailModal, OrderStats, OrdersTable } from "@/components/orders";
+import { NewOrderModal, OrderDetailModal, OrderStats, OrdersTable, ShipOrderModal } from "@/components/orders";
 
 export default function OrdersPage() {
   const orders = useCollection("orders");
@@ -22,6 +22,7 @@ export default function OrdersPage() {
   const [creating, setCreating] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<SalesOrder | null>(null);
+  const [shipTarget, setShipTarget] = useState<SalesOrder | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const selected = useMemo(() => (selectedId ? (orders.find((o) => o.id === selectedId) ?? null) : null), [orders, selectedId]);
@@ -36,20 +37,22 @@ export default function OrdersPage() {
   }, [setPageContext, selectedSkus]);
 
 
-  const fulfil = useCallback(
-    async (order: SalesOrder) => {
-      if (!writable) return;
-      setBusyId(order.id);
-      try {
-        const shipped = await fulfillOrder(store, user, order.id);
-        toast(`Shipped ${shipped.number} to ${shipped.customer}`, "success");
-      } catch (e) {
-        toast(e instanceof Error ? e.message : String(e), "critical");
-      } finally {
-        setBusyId(null);
-      }
+  // "?ship=<orderId>" opens the ship modal straight away.
+  const onShipParam = useCallback(
+    (id: string) => {
+      const order = orders.find((o) => o.id === id);
+      if (order && writable) setShipTarget((current) => (current?.id === order.id ? current : order));
     },
-    [store, user, toast, writable],
+    [orders, writable],
+  );
+
+  // Shipping goes through the ship modal: pick quantities and a location, enter tracking or buy a label.
+  const fulfil = useCallback(
+    (order: SalesOrder) => {
+      if (!writable) return;
+      setShipTarget(order);
+    },
+    [writable],
   );
 
   const requestCancel = useCallback(
@@ -86,6 +89,7 @@ export default function OrdersPage() {
       {/* "?highlight=<orderId>" opens that order, also when navigating here while already on the page. */}
       <Suspense fallback={null}>
         <QueryParamEffect param="highlight" onValue={setSelectedId} />
+        <QueryParamEffect param="ship" onValue={onShipParam} />
       </Suspense>
       <div className="flex flex-col gap-4">
         <OrderStats orders={orders} />
@@ -95,6 +99,8 @@ export default function OrdersPage() {
       <NewOrderModal open={creating} onClose={() => setCreating(false)} onCreated={(order) => setSelectedId(order.id)} />
 
       <OrderDetailModal order={selected} onClose={() => setSelectedId(null)} canWrite={writable} busy={!!selected && busyId === selected.id} onFulfil={fulfil} onCancel={requestCancel} />
+
+      <ShipOrderModal order={shipTarget} onClose={() => setShipTarget(null)} />
 
       <ConfirmDialog
         open={!!cancelTarget}

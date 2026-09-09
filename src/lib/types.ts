@@ -83,6 +83,15 @@ export interface Item {
   /** Extra attributes captured on import (custom fields), keyed by field name. */
   attributes?: Record<string, string>;
 
+  /** Quantity and bin per location. Absent on items that pre-date locations: everything then sits in the default location. */
+  stock?: Record<ID, ItemStock>;
+  /** Units that have left one location on a transfer and not yet arrived at the other. */
+  inTransit?: number;
+  /** Other numbers this part is known by (OEM, aftermarket, competitor, supplier, nickname). Searchable everywhere. */
+  crossRefs?: CrossRef[];
+  /** Ids on connected sales channels, filled in by sync. */
+  channels?: ChannelRefs;
+
   createdAt: string;
   updatedAt: string;
   updatedBy?: string;
@@ -101,9 +110,11 @@ export type MovementType =
   | "build_produce"
   | "sale"
   | "rma_return"
-  | "import";
+  | "import"
+  | "transfer_out"
+  | "transfer_in";
 
-export type RefType = "receipt" | "build" | "order" | "rma" | "import" | "agent" | "manual";
+export type RefType = "receipt" | "build" | "order" | "rma" | "import" | "agent" | "manual" | "transfer" | "shipment" | "channel";
 
 export interface StockMovement {
   id: ID;
@@ -113,6 +124,8 @@ export interface StockMovement {
   qty: number;
   /** Unit cost at the time of the movement (used for valuation and COGS). */
   unitCost?: number;
+  /** Where the stock moved. Absent on movements that pre-date locations (the default location). */
+  locationId?: ID;
   lotId?: ID;
   refType?: RefType;
   refId?: ID;
@@ -206,16 +219,26 @@ export interface OrderLine {
   itemId: ID;
   qty: number;
   unitPrice: number;
+  /** Units shipped so far. The difference to qty is open, and backordered when stock is short. */
+  shipped?: number;
 }
 
 export interface SalesOrder {
   id: ID;
   number: string; // SO-1001
   customer: string;
-  status: "open" | "fulfilled" | "cancelled";
+  /** partial = some units shipped, the rest still open. */
+  status: "open" | "partial" | "fulfilled" | "cancelled";
   source: OrderSource;
   lines: OrderLine[];
   note?: string;
+  customerEmail?: string;
+  shipTo?: Address;
+  /** Set when the order came from a connected channel. */
+  channel?: IntegrationId;
+  externalId?: string;
+  /** Human reference on the channel, e.g. Shopify "#1042". */
+  externalRef?: string;
   fulfilledAt?: string;
   createdAt: string;
   createdBy: string;
@@ -250,6 +273,120 @@ export interface Rma {
 // ---------------------------------------------------------------------------
 // Workspace
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Locations, transfers, shipments and cross-references
+// ---------------------------------------------------------------------------
+
+export interface Address {
+  name?: string;
+  company?: string;
+  street1: string;
+  street2?: string;
+  city: string;
+  state?: string;
+  zip: string;
+  /** ISO 3166-1 alpha-2, e.g. "US". */
+  country: string;
+  phone?: string;
+  email?: string;
+}
+
+export type LocationKind = "warehouse" | "store" | "vehicle" | "trailer" | "customer" | "other";
+
+/** Somewhere stock can sit: a warehouse, a store, a truck. Bins live inside a location per item. */
+export interface Location {
+  id: ID;
+  name: string;
+  kind: LocationKind;
+  /** Short code for labels and scanning, e.g. "WH-B". */
+  code?: string;
+  address?: Address;
+  isDefault?: boolean;
+  active: boolean;
+  createdAt: string;
+}
+
+export interface ItemStock {
+  qty: number;
+  /** Aisle / rack / bin within the location. */
+  bin?: string;
+}
+
+export type CrossRefKind = "oem" | "aftermarket" | "competitor" | "supplier" | "alias";
+
+export interface CrossRef {
+  number: string;
+  kind: CrossRefKind;
+  /** Whose number it is: the OEM, a competitor brand, a supplier. */
+  source?: string;
+  note?: string;
+}
+
+export type TransferStatus = "in_transit" | "received" | "cancelled";
+
+export interface TransferLine {
+  itemId: ID;
+  qty: number;
+  /** Filled in when the transfer is received; less than qty means units went missing in transit. */
+  receivedQty?: number;
+}
+
+/** Stock moving between locations. In transit it is on hand at neither end. */
+export interface Transfer {
+  id: ID;
+  number: string; // TR-1001
+  fromLocationId: ID;
+  toLocationId: ID;
+  status: TransferStatus;
+  lines: TransferLine[];
+  note?: string;
+  carrier?: string;
+  trackingNumber?: string;
+  shippedAt: string;
+  receivedAt?: string;
+  receivedBy?: string;
+  createdAt: string;
+  createdBy: string;
+}
+
+export type ShipmentProvider = "manual" | "shippo" | "easypost";
+
+export interface ShipmentLine {
+  itemId: ID;
+  qty: number;
+}
+
+/** One parcel or hand-off against an order. An order can have several (partial shipments). */
+export interface Shipment {
+  id: ID;
+  number: string; // SH-1001
+  orderId: ID;
+  lines: ShipmentLine[];
+  locationId?: ID;
+  carrier?: string;
+  service?: string;
+  trackingNumber?: string;
+  trackingUrl?: string;
+  /** Latest carrier status, e.g. "in_transit", "delivered". */
+  trackingStatus?: string;
+  trackingUpdatedAt?: string;
+  labelUrl?: string;
+  cost?: number;
+  currency?: string;
+  provider?: ShipmentProvider;
+  /** The carrier platform's own id for the label/transaction. */
+  providerRef?: string;
+  note?: string;
+  shippedAt: string;
+  createdAt: string;
+  createdBy: string;
+}
+
+export interface ChannelRefs {
+  shopify?: { productId: string; variantId: string; inventoryItemId?: string };
+  woocommerce?: { productId: string; variationId?: string };
+}
 
 export type MemberRole = "owner" | "admin" | "member" | "viewer";
 
@@ -335,7 +472,16 @@ export type ActivityType =
   | "import.completed"
   | "agent.action"
   | "member.joined"
-  | "settings.updated";
+  | "settings.updated"
+  | "transfer.created"
+  | "transfer.received"
+  | "transfer.cancelled"
+  | "order.shipped"
+  | "order.ready"
+  | "integration.connected"
+  | "integration.disconnected"
+  | "integration.synced"
+  | "shipment.tracked";
 
 export interface ActivityEvent {
   id: ID;
@@ -343,21 +489,46 @@ export interface ActivityEvent {
   message: string;
   actorId: string;
   actorName: string;
-  entityType?: "item" | "receipt" | "build" | "order" | "rma" | "supplier" | "member";
+  entityType?: "item" | "receipt" | "build" | "order" | "rma" | "supplier" | "member" | "transfer" | "shipment" | "integration" | "location";
   entityId?: ID;
   /** Free-form details, e.g. { count: 12 } for bulk operations. */
   meta?: Record<string, unknown>;
   createdAt: string;
 }
 
-export type IntegrationId = "shopify" | "woocommerce" | "quickbooks" | "square";
+export type IntegrationId = "shopify" | "woocommerce" | "quickbooks" | "square" | "shippo" | "easypost";
+
+export interface IntegrationSettings {
+  /** Pull products and variants in as items (channels). */
+  syncProducts?: boolean;
+  /** Pull unfulfilled orders in as sales orders (channels). */
+  syncOrders?: boolean;
+  /** Push Cumulus on-hand counts to the channel after every stock change. */
+  pushStock?: boolean;
+  /** On the first product sync, take the channel's quantities as the opening counts. */
+  takeStockOnFirstSync?: boolean;
+  /** Apply stock changes reported by the channel (webhooks) as counts. Off means Cumulus is the source of truth. */
+  acceptStockFromChannel?: boolean;
+  /** Cumulus location that mirrors the channel's stock. */
+  locationId?: ID;
+  /** The channel's own location id (Shopify) that stock is pushed to. */
+  channelLocationId?: string;
+}
 
 export interface Integration {
   id: IntegrationId;
   status: "not_connected" | "connected" | "error";
-  /** Store URL / realm etc. Never store secrets here. */
+  /** Non-secret connection details (store domain, shop name, account). Secrets live server-side only. */
   config?: Record<string, string>;
+  settings?: IntegrationSettings;
+  connectedAt?: string;
+  connectedBy?: string;
   lastSyncAt?: string;
+  /** One line about the last sync, e.g. "12 products, 3 orders". */
+  lastSyncSummary?: string;
+  lastError?: string;
+  /** Webhooks registered on the platform, so they can be removed on disconnect. */
+  webhooks?: Array<{ id: string; topic: string }>;
   createdAt: string;
 }
 
@@ -390,8 +561,33 @@ export interface WorkspaceSettings {
     build: number;
     order: number;
     rma: number;
+    transfer?: number;
+    shipment?: number;
   };
+  shipping?: ShippingSettings;
+  scanning?: ScanningSettings;
   updatedAt: string;
+}
+
+export interface ShippingSettings {
+  /** Where parcels ship from. Needed to rate-shop with a connected carrier. */
+  from?: Address;
+  /** Package used when a rate is requested and the items carry no dimensions. */
+  parcel?: ParcelDefaults;
+}
+
+export interface ParcelDefaults {
+  length: number;
+  width: number;
+  height: number;
+  distanceUnit: "in" | "cm";
+  weight: number;
+  massUnit: "lb" | "oz" | "kg" | "g";
+}
+
+export interface ScanningSettings {
+  /** Treat fast keyboard input ending in Enter as a barcode scan anywhere in the app. */
+  keyboardWedge: boolean;
 }
 
 /** Persisted agent chat session so teammates can see what Nimbus did. */
@@ -424,6 +620,9 @@ export interface CollectionMap {
   integrations: Integration;
   settings: WorkspaceSettings;
   agentSessions: AgentSession;
+  locations: Location;
+  transfers: Transfer;
+  shipments: Shipment;
 }
 
 export type CollectionName = keyof CollectionMap;
@@ -442,6 +641,9 @@ export const COLLECTIONS: CollectionName[] = [
   "integrations",
   "settings",
   "agentSessions",
+  "locations",
+  "transfers",
+  "shipments",
 ];
 
 /** A full snapshot of a workspace. Used for seed data, export and import. */

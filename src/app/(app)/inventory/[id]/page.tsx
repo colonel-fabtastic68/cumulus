@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Copy, Hammer, MoreHorizontal, Pencil, Power, Replace, SlidersHorizontal, Sparkles, Trash2 } from "lucide-react";
 import { deleteItems, isLowStock, updateItem } from "@/lib/inventory";
 import { useCollection, useItems, useSettings, useStore } from "@/lib/store/provider";
 import { canWrite, useCurrentUser } from "@/lib/auth";
-import { Badge, Button, Card, ConfirmDialog, EmptyState, IconButton, Menu, Page, PageLayout, StatusBadge, Tabs, useToast } from "@/components/ui";
+import { Badge, Button, Card, ConfirmDialog, EmptyState, IconButton, Menu, Page, PageLayout, QueryParamEffect, StatusBadge, Tabs, useToast } from "@/components/ui";
 import { AdjustStockModal, BuildModal, ItemFormModal } from "@/components/inventory";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { StockSummaryCard } from "@/components/item/StockSummaryCard";
@@ -16,12 +16,14 @@ import { WhereUsedTab } from "@/components/item/WhereUsedTab";
 import { StockHistoryTab } from "@/components/item/StockHistoryTab";
 import { BatchesTab } from "@/components/item/BatchesTab";
 import { PricingTab } from "@/components/item/PricingTab";
+import { LocationsTab } from "@/components/item/LocationsTab";
+import { CrossRefsTab } from "@/components/item/CrossRefsTab";
 import { ItemAside } from "@/components/item/ItemAside";
 import { SupersedeModal } from "@/components/item/SupersedeModal";
 import { duplicateDefaults, errorMessage } from "@/components/item/utils";
 import { whereUsed } from "@/lib/inventory";
 
-type Tab = "overview" | "bom" | "whereUsed" | "history" | "batches" | "pricing";
+type Tab = "overview" | "locations" | "crossRefs" | "bom" | "whereUsed" | "history" | "batches" | "pricing";
 
 export default function ItemDetailPage() {
   const params = useParams<{ id: string }>();
@@ -54,6 +56,12 @@ export default function ItemDetailPage() {
   const lotsOnShelf = itemLots.filter((l) => l.qtyRemaining > 0).length;
 
   const [tab, setTab] = useState<Tab>("overview");
+  const TAB_VALUES: Tab[] = ["overview", "locations", "crossRefs", "bom", "whereUsed", "history", "batches", "pricing"];
+  // "?tab=locations" deep-links a tab (scan results and Nimbus use it).
+  const onTabParam = useCallback((value: string) => {
+    if ((TAB_VALUES as string[]).includes(value)) setTab(value as Tab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [buildOpen, setBuildOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -104,6 +112,8 @@ export default function ItemDetailPage() {
 
   const tabs: Array<{ value: Tab; label: string; count?: number }> = [
     { value: "overview", label: "Overview" },
+    { value: "locations", label: "Locations", count: item.stock ? Object.values(item.stock).filter((s) => s.qty !== 0).length : undefined },
+    { value: "crossRefs", label: "Cross-references", count: item.crossRefs?.length || undefined },
     ...(isAssembly ? [{ value: "bom" as Tab, label: "BOM", count: item.bom.length }] : [{ value: "bom" as Tab, label: "BOM" }]),
     { value: "whereUsed", label: "Where used", count: usedIn },
     { value: "history", label: "Stock history", count: itemMovements.length },
@@ -166,6 +176,9 @@ export default function ItemDetailPage() {
       <PageLayout aside={<ItemAside item={item} items={items} supplier={supplier} membersById={membersById} activity={activity} />}>
         <StockSummaryCard item={item} movements={itemMovements} lots={itemLots} settings={settings} />
         <Card padded={false}>
+          <Suspense fallback={null}>
+            <QueryParamEffect param="tab" onValue={onTabParam} />
+          </Suspense>
           <Tabs value={tab} onChange={setTab} tabs={tabs} className="px-3" />
           <div className="p-4">
             {/* BOM and Pricing stay mounted (hidden) so unsaved drafts survive a tab switch. */}
@@ -173,6 +186,8 @@ export default function ItemDetailPage() {
             <div hidden={tab !== "bom"}>
               <BomTab item={item} items={items} currency={settings.currency} canEdit={writable} />
             </div>
+            {tab === "locations" && <LocationsTab item={item} canEdit={writable} />}
+            {tab === "crossRefs" && <CrossRefsTab item={item} items={items} canEdit={writable} />}
             {tab === "whereUsed" && <WhereUsedTab item={item} items={items} />}
             {tab === "history" && <StockHistoryTab item={item} movements={itemMovements} lookups={{ receipts, builds, orders, rmas, membersById }} />}
             {tab === "batches" && <BatchesTab item={item} lots={itemLots} receipts={receipts} currency={settings.currency} />}

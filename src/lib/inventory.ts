@@ -8,18 +8,27 @@
 import type {
   ActivityEvent,
   ActivityType,
+  Address,
   Build,
+  IntegrationId,
   Item,
+  ItemStock,
+  Location,
   Lot,
   Member,
   MovementType,
+  OrderLine,
   Receipt,
   RefType,
   Rma,
   RmaDisposition,
   SalesOrder,
+  Shipment,
+  ShipmentLine,
+  ShipmentProvider,
   StockMovement,
   Supplier,
+  Transfer,
   WorkspaceSettings,
 } from "@/lib/types";
 import type { Store, WriteOp } from "@/lib/store/types";
@@ -400,8 +409,8 @@ async function loadSettings(store: Store): Promise<WorkspaceSettings> {
 
 export async function nextNumber(store: Store, kind: keyof WorkspaceSettings["counters"]): Promise<{ number: string; ops: WriteOp[] }> {
   const settings = await loadSettings(store);
-  const n = settings.counters[kind];
-  const prefix = { receipt: "RCV", build: "BLD", order: "SO", rma: "RMA" }[kind];
+  const n = settings.counters[kind] ?? 1001;
+  const prefix = { receipt: "RCV", build: "BLD", order: "SO", rma: "RMA", transfer: "TR", shipment: "SH" }[kind];
   const ops: WriteOp[] = [
     { op: "patch", collection: "settings", id: "default", patch: { counters: { ...settings.counters, [kind]: n + 1 }, updatedAt: nowIso() } },
   ];
@@ -432,6 +441,37 @@ export interface MovementInput {
   reason?: string;
   note?: string;
   occurredAt?: string;
+  /** Location the stock moves in or out of. Defaults to the workspace's default location. */
+  locationId?: string;
+}
+
+/** Id of the location created on first use when a workspace has none. */
+export const DEFAULT_LOCATION_ID = "loc_main";
+
+/**
+ * The location stock goes to when none is named: the one flagged default, else
+ * the first active one. When a workspace has no locations yet, "Main" is
+ * created on the spot so every movement has a home.
+ */
+export function defaultLocation(locations: Location[]): { location: Location; created: boolean } {
+  const active = locations.filter((l) => l.active);
+  const found = active.find((l) => l.isDefault) ?? active[0] ?? locations[0];
+  if (found) return { location: found, created: false };
+  return { location: { id: DEFAULT_LOCATION_ID, name: "Main", kind: "warehouse", isDefault: true, active: true, createdAt: nowIso() }, created: true };
+}
+
+/** Per-location balances for an item. Items that pre-date locations keep everything in the default location. */
+export function stockMap(item: Item, homeId: string): Record<string, ItemStock> {
+  if (item.stock) return { ...item.stock };
+  const entry: ItemStock = { qty: item.onHand };
+  if (item.location) entry.bin = item.location;
+  return { [homeId]: entry };
+}
+
+/** Quantity of an item at one location. */
+export function qtyAt(item: Item, locationId: string, homeId: string): number {
+  if (item.stock) return item.stock[locationId]?.qty ?? 0;
+  return locationId === homeId ? item.onHand : 0;
 }
 
 /**
@@ -443,23 +483,35 @@ export async function movementOps(
   actor: Actor,
   inputs: MovementInput[],
   opts: { allowNegative?: boolean } = {},
-): Promise<{ ops: WriteOp[]; movements: StockMovement[]; itemPatches: Map<string, Partial<Item>> }> {
+): Promise<{ ops: WriteOp[]; movements: StockMovement[]; itemPatches: Map<string, Partial<Item>>; homeId: string }> {
   const items = await store.list("items");
   const lots = await store.list("lots");
+  const locations = await store.list("locations");
   const byId = new Map(items.map((i) => [i.id, { ...i }]));
   const lotById = new Map(lots.map((l) => [l.id, { ...l }]));
   const touchedLots = new Set<string>();
   const movements: StockMovement[] = [];
   const now = nowIso();
+  const home = defaultLocation(locations);
+  const homeId = home.location.id;
+  const locationName = (id: string) => (id === homeId ? home.location.name : (locations.find((l) => l.id === id)?.name ?? id));
 
   for (const input of inputs) {
     const item = byId.get(input.itemId);
     if (!item) throw new InventoryError(`Unknown item ${input.itemId}`);
     if (input.qty === 0) continue;
-    const balanceAfter = round(item.onHand + input.qty, 3);
-    if (balanceAfter < 0 && !opts.allowNegative) {
-      throw new InventoryError(`Not enough ${item.sku} on hand (have ${item.onHand}, need ${-input.qty})`, { itemId: item.id, have: item.onHand, need: -input.qty });
+    const locationId = input.locationId ?? homeId;
+    if (locationId !== homeId && !locations.some((l) => l.id === locationId)) throw new InventoryError(`Unknown location ${locationId}`);
+    const stock = stockMap(item, homeId);
+    const entry: ItemStock = { ...(stock[locationId] ?? { qty: 0 }) };
+    const atLocation = round(entry.qty + input.qty, 3);
+    if (atLocation < 0 && !opts.allowNegative) {
+      throw new InventoryError(`Not enough ${item.sku} at ${locationName(locationId)} (have ${entry.qty}, need ${-input.qty})`, { itemId: item.id, have: entry.qty, need: -input.qty, locationId });
     }
+    entry.qty = atLocation;
+    stock[locationId] = entry;
+    item.stock = stock;
+    const balanceAfter = round(Object.values(stock).reduce((a, e) => a + e.qty, 0), 3);
     item.onHand = balanceAfter;
     item.updatedAt = now;
     item.updatedBy = actor.id;
@@ -469,6 +521,7 @@ export async function movementOps(
       type: input.type,
       qty: input.qty,
       unitCost: input.unitCost ?? item.unitCost,
+      locationId,
       lotId: input.lotId,
       refType: input.refType,
       refId: input.refId,
@@ -494,17 +547,16 @@ export async function movementOps(
         remaining -= take;
         touchedLots.add(lot.id);
       }
-    } else if (input.lotId && lotById.has(input.lotId)) {
-      // Lot already created by caller; nothing to do.
     }
   }
 
   const ops: WriteOp[] = [];
+  if (home.created && movements.length > 0) ops.push({ op: "put", collection: "locations", doc: home.location });
   const itemPatches = new Map<string, Partial<Item>>();
   for (const m of movements) ops.push({ op: "put", collection: "movements", doc: m });
   for (const id of new Set(movements.map((m) => m.itemId))) {
     const it = byId.get(id)!;
-    const patch = { onHand: it.onHand, updatedAt: it.updatedAt, updatedBy: it.updatedBy };
+    const patch: Partial<Item> = { onHand: it.onHand, stock: it.stock, updatedAt: it.updatedAt, updatedBy: it.updatedBy };
     itemPatches.set(id, patch);
     ops.push({ op: "patch", collection: "items", id, patch });
   }
@@ -512,7 +564,7 @@ export async function movementOps(
     const lot = lotById.get(id)!;
     ops.push({ op: "patch", collection: "lots", id, patch: { qtyRemaining: lot.qtyRemaining } });
   }
-  return { ops, movements, itemPatches };
+  return { ops, movements, itemPatches, homeId };
 }
 
 export interface AdjustInput {
@@ -526,17 +578,21 @@ export interface AdjustInput {
   occurredAt?: string;
   refType?: RefType;
   refId?: string;
+  /** Count or adjust one location; defaults to the workspace default. */
+  locationId?: string;
 }
 
 /** Factor 12: adjustments, counts and write-offs. */
 export async function adjustStock(store: Store, actor: Actor, inputs: AdjustInput[]): Promise<StockMovement[]> {
   const items = await store.list("items");
+  const homeId = defaultLocation(await store.list("locations")).location.id;
   const byId = new Map(items.map((i) => [i.id, i]));
   const movementInputs: MovementInput[] = [];
   for (const a of inputs) {
     const item = byId.get(a.itemId);
     if (!item) throw new InventoryError(`Unknown item ${a.itemId}`);
-    const delta = a.newQty !== undefined ? round(a.newQty - item.onHand, 3) : (a.qtyDelta ?? 0);
+    const current = a.locationId ? qtyAt(item, a.locationId, homeId) : item.onHand;
+    const delta = a.newQty !== undefined ? round(a.newQty - current, 3) : (a.qtyDelta ?? 0);
     if (delta === 0) continue;
     movementInputs.push({
       itemId: item.id,
@@ -547,6 +603,7 @@ export async function adjustStock(store: Store, actor: Actor, inputs: AdjustInpu
       occurredAt: a.occurredAt,
       refType: a.refType ?? "manual",
       refId: a.refId,
+      locationId: a.locationId,
     });
   }
   if (movementInputs.length === 0) return [];
@@ -586,7 +643,7 @@ export interface ReceiveInput {
   reference?: string;
   receivedAt?: string;
   note?: string;
-  lines: Array<{ itemId: string; qty: number; unitCost?: number }>;
+  lines: Array<{ itemId: string; qty: number; unitCost?: number; locationId?: string; bin?: string }>;
   /** Update the item's standard cost to the received cost. Default true. */
   updateStandardCost?: boolean;
 }
@@ -620,14 +677,26 @@ export async function receiveStock(store: Store, actor: Actor, input: ReceiveInp
     const lot: Lot = { id: newId("lot"), itemId: item.id, receiptId: receipt.id, qtyReceived: line.qty, qtyRemaining: line.qty, unitCost, receivedAt };
     ops.push({ op: "put", collection: "lots", doc: lot });
     receipt.lines.push({ itemId: item.id, qty: line.qty, unitCost, lotId: lot.id });
-    movementInputs.push({ itemId: item.id, type: "receipt", qty: line.qty, unitCost, lotId: lot.id, refType: "receipt", refId: receipt.id, occurredAt: receivedAt });
+    movementInputs.push({ itemId: item.id, type: "receipt", qty: line.qty, unitCost, lotId: lot.id, refType: "receipt", refId: receipt.id, occurredAt: receivedAt, locationId: line.locationId });
     if (input.updateStandardCost !== false && unitCost !== item.unitCost) {
       ops.push({ op: "patch", collection: "items", id: item.id, patch: { unitCost } });
     }
   }
   const mv = await movementOps(store, actor, movementInputs);
+  // Put-away: remember the bin each line landed in.
+  for (const line of input.lines) {
+    if (!line.bin?.trim()) continue;
+    const patch = mv.itemPatches.get(line.itemId);
+    const locationId = line.locationId ?? mv.homeId;
+    if (patch?.stock?.[locationId]) patch.stock[locationId] = { ...patch.stock[locationId]!, bin: line.bin.trim() };
+  }
   ops.push(...mv.ops);
   ops.push({ op: "put", collection: "receipts", doc: receipt });
+  // Factor 34: backordered lines that this delivery covers.
+  const ready = backordersCoveredBy(await store.list("orders"), mv.itemPatches, byId);
+  if (ready.length) {
+    ops.push(activityOp(actor, "order.ready", `${receipt.number} covers ${ready.length} backordered line${ready.length === 1 ? "" : "s"}: ${ready.slice(0, 4).map((r) => `${r.order.number} (${r.sku} × ${r.qty})`).join(", ")}${ready.length > 4 ? "…" : ""}`, { entityType: "receipt", entityId: receipt.id, meta: { orders: Array.from(new Set(ready.map((r) => r.order.id))) } }));
+  }
   const total = round(sum(receipt.lines.map((l) => l.qty * l.unitCost)));
   ops.push(activityOp(actor, "stock.received", `${actor.name} received ${receipt.number} · ${receipt.lines.length} line${receipt.lines.length === 1 ? "" : "s"} · $${total.toFixed(2)}`, { entityType: "receipt", entityId: receipt.id, meta: { lines: receipt.lines.length, total } }));
   await store.batch(ops);
@@ -640,6 +709,8 @@ export interface BuildInput {
   consumeSubassemblies?: boolean;
   note?: string;
   occurredAt?: string;
+  /** Consume components from and put the assembly into this location; defaults to the workspace default. */
+  locationId?: string;
 }
 
 /** Factor 19/20: build an assembly, relieving components (and sub-assemblies) correctly. */
@@ -674,9 +745,9 @@ export async function buildAssembly(store: Store, actor: Actor, input: BuildInpu
     createdAt: nowIso(),
     createdBy: actor.id,
   };
-  const movementInputs: MovementInput[] = reqs.map((r) => ({ itemId: r.item.id, type: "build_consume", qty: -r.required, refType: "build", refId: build.id, occurredAt }));
+  const movementInputs: MovementInput[] = reqs.map((r) => ({ itemId: r.item.id, type: "build_consume", locationId: input.locationId, qty: -r.required, refType: "build", refId: build.id, occurredAt }));
   const cost = rolledUpCost(items, assembly);
-  movementInputs.push({ itemId: assembly.id, type: "build_produce", qty: input.qty, unitCost: cost, refType: "build", refId: build.id, occurredAt });
+  movementInputs.push({ itemId: assembly.id, type: "build_produce", locationId: input.locationId, qty: input.qty, unitCost: cost, refType: "build", refId: build.id, occurredAt });
   const mv = await movementOps(store, actor, movementInputs);
   const lot: Lot = { id: newId("lot"), itemId: assembly.id, qtyReceived: input.qty, qtyRemaining: input.qty, unitCost: cost, receivedAt: occurredAt };
   const ops: WriteOp[] = [
@@ -698,6 +769,11 @@ export interface OrderInput {
   lines: Array<{ itemId: string; qty: number; unitPrice?: number }>;
   /** Fulfil immediately. */
   fulfill?: boolean;
+  customerEmail?: string;
+  shipTo?: Address;
+  channel?: IntegrationId;
+  externalId?: string;
+  externalRef?: string;
 }
 
 export async function createOrder(store: Store, actor: Actor, input: OrderInput): Promise<SalesOrder> {
@@ -717,6 +793,11 @@ export async function createOrder(store: Store, actor: Actor, input: OrderInput)
       return { itemId: item.id, qty: l.qty, unitPrice: l.unitPrice ?? priceForQty(item, l.qty) };
     }),
     note: input.note,
+    customerEmail: input.customerEmail,
+    shipTo: input.shipTo,
+    channel: input.channel,
+    externalId: input.externalId,
+    externalRef: input.externalRef,
     createdAt: nowIso(),
     createdBy: actor.id,
   };
@@ -727,48 +808,192 @@ export async function createOrder(store: Store, actor: Actor, input: OrderInput)
   return order;
 }
 
-/** Ship an order. Relieves the sold item, or its components when policy is "on_fulfill". */
-export async function fulfillOrder(store: Store, actor: Actor, orderId: string): Promise<SalesOrder> {
-  const order = await store.get("orders", orderId);
+/** Units on an order line that have not shipped yet. */
+export function openQty(line: OrderLine): number {
+  return round(line.qty - (line.shipped ?? 0), 3);
+}
+
+export function isOrderOpen(order: Pick<SalesOrder, "status">): boolean {
+  return order.status === "open" || order.status === "partial";
+}
+
+export function orderOpenLines(order: SalesOrder): OrderLine[] {
+  return order.lines.filter((l) => openQty(l) > 0);
+}
+
+export interface ShipInput {
+  orderId: string;
+  /** Lines and quantities to ship now. Defaults to everything still open. */
+  lines?: Array<{ itemId: string; qty: number }>;
+  /** Ship from this location; defaults to the workspace default. */
+  locationId?: string;
+  carrier?: string;
+  service?: string;
+  trackingNumber?: string;
+  trackingUrl?: string;
+  labelUrl?: string;
+  cost?: number;
+  currency?: string;
+  provider?: ShipmentProvider;
+  providerRef?: string;
+  shippedAt?: string;
+  note?: string;
+}
+
+/**
+ * Factor 34: ship all or part of an order. Relieves stock for the shipped
+ * units (or the assembly's components when policy is "on_fulfill"), records a
+ * Shipment with any carrier details, and leaves the rest of the order open.
+ */
+export async function shipOrder(store: Store, actor: Actor, input: ShipInput): Promise<{ order: SalesOrder; shipment: Shipment }> {
+  const order = await store.get("orders", input.orderId);
   if (!order) throw new InventoryError("Order not found");
-  if (order.status !== "open") throw new InventoryError(`${order.number} is already ${order.status}`);
+  if (!isOrderOpen(order)) throw new InventoryError(`${order.number} is already ${order.status}`);
   const settings = await loadSettings(store);
   const items = await store.list("items");
+  const homeId = defaultLocation(await store.list("locations")).location.id;
+  const locationId = input.locationId ?? homeId;
   const byId = new Map(items.map((i) => [i.id, i]));
-  const fulfilledAt = nowIso();
+  const shippedAt = input.shippedAt ?? nowIso();
+  const lines = order.lines.map((l) => ({ ...l }));
+  const requested = (input.lines ?? lines.map((l) => ({ itemId: l.itemId, qty: openQty(l) }))).filter((l) => l.qty > 0);
+  if (requested.length === 0) throw new InventoryError(`${order.number} has nothing left to ship`);
+
   const movementInputs: MovementInput[] = [];
-  for (const line of order.lines) {
-    const item = byId.get(line.itemId);
-    if (!item) throw new InventoryError(`Unknown item ${line.itemId}`);
-    if (settings.relievePolicy === "on_fulfill" && item.type === "assembly" && item.bom.length > 0 && item.onHand < line.qty) {
+  const shipLines: ShipmentLine[] = [];
+  for (const req of requested) {
+    const line = lines.find((l) => l.itemId === req.itemId && openQty(l) > 0);
+    const item = byId.get(req.itemId);
+    if (!line || !item) throw new InventoryError(`${order.number} has no open line for ${item?.sku ?? req.itemId}`);
+    const open = openQty(line);
+    if (req.qty > open + 1e-9) throw new InventoryError(`Only ${open} of ${item.sku} is still open on ${order.number}`);
+    const available = qtyAt(item, locationId, homeId);
+    if (settings.relievePolicy === "on_fulfill" && item.type === "assembly" && item.bom.length > 0 && available < req.qty) {
       // Relieve components for the portion not on the shelf.
-      const fromStock = Math.max(0, item.onHand);
-      if (fromStock > 0) movementInputs.push({ itemId: item.id, type: "sale", qty: -fromStock, refType: "order", refId: order.id, occurredAt: fulfilledAt });
-      const reqs = explodeBom(items, item, line.qty - fromStock, { explodeShortfallOnly: true });
+      const fromStock = Math.max(0, available);
+      if (fromStock > 0) movementInputs.push({ itemId: item.id, type: "sale", qty: -fromStock, refType: "order", refId: order.id, occurredAt: shippedAt, locationId });
+      const reqs = explodeBom(items, item, req.qty - fromStock, { explodeShortfallOnly: true });
       const short = reqs.filter((r) => r.shortage > 0);
-      if (short.length) throw new InventoryError(`Cannot fulfil ${order.number}: short on ${short.map((r) => r.item.sku).join(", ")}`, { shortages: short });
-      for (const r of reqs) movementInputs.push({ itemId: r.item.id, type: "sale", qty: -r.required, refType: "order", refId: order.id, occurredAt: fulfilledAt, note: `Component of ${item.sku}` });
+      if (short.length) throw new InventoryError(`Cannot ship ${order.number}: short on ${short.map((r) => r.item.sku).join(", ")}`, { shortages: short });
+      for (const r of reqs) movementInputs.push({ itemId: r.item.id, type: "sale", qty: -r.required, refType: "order", refId: order.id, occurredAt: shippedAt, note: `Component of ${item.sku}`, locationId });
     } else {
-      if (item.onHand < line.qty) {
-        throw new InventoryError(`Cannot fulfil ${order.number}: ${item.sku} has ${item.onHand} on hand, need ${line.qty}${item.type === "assembly" ? ". Build more first." : ""}`, { itemId: item.id });
+      if (available < req.qty) {
+        throw new InventoryError(`Cannot ship ${order.number}: ${item.sku} has ${available} available, need ${req.qty}${item.type === "assembly" ? ". Build more first." : ""}`, { itemId: item.id });
       }
-      movementInputs.push({ itemId: item.id, type: "sale", qty: -line.qty, unitCost: item.unitCost, refType: "order", refId: order.id, occurredAt: fulfilledAt });
+      movementInputs.push({ itemId: item.id, type: "sale", qty: -req.qty, unitCost: item.unitCost, refType: "order", refId: order.id, occurredAt: shippedAt, locationId });
     }
+    line.shipped = round((line.shipped ?? 0) + req.qty, 3);
+    shipLines.push({ itemId: item.id, qty: req.qty });
   }
+
+  const complete = lines.every((l) => openQty(l) <= 0);
+  const { number, ops: counterOps } = await nextNumber(store, "shipment");
+  const shipment: Shipment = {
+    id: newId("shp"),
+    number,
+    orderId: order.id,
+    lines: shipLines,
+    locationId,
+    carrier: input.carrier,
+    service: input.service,
+    trackingNumber: input.trackingNumber,
+    trackingUrl: input.trackingUrl,
+    labelUrl: input.labelUrl,
+    cost: input.cost,
+    currency: input.currency,
+    provider: input.provider ?? (input.trackingNumber ? "manual" : undefined),
+    providerRef: input.providerRef,
+    note: input.note,
+    shippedAt,
+    createdAt: nowIso(),
+    createdBy: actor.id,
+  };
   const mv = await movementOps(store, actor, movementInputs);
+  const patch: Partial<SalesOrder> = complete ? { lines, status: "fulfilled", fulfilledAt: shippedAt } : { lines, status: "partial" };
+  const units = sum(shipLines.map((l) => l.qty));
   const ops: WriteOp[] = [
+    ...counterOps,
     ...mv.ops,
-    { op: "patch", collection: "orders", id: order.id, patch: { status: "fulfilled", fulfilledAt } },
-    activityOp(actor, "order.fulfilled", `${actor.name} shipped ${order.number} to ${order.customer}`, { entityType: "order", entityId: order.id }),
+    { op: "put", collection: "shipments", doc: shipment },
+    { op: "patch", collection: "orders", id: order.id, patch },
+    activityOp(
+      actor,
+      complete ? "order.fulfilled" : "order.shipped",
+      complete
+        ? `${actor.name} shipped ${order.number} to ${order.customer}${input.trackingNumber ? ` · ${input.carrier ?? "tracking"} ${input.trackingNumber}` : ""}`
+        : `${actor.name} shipped ${units} of ${sum(order.lines.map((l) => l.qty))} units on ${order.number}, rest backordered`,
+      { entityType: "order", entityId: order.id, meta: { shipmentId: shipment.id } },
+    ),
   ];
   await store.batch(ops);
-  return { ...order, status: "fulfilled", fulfilledAt };
+  return { order: { ...order, ...patch }, shipment };
+}
+
+/** Ship everything still open on an order. */
+export async function fulfillOrder(store: Store, actor: Actor, orderId: string): Promise<SalesOrder> {
+  return (await shipOrder(store, actor, { orderId })).order;
+}
+
+export interface BackorderRow {
+  order: SalesOrder;
+  line: OrderLine;
+  item?: Item;
+  supplier?: Supplier;
+  openQty: number;
+  available: number;
+  shortBy: number;
+  /** Earliest date the shortfall could land, from the item's or supplier's lead time. */
+  expectedAt?: string;
+}
+
+/** Open order lines that cannot ship from what is on hand right now. */
+export function backorderReport(orders: SalesOrder[], items: Item[], suppliers: Supplier[], now: number = Date.now()): BackorderRow[] {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const supplierById = new Map(suppliers.map((s) => [s.id, s]));
+  const out: BackorderRow[] = [];
+  for (const order of orders) {
+    if (!isOrderOpen(order)) continue;
+    for (const line of order.lines) {
+      const open = openQty(line);
+      if (open <= 0) continue;
+      const item = byId.get(line.itemId);
+      const available = item?.onHand ?? 0;
+      if (available >= open) continue;
+      const supplier = item?.supplierId ? supplierById.get(item.supplierId) : undefined;
+      const lead = item?.leadTimeDays ?? supplier?.leadTimeDays;
+      out.push({ order, line, item, supplier, openQty: open, available, shortBy: round(open - available, 3), expectedAt: lead !== undefined ? new Date(now + lead * 86_400_000).toISOString() : undefined });
+    }
+  }
+  return out.sort((a, b) => a.order.createdAt.localeCompare(b.order.createdAt));
+}
+
+/** Whether an open order has at least one line that is short. */
+export function orderIsBackordered(order: SalesOrder, byId: Map<string, Item>): boolean {
+  return isOrderOpen(order) && order.lines.some((l) => openQty(l) > 0 && (byId.get(l.itemId)?.onHand ?? 0) < openQty(l));
+}
+
+/** Backordered lines that the just-received quantities now cover in full. */
+function backordersCoveredBy(orders: SalesOrder[], patches: Map<string, Partial<Item>>, byId: Map<string, Item>): Array<{ order: SalesOrder; sku: string; qty: number }> {
+  const out: Array<{ order: SalesOrder; sku: string; qty: number }> = [];
+  for (const order of orders) {
+    if (!isOrderOpen(order)) continue;
+    for (const line of order.lines) {
+      const patch = patches.get(line.itemId);
+      const item = byId.get(line.itemId);
+      if (!patch || !item) continue;
+      const open = openQty(line);
+      const before = item.onHand;
+      const after = patch.onHand ?? before;
+      if (open > 0 && before < open && after >= open) out.push({ order, sku: item.sku, qty: open });
+    }
+  }
+  return out;
 }
 
 export async function cancelOrder(store: Store, actor: Actor, orderId: string): Promise<void> {
   const order = await store.get("orders", orderId);
   if (!order) throw new InventoryError("Order not found");
-  if (order.status !== "open") throw new InventoryError(`${order.number} is ${order.status}`);
+  if (!isOrderOpen(order)) throw new InventoryError(`${order.number} is ${order.status}`);
   await store.batch([
     { op: "patch", collection: "orders", id: orderId, patch: { status: "cancelled" } },
     activityOp(actor, "order.cancelled", `${actor.name} cancelled ${order.number}`, { entityType: "order", entityId: order.id }),
@@ -947,6 +1172,144 @@ export async function deleteItems(store: Store, actor: Actor, itemIds: string[])
   const names = items.filter((i) => ids.has(i.id)).map((i) => i.sku);
   ops.push(activityOp(actor, "item.deleted", `${actor.name} deleted ${names.length === 1 ? names[0] : `${names.length} items`}`, { meta: { count: names.length } }));
   await store.batch(ops);
+}
+
+// ---------------------------------------------------------------------------
+// Factor 30: transfers between locations
+// ---------------------------------------------------------------------------
+
+export interface TransferInput {
+  fromLocationId: string;
+  toLocationId: string;
+  lines: Array<{ itemId: string; qty: number }>;
+  note?: string;
+  carrier?: string;
+  trackingNumber?: string;
+  shippedAt?: string;
+}
+
+/** Stock leaves the origin now and sits in transit until the transfer is received. */
+export async function createTransfer(store: Store, actor: Actor, input: TransferInput): Promise<Transfer> {
+  if (input.fromLocationId === input.toLocationId) throw new InventoryError("Pick two different locations");
+  const locations = await store.list("locations");
+  const from = locations.find((l) => l.id === input.fromLocationId);
+  const to = locations.find((l) => l.id === input.toLocationId);
+  if (!from || !to) throw new InventoryError("Unknown location");
+  if (!to.active) throw new InventoryError(`${to.name} is not active`);
+  const lines = input.lines.filter((l) => l.qty > 0);
+  if (lines.length === 0) throw new InventoryError("A transfer needs at least one line");
+  const items = await store.list("items");
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const { number, ops: counterOps } = await nextNumber(store, "transfer");
+  const shippedAt = input.shippedAt ?? nowIso();
+  const transfer: Transfer = {
+    id: newId("tr"),
+    number,
+    fromLocationId: from.id,
+    toLocationId: to.id,
+    status: "in_transit",
+    lines: lines.map((l) => ({ itemId: l.itemId, qty: l.qty })),
+    note: input.note,
+    carrier: input.carrier,
+    trackingNumber: input.trackingNumber,
+    shippedAt,
+    createdAt: nowIso(),
+    createdBy: actor.id,
+  };
+  const mv = await movementOps(
+    store,
+    actor,
+    lines.map((l) => ({ itemId: l.itemId, type: "transfer_out" as const, qty: -l.qty, refType: "transfer" as const, refId: transfer.id, occurredAt: shippedAt, locationId: from.id, note: `To ${to.name}` })),
+  );
+  for (const l of lines) {
+    const patch = mv.itemPatches.get(l.itemId);
+    const item = byId.get(l.itemId);
+    if (patch && item) patch.inTransit = round((item.inTransit ?? 0) + l.qty, 3);
+  }
+  const units = sum(lines.map((l) => l.qty));
+  await store.batch([
+    ...counterOps,
+    ...mv.ops,
+    { op: "put", collection: "transfers", doc: transfer },
+    activityOp(actor, "transfer.created", `${actor.name} sent ${transfer.number}: ${units} unit${units === 1 ? "" : "s"} from ${from.name} to ${to.name}`, { entityType: "transfer", entityId: transfer.id }),
+  ]);
+  return transfer;
+}
+
+/** Book the transfer in at its destination. Units short of what was sent are written off there. */
+export async function receiveTransfer(store: Store, actor: Actor, transferId: string, received?: Array<{ itemId: string; qty: number }>): Promise<Transfer> {
+  const transfer = await store.get("transfers", transferId);
+  if (!transfer) throw new InventoryError("Transfer not found");
+  if (transfer.status !== "in_transit") throw new InventoryError(`${transfer.number} is already ${transfer.status.replace("_", " ")}`);
+  const locations = await store.list("locations");
+  const to = locations.find((l) => l.id === transfer.toLocationId);
+  if (!to) throw new InventoryError("Destination location no longer exists");
+  const items = await store.list("items");
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const receivedAt = nowIso();
+  const movementInputs: MovementInput[] = [];
+  const lines = transfer.lines.map((l) => {
+    const got = received?.find((r) => r.itemId === l.itemId)?.qty ?? l.qty;
+    if (got < 0 || got > l.qty + 1e-9) throw new InventoryError(`Received quantity for ${byId.get(l.itemId)?.sku ?? l.itemId} must be between 0 and ${l.qty}`);
+    movementInputs.push({ itemId: l.itemId, type: "transfer_in", qty: l.qty, refType: "transfer", refId: transfer.id, occurredAt: receivedAt, locationId: to.id, note: `${transfer.number}` });
+    const missing = round(l.qty - got, 3);
+    if (missing > 0) movementInputs.push({ itemId: l.itemId, type: "write_off", qty: -missing, refType: "transfer", refId: transfer.id, occurredAt: receivedAt, locationId: to.id, reason: `Missing on arrival of ${transfer.number}` });
+    return { ...l, receivedQty: got };
+  });
+  const mv = await movementOps(store, actor, movementInputs);
+  for (const l of transfer.lines) {
+    const patch = mv.itemPatches.get(l.itemId);
+    const item = byId.get(l.itemId);
+    if (patch && item) patch.inTransit = Math.max(0, round((item.inTransit ?? 0) - l.qty, 3));
+  }
+  const missingUnits = sum(lines.map((l) => l.qty - (l.receivedQty ?? l.qty)));
+  const patch: Partial<Transfer> = { status: "received", lines, receivedAt, receivedBy: actor.id };
+  await store.batch([
+    ...mv.ops,
+    { op: "patch", collection: "transfers", id: transfer.id, patch },
+    activityOp(actor, "transfer.received", `${actor.name} received ${transfer.number} at ${to.name}${missingUnits > 0 ? ` · ${missingUnits} unit${missingUnits === 1 ? "" : "s"} missing, written off` : ""}`, { entityType: "transfer", entityId: transfer.id }),
+  ]);
+  return { ...transfer, ...patch };
+}
+
+/** Bring an in-transit transfer back to where it left from. */
+export async function cancelTransfer(store: Store, actor: Actor, transferId: string): Promise<void> {
+  const transfer = await store.get("transfers", transferId);
+  if (!transfer) throw new InventoryError("Transfer not found");
+  if (transfer.status !== "in_transit") throw new InventoryError(`${transfer.number} is already ${transfer.status.replace("_", " ")}`);
+  const items = await store.list("items");
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const mv = await movementOps(
+    store,
+    actor,
+    transfer.lines.map((l) => ({ itemId: l.itemId, type: "transfer_in" as const, qty: l.qty, refType: "transfer" as const, refId: transfer.id, locationId: transfer.fromLocationId, note: `${transfer.number} cancelled` })),
+  );
+  for (const l of transfer.lines) {
+    const patch = mv.itemPatches.get(l.itemId);
+    const item = byId.get(l.itemId);
+    if (patch && item) patch.inTransit = Math.max(0, round((item.inTransit ?? 0) - l.qty, 3));
+  }
+  await store.batch([
+    ...mv.ops,
+    { op: "patch", collection: "transfers", id: transfer.id, patch: { status: "cancelled" } },
+    activityOp(actor, "transfer.cancelled", `${actor.name} cancelled ${transfer.number}; stock returned to origin`, { entityType: "transfer", entityId: transfer.id }),
+  ]);
+}
+
+/** Set or clear the bin an item occupies at a location. */
+export async function setBin(store: Store, actor: Actor, itemId: string, locationId: string, bin: string): Promise<void> {
+  const item = await store.get("items", itemId);
+  if (!item) throw new InventoryError("Item not found");
+  const homeId = defaultLocation(await store.list("locations")).location.id;
+  const stock = stockMap(item, homeId);
+  const entry: ItemStock = { ...(stock[locationId] ?? { qty: 0 }) };
+  const trimmed = bin.trim();
+  if (trimmed) entry.bin = trimmed;
+  else delete entry.bin;
+  stock[locationId] = entry;
+  const patch: Partial<Item> = { stock, updatedAt: nowIso(), updatedBy: actor.id };
+  if (locationId === homeId) patch.location = trimmed || undefined;
+  await store.patch("items", itemId, patch);
 }
 
 export async function upsertSupplier(store: Store, actor: Actor, input: Partial<Supplier> & { name: string }): Promise<Supplier> {

@@ -1,41 +1,77 @@
-import type { IntegrationId } from "@/lib/types";
+import type { IntegrationId, IntegrationSettings } from "@/lib/types";
 
 /**
- * Static catalogue of the integrations Cumulus plans to support.
- * Live sync is not built yet; each entry carries enough to explain what will
- * sync, remember a store URL, and point people at the CSV export that works today.
+ * Catalogue of connections. Channels (Factor 40) and carriers (Factor 41) are
+ * live: credentials go to the server, which verifies them with the platform
+ * and keeps them in a subcollection browsers cannot read. The rest are on the
+ * roadmap and fall back to CSV import.
  */
+export type IntegrationKind = "channel" | "carrier" | "roadmap";
+
+export interface CredentialField {
+  key: string;
+  label: string;
+  placeholder?: string;
+  help?: string;
+  /** Secrets are never echoed back; config fields show on the card once connected. */
+  secret?: boolean;
+  optional?: boolean;
+}
+
+export interface SettingDef {
+  key: keyof IntegrationSettings;
+  label: string;
+  help: string;
+  default: boolean;
+}
+
 export interface IntegrationDef {
   id: IntegrationId;
   name: string;
+  kind: IntegrationKind;
   /** Letter mark shown in the card avatar. */
   letter: string;
-  /** Soft background and foreground for the letter mark. */
   mark: { bg: string; fg: string };
-  /** Two-line description of what the connection will do. */
   description: string;
-  /** What would sync once the connection is live. */
+  /** What the connection syncs or does. */
   syncs: string[];
-  url: { label: string; placeholder: string; help: string };
-  export: {
-    /** Where the CSV export lives in that platform. */
-    steps: string[];
-    /** Header row of the platform's product export. */
-    headers: string[];
-    /** Which of those headers the Import wizard recognises on its own. */
-    note: string;
-  };
+  fields: CredentialField[];
+  settings?: SettingDef[];
+  setup: { steps: string[]; docsUrl?: string };
+  /** CSV fallback for product data. */
+  export?: { steps: string[]; headers: string[]; note: string };
 }
 
 export const INTEGRATIONS: IntegrationDef[] = [
   {
     id: "shopify",
     name: "Shopify",
+    kind: "channel",
     letter: "S",
     mark: { bg: "#e6f4ec", fg: "#1f7a4d" },
-    description: "Pull products and variants in as items keyed by SKU, keep stock levels aligned, and turn Shopify orders into sales orders that relieve inventory when they ship.",
-    syncs: ["Products & SKUs", "Stock levels", "Orders"],
-    url: { label: "Store URL", placeholder: "your-store.myshopify.com", help: "The .myshopify.com address from Shopify admin. Saved for later; nothing is contacted." },
+    description: "Products and variants come in as items keyed by SKU, paid orders become sales orders, and on-hand counts go back to the store so it never oversells.",
+    syncs: ["Products & SKUs", "Orders in", "Stock out", "Webhooks"],
+    fields: [
+      { key: "shop", label: "Store address", placeholder: "your-store.myshopify.com", help: "The .myshopify.com address from Shopify admin." },
+      { key: "accessToken", label: "Admin API access token", placeholder: "shpat_…", secret: true, help: "From the custom app you create in Shopify admin (steps below)." },
+      { key: "apiSecret", label: "API secret key", secret: true, optional: true, help: "Optional. Lets Cumulus verify the signature on every webhook Shopify sends." },
+    ],
+    settings: [
+      { key: "syncProducts", label: "Pull products in", help: "Create or update items by SKU on every sync.", default: true },
+      { key: "syncOrders", label: "Pull open orders in", help: "Unshipped, paid orders become sales orders here.", default: true },
+      { key: "pushStock", label: "Push stock levels out", help: "After stock changes here, set the available quantity in Shopify.", default: false },
+      { key: "takeStockOnFirstSync", label: "Take Shopify's quantities on the first sync", help: "Only for a fresh workspace: opening counts come from the store.", default: false },
+      { key: "acceptStockFromChannel", label: "Accept stock changes from Shopify", help: "Inventory edits in Shopify are recorded as counts here. Off keeps Cumulus as the source of truth.", default: false },
+    ],
+    setup: {
+      steps: [
+        "In Shopify admin open Settings → Apps and sales channels → Develop apps, and create an app called Cumulus",
+        "Under Configure Admin API scopes tick read_products, read_inventory, write_inventory, read_orders, read_locations",
+        "Install the app, then reveal the Admin API access token once and paste it here",
+        "Optional: copy the API secret key from the same page so webhooks are signature-checked",
+      ],
+      docsUrl: "https://help.shopify.com/en/manual/apps/app-types/custom-apps",
+    },
     export: {
       steps: ["In Shopify admin open Products and click Export", "Choose All products and Plain CSV file", "Upload the file on the Import page"],
       headers: ["Handle", "Title", "Vendor", "Type", "Tags", "Variant SKU", "Variant Inventory Qty", "Variant Price", "Cost per item", "Variant Barcode"],
@@ -45,11 +81,27 @@ export const INTEGRATIONS: IntegrationDef[] = [
   {
     id: "woocommerce",
     name: "WooCommerce",
+    kind: "channel",
     letter: "W",
     mark: { bg: "#f1e8f7", fg: "#7a3e9d" },
-    description: "Import products by SKU, push on-hand counts back to your store so it never oversells, and bring WooCommerce orders in as sales orders.",
-    syncs: ["Products & SKUs", "Stock levels", "Orders"],
-    url: { label: "Site URL", placeholder: "https://shop.example.com", help: "Your WordPress site address. Saved for later; nothing is contacted." },
+    description: "Products and variations come in by SKU, processing orders become sales orders, and stock quantities are pushed back so the shop stays in step.",
+    syncs: ["Products & SKUs", "Orders in", "Stock out", "Webhooks"],
+    fields: [
+      { key: "siteUrl", label: "Site URL", placeholder: "https://shop.example.com", help: "Your WordPress site, over https." },
+      { key: "consumerKey", label: "Consumer key", placeholder: "ck_…", secret: true },
+      { key: "consumerSecret", label: "Consumer secret", placeholder: "cs_…", secret: true },
+    ],
+    settings: [
+      { key: "syncProducts", label: "Pull products in", help: "Create or update items by SKU on every sync.", default: true },
+      { key: "syncOrders", label: "Pull open orders in", help: "Orders in Processing or On hold become sales orders here.", default: true },
+      { key: "pushStock", label: "Push stock levels out", help: "After stock changes here, set the stock quantity in WooCommerce.", default: false },
+      { key: "takeStockOnFirstSync", label: "Take WooCommerce's quantities on the first sync", help: "Only for a fresh workspace: opening counts come from the shop.", default: false },
+      { key: "acceptStockFromChannel", label: "Accept stock changes from WooCommerce", help: "Stock edits in WooCommerce are recorded as counts here.", default: false },
+    ],
+    setup: {
+      steps: ["In WordPress open WooCommerce → Settings → Advanced → REST API and click Add key", "Give it Read/Write permissions and generate it", "Copy the consumer key and secret here; they are shown only once"],
+      docsUrl: "https://woocommerce.com/document/woocommerce-rest-api/",
+    },
     export: {
       steps: ["In WordPress open Products and click Export", "Keep all columns selected and generate the CSV", "Upload the file on the Import page"],
       headers: ["SKU", "Name", "Stock", "Regular price", "Categories", "Tags", "Low stock amount", "Short description", "GTIN, UPC, EAN, or ISBN"],
@@ -57,13 +109,37 @@ export const INTEGRATIONS: IntegrationDef[] = [
     },
   },
   {
+    id: "shippo",
+    name: "Shippo",
+    kind: "carrier",
+    letter: "Sh",
+    mark: { bg: "#e8f0fb", fg: "#1f4f9c" },
+    description: "One API key for USPS, UPS, FedEx, DHL and the other carriers on your Shippo account: compare rates when shipping an order, buy the label, and track it to the door.",
+    syncs: ["Rate shopping", "Labels", "Tracking"],
+    fields: [{ key: "token", label: "API token", placeholder: "shippo_live_… or shippo_test_…", secret: true, help: "A test token buys sample labels and costs nothing; switch to the live token when ready." }],
+    setup: { steps: ["In Shippo open Settings → API and generate a token", "Add your carrier accounts under Settings → Carriers (USPS comes built in)", "Paste the token here, then set a ship-from address under Settings → Shipping and scanning"], docsUrl: "https://docs.goshippo.com/docs/guides_general/authentication/" },
+  },
+  {
+    id: "easypost",
+    name: "EasyPost",
+    kind: "carrier",
+    letter: "E",
+    mark: { bg: "#e9f3f9", fg: "#0b5c8a" },
+    description: "Rate-shop and buy labels across the carriers on your EasyPost account, with tracking updates pushed back to each shipment.",
+    syncs: ["Rate shopping", "Labels", "Tracking"],
+    fields: [{ key: "token", label: "API key", placeholder: "EZAK… (production) or EZTK… (test)", secret: true, help: "Test keys buy sample labels for free." }],
+    setup: { steps: ["In the EasyPost dashboard open Account Settings → API Keys", "Copy the production key (or the test key to try it out)", "Paste it here, then set a ship-from address under Settings → Shipping and scanning"], docsUrl: "https://docs.easypost.com/docs/api-keys" },
+  },
+  {
     id: "quickbooks",
     name: "QuickBooks",
+    kind: "roadmap",
     letter: "Q",
     mark: { bg: "#e8f1f8", fg: "#1f5f8b" },
     description: "Match items to Products and Services, keep purchase costs and sales prices aligned, and post inventory value and cost of goods sold to your books.",
     syncs: ["Products & SKUs", "Costs & prices", "Inventory value"],
-    url: { label: "Company (realm) ID", placeholder: "1234567890", help: "Found under Settings → Account and settings → Billing & subscription. Saved for later; nothing is contacted." },
+    fields: [{ key: "realmId", label: "Company (realm) ID", placeholder: "1234567890", help: "Found under Settings → Account and settings → Billing & subscription. Saved for later; nothing is contacted." }],
+    setup: { steps: [] },
     export: {
       steps: ["In QuickBooks Online open Sales → Products and services", "Use the export icon above the list to download an Excel file, then save it as CSV", "Upload the file on the Import page"],
       headers: ["Product/Service Name", "SKU", "Type", "Sales description", "Sales price/rate", "Purchase cost", "Quantity on hand", "Reorder point"],
@@ -73,11 +149,13 @@ export const INTEGRATIONS: IntegrationDef[] = [
   {
     id: "square",
     name: "Square",
+    kind: "roadmap",
     letter: "□",
     mark: { bg: "#f3f3f4", fg: "#303030" },
     description: "Sync the Square item library and per-location counts, and record point-of-sale and online sales as orders that relieve stock.",
     syncs: ["Item library", "Stock by location", "Sales"],
-    url: { label: "Location name", placeholder: "Main Street store", help: "The Square location this workspace should mirror. Saved for later; nothing is contacted." },
+    fields: [{ key: "location", label: "Location name", placeholder: "Main Street store", help: "The Square location this workspace should mirror. Saved for later; nothing is contacted." }],
+    setup: { steps: [] },
     export: {
       steps: ["In Square Dashboard open Items & orders → Items", "Choose Actions → Export library and download the CSV", "Upload the file on the Import page"],
       headers: ["Item Name", "SKU", "Description", "Category", "Price", "Current Quantity <Location>", "Stock Alert Count <Location>"],
@@ -88,4 +166,10 @@ export const INTEGRATIONS: IntegrationDef[] = [
 
 export function integrationDef(id: string | null | undefined): IntegrationDef | undefined {
   return INTEGRATIONS.find((d) => d.id === id);
+}
+
+export function defaultSettings(def: IntegrationDef): IntegrationSettings {
+  const out: IntegrationSettings = {};
+  for (const s of def.settings ?? []) (out as Record<string, boolean>)[s.key] = s.default;
+  return out;
 }

@@ -33,8 +33,11 @@ import {
   type Actor,
   type ItemPatch,
   InventoryError,
+  backorderReport,
 } from "@/lib/inventory";
 import { matches, round } from "@/lib/utils";
+import { crossRefText } from "@/lib/scan";
+import { kpiReport } from "@/lib/kpis";
 import type { AgentToolName } from "./tools";
 
 export interface ExecContext {
@@ -57,7 +60,7 @@ type Filter = {
 function applyFilter(items: Item[], filter: Filter | undefined, suppliers: Supplier[], movements: StockMovement[]): Item[] {
   if (!filter) return items;
   let out = items;
-  if (filter.query) out = out.filter((i) => matches(filter.query!, i.sku, i.name, i.description, i.category, i.tags.join(" "), i.location));
+  if (filter.query) out = out.filter((i) => matches(filter.query!, i.sku, i.name, i.description, i.category, i.tags.join(" "), i.location, i.barcode, crossRefText(i)));
   if (filter.category) out = out.filter((i) => (i.category ?? "").toLowerCase() === filter.category!.toLowerCase() || matches(filter.category!, i.category));
   if (filter.type) out = out.filter((i) => i.type === filter.type);
   if (filter.status) out = out.filter((i) => i.status === filter.status);
@@ -256,6 +259,10 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
       return {
         ...brief(item, suppliers),
         description: item.description,
+        barcode: item.barcode,
+        crossRefs: item.crossRefs?.map((r) => ({ number: r.number, kind: r.kind, source: r.source })),
+        stockByLocation: item.stock ? Object.entries(item.stock).map(([locationId, s]) => ({ locationId, qty: s.qty, bin: s.bin })) : undefined,
+        inTransit: item.inTransit || undefined,
         supersededBy: item.supersededBy ? byId.get(item.supersededBy)?.sku : undefined,
         priceBreaks: item.priceBreaks,
         expectedWastePct: item.expectedWastePct,
@@ -333,7 +340,20 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
           return seasonalityReport(movements, 12, item?.id);
         }
         case "openOrders":
-          return orders.filter((o) => o.status === "open").map((o) => ({ number: o.number, customer: o.customer, source: o.source, createdAt: o.createdAt.slice(0, 10), lines: o.lines.map((l) => ({ sku: byId.get(l.itemId)?.sku, qty: l.qty, unitPrice: l.unitPrice, onHand: byId.get(l.itemId)?.onHand })) }));
+          return orders.filter((o) => o.status === "open" || o.status === "partial").map((o) => ({ number: o.number, customer: o.customer, source: o.source, status: o.status, createdAt: o.createdAt.slice(0, 10), lines: o.lines.map((l) => ({ sku: byId.get(l.itemId)?.sku, qty: l.qty, shipped: l.shipped ?? 0, unitPrice: l.unitPrice, onHand: byId.get(l.itemId)?.onHand })) }));
+        case "backorders":
+          return backorderReport(orders, items, suppliers).slice(0, limit).map((r) => ({ order: r.order.number, customer: r.order.customer, sku: r.item?.sku, open: r.openQty, available: r.available, shortBy: r.shortBy, supplier: r.supplier?.name, couldShipBy: r.expectedAt?.slice(0, 10), ordered: r.order.createdAt.slice(0, 10) }));
+        case "kpis": {
+          const shipments = await store.list("shipments");
+          const rep = kpiReport(items, movements, orders, shipments, { days: Number(input.days) || 90 });
+          return { periodDays: rep.period.days, company: rep.company, byCategory: rep.byCategory.slice(0, limit) };
+        }
+        case "transfers": {
+          const transfers = await store.list("transfers");
+          const locations = await store.list("locations");
+          const name = (id: string) => locations.find((l) => l.id === id)?.name ?? id;
+          return [...transfers].sort((a, b) => b.shippedAt.localeCompare(a.shippedAt)).slice(0, limit).map((t) => ({ number: t.number, from: name(t.fromLocationId), to: name(t.toLocationId), status: t.status, sentAt: t.shippedAt.slice(0, 10), receivedAt: t.receivedAt?.slice(0, 10), lines: t.lines.map((l) => ({ sku: byId.get(l.itemId)?.sku, qty: l.qty, received: l.receivedQty })) }));
+        }
         case "openRmas":
           return rmas.filter((r) => r.status === "open" || r.status === "inspecting").map((r) => ({ number: r.number, customer: r.customer, reason: r.reason, status: r.status, lines: r.lines.map((l) => ({ sku: byId.get(l.itemId)?.sku, qty: l.qty, condition: l.condition })) }));
         case "recentActivity":

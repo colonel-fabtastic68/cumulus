@@ -2,11 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, ChevronDown, LogOut, Menu as MenuIcon, Search, Settings2, Sparkles, UserRound } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Menu as MenuIcon, ScanBarcode, Search, Settings2, Sparkles, UserRound } from "lucide-react";
 import { Avatar, AvatarStack, Button, IconButton, Kbd, Menu, Modal } from "@/components/ui";
 import { isOnline, useAuth, useCurrentUser } from "@/lib/auth";
 import { useCollection } from "@/lib/store/provider";
 import { useAgent } from "@/components/agent/AgentProvider";
+import { ScanModal, useScanWedge } from "@/components/scan";
+import { crossRefText } from "@/lib/scan";
+import { useSettings } from "@/lib/store/provider";
 import { matches } from "@/lib/utils";
 
 export function TopBar({ onMenu }: { onMenu?: () => void }) {
@@ -16,6 +19,10 @@ export function TopBar({ onMenu }: { onMenu?: () => void }) {
   const { open: openAgent, toggle: toggleAgent, isOpen } = useAgent();
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchNonce, setSearchNonce] = useState(0);
+  const [scan, setScan] = useState<{ open: boolean; code?: string }>({ open: false });
+  const settings = useSettings();
+  // Factor 32: a USB/Bluetooth scanner typing into the page opens what it scanned.
+  useScanWedge((code) => setScan({ open: true, code }), { enabled: settings.scanning?.keyboardWedge !== false });
   const openSearch = () => {
     setSearchNonce((n) => n + 1);
     setSearchOpen(true);
@@ -33,6 +40,10 @@ export function TopBar({ onMenu }: { onMenu?: () => void }) {
       if (mod && e.key.toLowerCase() === "j") {
         e.preventDefault();
         toggleAgent();
+      }
+      if (mod && e.key === "/") {
+        e.preventDefault();
+        setScan({ open: true });
       }
     };
     document.addEventListener("keydown", onKey);
@@ -62,6 +73,7 @@ export function TopBar({ onMenu }: { onMenu?: () => void }) {
       )}
       <Button variant={isOpen ? "primary" : "secondary"} size="md" icon={<Sparkles />} onClick={() => (isOpen ? toggleAgent() : openAgent())} className="hidden sm:inline-flex">Nimbus <Kbd>⌘J</Kbd>
       </Button>
+      <IconButton variant="plain" size="md" className="text-text-secondary" aria-label="Scan a barcode (⌘/)" title="Scan (⌘/)" onClick={() => setScan({ open: true })} icon={<ScanBarcode />} />
       <IconButton variant="plain" size="md" className="text-text-secondary" aria-label="Activity" href="/activity" icon={<Bell />} />
       <Menu
         trigger={
@@ -85,6 +97,7 @@ export function TopBar({ onMenu }: { onMenu?: () => void }) {
         ]}
       />
       <GlobalSearch key={searchNonce} open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <ScanModal key={scan.code ?? "scan"} open={scan.open} initialCode={scan.code} onClose={() => setScan({ open: false })} />
     </header>
   );
 }
@@ -102,7 +115,7 @@ function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => void })
   const results = useMemo(() => {
     if (!q.trim()) return [];
     const out: Array<{ label: string; sub?: string; href: string; kind: string }> = [];
-    for (const i of items) if (matches(q, i.sku, i.name, i.category, i.barcode)) out.push({ label: `${i.sku} · ${i.name}`, sub: `${i.onHand} on hand`, href: `/inventory/${i.id}`, kind: "Item" });
+    for (const i of items) if (matches(q, i.sku, i.name, i.category, i.barcode, crossRefText(i))) out.push({ label: `${i.sku} · ${i.name}`, sub: `${i.onHand} on hand${i.crossRefs?.some((r) => matches(q, r.number)) ? " · matched a cross-reference" : ""}`, href: `/inventory/${i.id}`, kind: "Item" });
     for (const o of orders) if (matches(q, o.number, o.customer)) out.push({ label: `${o.number} · ${o.customer}`, sub: o.status, href: `/orders?highlight=${o.id}`, kind: "Order" });
     for (const r of rmas) if (matches(q, r.number, r.customer, r.reason)) out.push({ label: `${r.number} · ${r.customer}`, sub: r.status, href: `/rmas?highlight=${r.id}`, kind: "RMA" });
     for (const s of suppliers) if (matches(q, s.name)) out.push({ label: s.name, href: `/suppliers?highlight=${s.id}`, kind: "Supplier" });

@@ -14,6 +14,8 @@ export const MOVEMENT_LABELS: Record<MovementType, string> = {
   sale: "Sale",
   rma_return: "RMA return",
   import: "Import",
+  transfer_out: "Transfer out",
+  transfer_in: "Transfer in",
 };
 
 export const MOVEMENT_TYPES = Object.keys(MOVEMENT_LABELS) as MovementType[];
@@ -26,6 +28,9 @@ export const REF_LABELS: Record<RefType, string> = {
   import: "Import",
   agent: "Nimbus",
   manual: "Manual",
+  transfer: "Transfer",
+  shipment: "Shipment",
+  channel: "Channel",
 };
 
 export function movementTone(type: MovementType): BadgeTone {
@@ -33,7 +38,10 @@ export function movementTone(type: MovementType): BadgeTone {
     case "receipt":
     case "build_produce":
     case "rma_return":
+    case "transfer_in":
       return "success";
+    case "transfer_out":
+      return "attention";
     case "sale":
     case "build_consume":
       return "info";

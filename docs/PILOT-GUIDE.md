@@ -49,10 +49,30 @@ Try these, in your own words:
 ### 6. Returns (Returns)
 - Resolve RMA-1003: restock 1, scrap 1. Check that FG-OD1-BLK's stock rose by exactly one.
 
+### 6b. Locations, bins and transfers (Settings → Locations, Transfers)
+- Add a second location (a truck, a trailer, a second warehouse). Receiving now asks where the stock lands and takes a bin per line.
+- Open an item → Locations to see what is where, and set bins inline.
+- Transfers → New transfer: pick lines, scan them, or paste "SKU, qty" from a spreadsheet. The stock leaves now and is "in transit" until the other end receives it. Receive fewer than sent and the difference is written off with the transfer as the reason.
+- Inventory → filter by location to see one site's stock; select rows → Transfer to move them.
+
+### 6c. Scan (⌘/ or the barcode button)
+- Point the phone camera at a barcode, or use a USB/Bluetooth scanner: it types into the page and Cumulus catches it, no field focus needed (turn that off under Settings → Shipping and scanning if it interferes).
+- A scan finds the item by barcode, SKU, a cross-reference (OEM / competitor / supplier number) or the channel id, then offers open, receive, transfer.
+- Item → Cross-references: add the other numbers a part is known by. Search finds them too.
+
+### 6d. Ship, partial or with a label (Orders)
+- Ship an open order: choose the quantity per line. Ship less than ordered and the rest stays open as a backorder (Orders → Backordered, Reports → Backorders with expected dates from lead times).
+- Enter the carrier and tracking by hand, or connect Shippo / EasyPost (Integrations) and set a ship-from address under Settings → Shipping and scanning to compare rates and buy the label. Tracking updates land on the shipment.
+
+### 6e. Connect a store (Integrations, hosted mode only)
+- Shopify or WooCommerce: paste the API credentials from your store (the modal lists where to find them). Products come in by SKU, open orders become sales orders, and, when switched on, on-hand counts go back out.
+- Nothing is demo data: a fresh workspace stays empty until you connect or import.
+
 ### 7. Reports
 - Low stock: are the days-of-cover and lead-time columns useful for deciding what to order first?
 - Shelf life: which batch has sat longest? Would you discount it?
 - Consumption: does "sold vs consumed in builds vs written off" give you the breakdown you'd want at year end?
+- KPIs: turnover, days on hand, fill rate and stockouts for 30 / 90 / 365 days, by category or SKU. Backorders: what is short, by how much, and when it could ship.
 
 ### 8. Bring your own data (Import)
 - Export a CSV from your current system (or Shopify/WooCommerce) and import it. Did the column mapping guess right? Try "Map with AI".

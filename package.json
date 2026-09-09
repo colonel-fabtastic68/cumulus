@@ -11,6 +11,8 @@
   "dependencies": {
     "@ai-sdk/google": "^4.0.63",
     "@ai-sdk/react": "^4.0.94",
+    "@zxing/browser": "^0.1.5",
+    "@zxing/library": "^0.21.3",
     "ai": "^7.0.91",
     "firebase": "^12.18.0",
     "firebase-admin": "^14.3.0",

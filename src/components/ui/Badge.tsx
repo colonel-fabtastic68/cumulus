@@ -38,6 +38,8 @@ export function StatusBadge({ status }: { status: string }) {
     inactive: { tone: "default" },
     superseded: { tone: "warning" },
     open: { tone: "info" },
+    partial: { tone: "attention", label: "Partly shipped" },
+    in_transit: { tone: "info", label: "In transit" },
     inspecting: { tone: "warning" },
     fulfilled: { tone: "success" },
     received: { tone: "success" },

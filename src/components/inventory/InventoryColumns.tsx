@@ -3,7 +3,8 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import type { Item } from "@/lib/types";
-import { isLowStock } from "@/lib/inventory";
+import { isLowStock, qtyAt } from "@/lib/inventory";
+import { itemBinAt } from "@/lib/locations";
 import { formatMoney, formatNumber, formatQty, formatRelative } from "@/lib/format";
 import { clamp, cn } from "@/lib/utils";
 import { Badge, StatusBadge, type Column } from "@/components/ui";
@@ -35,11 +36,29 @@ export function StockLevelCell({ item }: { item: Item }) {
   );
 }
 
+export interface ColumnLocation {
+  id: string;
+  name: string;
+  homeId: string;
+}
+
+/** Factor 29: the quantity and bin at one location instead of the company total. */
+function AtLocationCell({ item, location }: { item: Item; location: ColumnLocation }) {
+  const qty = qtyAt(item, location.id, location.homeId);
+  const bin = itemBinAt(item, location.id, location.homeId);
+  return (
+    <div className="flex flex-col items-end gap-0.5">
+      <span className={cn("font-medium", qty > 0 ? "text-text" : "text-text-tertiary")}>{formatQty(qty, item.unit)}</span>
+      {bin && <span className="font-mono text-[11px] text-text-tertiary">{bin}</span>}
+    </div>
+  );
+}
+
 function optionalNumber(n?: number): string {
   return n === undefined ? "—" : formatNumber(n, Number.isInteger(n) ? 0 : 2);
 }
 
-export function useInventoryColumns({ currency, supplierName }: { currency: string; supplierName: (id?: string) => string | undefined }): Column<Item>[] {
+export function useInventoryColumns({ currency, supplierName, location }: { currency: string; supplierName: (id?: string) => string | undefined; location?: ColumnLocation }): Column<Item>[] {
   return useMemo<Column<Item>[]>(
     () => [
       {
@@ -72,10 +91,10 @@ export function useInventoryColumns({ currency, supplierName }: { currency: stri
       },
       {
         key: "onHand",
-        header: "On hand",
+        header: location ? `At ${location.name}` : "On hand",
         align: "right",
-        sortValue: (i) => i.onHand,
-        render: (i) => <StockLevelCell item={i} />,
+        sortValue: (i) => (location ? qtyAt(i, location.id, location.homeId) : i.onHand),
+        render: (i) => (location ? <AtLocationCell item={i} location={location} /> : <StockLevelCell item={i} />),
       },
       {
         key: "minMax",
@@ -141,6 +160,6 @@ export function useInventoryColumns({ currency, supplierName }: { currency: stri
         render: (i) => <span className="whitespace-nowrap text-text-secondary">{formatRelative(i.updatedAt)}</span>,
       },
     ],
-    [currency, supplierName],
+    [currency, supplierName, location],
   );
 }

@@ -8,9 +8,11 @@ import { useAgent } from "@/components/agent/AgentProvider";
 import { useItems, useSettings } from "@/lib/store/provider";
 import { isLowStock } from "@/lib/inventory";
 import {
+  BackorderReport,
   ConsumptionReport,
   DEFAULT_REPORT_TAB,
   DeadStockReport,
+  KpiReport,
   LowStockReport,
   REPORT_TABS,
   SeasonalityReport,
@@ -82,6 +84,8 @@ function ReportsView() {
     >
       <Tabs value={tab} onChange={setTab} tabs={tabs} className="mb-5" />
       {tab === "lowStock" && <LowStockReport />}
+      {tab === "kpis" && <KpiReport />}
+      {tab === "backorders" && <BackorderReport />}
       {tab === "valuation" && <ValuationReport />}
       {tab === "shelfLife" && <ShelfLifeReport />}
       {tab === "deadStock" && <DeadStockReport />}

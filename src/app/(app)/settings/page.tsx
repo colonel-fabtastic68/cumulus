@@ -5,7 +5,7 @@ import { useSettings } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { Banner, Page, Section } from "@/components/ui";
-import { AboutSection, AgentSection, CompanySection, DataSection, InventoryPolicySection } from "@/components/workspace/settings";
+import { AboutSection, AgentSection, CompanySection, DataSection, InventoryPolicySection, LocationsSection, ShippingSection } from "@/components/workspace/settings";
 import { canManageTeam } from "@/components/workspace/team";
 
 function Row({ children }: { children: ReactNode }) {
@@ -43,6 +43,16 @@ export default function SettingsPage() {
         <Row>
           <Section title="Inventory policy" description="How stock buckets and builds behave. Changes apply to future movements only.">
             <InventoryPolicySection key={formKey} settings={settings} readOnly={readOnly} />
+          </Section>
+        </Row>
+        <Row>
+          <Section title="Locations" description="Warehouses, stores, trucks and trailers that hold stock. Transfers move stock between them.">
+            <LocationsSection readOnly={readOnly} />
+          </Section>
+        </Row>
+        <Row>
+          <Section title="Shipping and scanning" description="Ship-from address and default parcel for carrier rates, and keyboard scanner behaviour.">
+            <ShippingSection key={formKey} settings={settings} readOnly={readOnly} />
           </Section>
         </Row>
         <Row>

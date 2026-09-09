@@ -175,5 +175,8 @@ export function emptySnapshot(): WorkspaceSnapshot {
     integrations: [],
     settings: [],
     agentSessions: [],
+    locations: [],
+    transfers: [],
+    shipments: [],
   };
 }

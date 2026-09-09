@@ -1,4 +1,4 @@
-import { Boxes, ClipboardList, Download, FileBarChart2, Hammer, Home, PackageCheck, Plug, RotateCcw, Settings, ShoppingCart, Sparkles, Truck, Users, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, Boxes, ClipboardList, Download, FileBarChart2, Hammer, Home, PackageCheck, Plug, RotateCcw, Settings, ShoppingCart, Sparkles, Truck, Users, type LucideIcon } from "lucide-react";
 
 export interface NavItem {
   href: string;
@@ -10,6 +10,7 @@ export const NAV: NavItem[] = [
   { href: "/home", label: "Home", icon: Home },
   { href: "/inventory", label: "Inventory", icon: Boxes },
   { href: "/receiving", label: "Receiving", icon: PackageCheck },
+  { href: "/transfers", label: "Transfers", icon: ArrowLeftRight },
   { href: "/builds", label: "Builds", icon: Hammer },
   { href: "/orders", label: "Orders", icon: ShoppingCart },
   { href: "/rmas", label: "Returns", icon: RotateCcw },
