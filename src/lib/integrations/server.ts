@@ -13,11 +13,15 @@ import { verifyFirebaseIdToken } from "./verifyIdToken";
  */
 
 export class HttpError extends Error {
+  /** The platform's own error code when it sent one (e.g. woocommerce_rest_cannot_view). */
+  code?: string;
   constructor(
     public status: number,
     message: string,
+    code?: string,
   ) {
     super(message);
+    this.code = code;
   }
 }
 
@@ -168,7 +172,8 @@ export async function fetchJson<T>(url: string, init: RequestInit & { timeoutMs?
     }
     if (!res.ok) {
       const detail = isJson ? describeApiError(data) : summarizeHtml(text);
-      throw new HttpError(res.status === 401 || res.status === 403 ? 401 : 502, `${host} answered ${res.status}${detail ? `: ${detail}` : ""}`);
+      const code = isJson && data && typeof (data as { code?: unknown }).code === "string" ? (data as { code: string }).code : undefined;
+      throw new HttpError(res.status === 401 || res.status === 403 ? 401 : 502, `${host} answered ${res.status}${detail ? `: ${detail}` : ""}`, code);
     }
     if (!isJson && text.trim()) {
       throw new HttpError(502, `${host} answered with a web page instead of API data${summarizeHtml(text) ? ` (${summarizeHtml(text)})` : ""}. A security plugin, bot protection, password protection or a "coming soon" mode is probably intercepting REST API requests.`);

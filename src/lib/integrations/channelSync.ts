@@ -40,13 +40,16 @@ async function wooCreds(ctx: ServerContext, integration: Integration, secrets: S
   const siteUrl = integration.config?.siteUrl;
   if (!siteUrl || !secrets.consumerKey || !secrets.consumerSecret) throw new HttpError(409, "WooCommerce credentials are incomplete; connect it again.");
   let plainPermalinks = integration.config?.plainPermalinks === "1";
-  if (integration.config?.plainPermalinks === undefined) {
+  let authMode = integration.config?.authMode as woo.WooAuthMode | undefined;
+  if (integration.config?.plainPermalinks === undefined || !authMode) {
     plainPermalinks = (await woo.detectPermalinks(siteUrl)).plainPermalinks;
-    const config = { ...(integration.config ?? {}), plainPermalinks: plainPermalinks ? "1" : "0" };
+    if (plainPermalinks) throw new HttpError(409, woo.PLAIN_PERMALINKS_HELP);
+    authMode = await woo.detectAuthMode({ siteUrl, consumerKey: secrets.consumerKey, consumerSecret: secrets.consumerSecret, plainPermalinks });
+    const config = { ...(integration.config ?? {}), plainPermalinks: "0", authMode };
     integration.config = config;
     await ctx.store.patch("integrations", integration.id, { config });
   }
-  return { siteUrl, consumerKey: secrets.consumerKey, consumerSecret: secrets.consumerSecret, plainPermalinks };
+  return { siteUrl, consumerKey: secrets.consumerKey, consumerSecret: secrets.consumerSecret, plainPermalinks, authMode };
 }
 
 // ---- products ------------------------------------------------------------------

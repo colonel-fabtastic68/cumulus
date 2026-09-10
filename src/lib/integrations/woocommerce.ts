@@ -1,7 +1,16 @@
-import { createHmac } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { HttpError, expectArray, fetchJson, safeEqual } from "./server";
 
 /** WooCommerce REST API v3 client. Needs a REST API key pair (WooCommerce → Settings → Advanced → REST API). */
+
+/**
+ * How the keys travel. "basic" is the documented HTTPS method; WooCommerce
+ * ignores it when WordPress cannot tell it is behind HTTPS (is_ssl() false
+ * behind some proxies), and then only signed OAuth 1.0a requests work. The
+ * signature base URL must use the scheme WordPress believes it is on, hence
+ * the http variant.
+ */
+export type WooAuthMode = "basic" | "oauth" | "oauth-http";
 
 export interface WooCreds {
   siteUrl: string;
@@ -9,6 +18,29 @@ export interface WooCreds {
   consumerSecret: string;
   /** Sites with "Plain" permalinks only expose the API as ?rest_route=…, not /wp-json/…. */
   plainPermalinks?: boolean;
+  authMode?: WooAuthMode;
+}
+
+const rfc3986 = (s: string) => encodeURIComponent(s).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+
+/** Adds one-legged OAuth 1.0a parameters (HMAC-SHA256) to the request URL, the way WooCommerce verifies them. */
+export function signOAuth(url: URL, method: string, creds: Pick<WooCreds, "consumerKey" | "consumerSecret">, scheme: "https" | "http"): URL {
+  const signed = new URL(url.toString());
+  const oauth: Record<string, string> = {
+    oauth_consumer_key: creds.consumerKey,
+    oauth_nonce: randomBytes(16).toString("hex"),
+    oauth_signature_method: "HMAC-SHA256",
+    oauth_timestamp: String(Math.floor(Date.now() / 1000)),
+  };
+  for (const [k, v] of Object.entries(oauth)) signed.searchParams.set(k, v);
+  const pairs = Array.from(signed.searchParams.entries())
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([k, v]) => `${rfc3986(k)}=${rfc3986(v)}`);
+  const baseUrl = `${scheme}://${signed.host}${signed.pathname}`;
+  const base = `${method.toUpperCase()}&${rfc3986(baseUrl)}&${rfc3986(pairs.join("&"))}`;
+  const signature = createHmac("sha256", `${creds.consumerSecret}&`).update(base).digest("base64");
+  signed.searchParams.set("oauth_signature", signature);
+  return signed;
 }
 
 export interface WooProduct {
@@ -97,9 +129,10 @@ export function endpoint(creds: Pick<WooCreds, "siteUrl" | "plainPermalinks">, p
 export async function detectPermalinks(siteUrl: string): Promise<{ plainPermalinks: boolean }> {
   const attempts: Array<{ plain: boolean; problem?: string }> = [];
   for (const plain of [false, true]) {
-    const url = endpoint({ siteUrl, plainPermalinks: plain }, "system_status", {});
+    // A cache-busting parameter so a host's page cache cannot replay an answer from before a permalink change.
+    const url = endpoint({ siteUrl, plainPermalinks: plain }, "system_status", { _cb: randomBytes(4).toString("hex") });
     try {
-      await fetchJson<unknown>(url.toString(), { method: "GET", redirect: "manual", timeoutMs: 15_000 });
+      await fetchJson<unknown>(url.toString(), { method: "GET", redirect: "manual", timeoutMs: 15_000, headers: { "Cache-Control": "no-cache" } });
       return { plainPermalinks: plain };
     } catch (e) {
       // 401/403 with a JSON body means the API is there and just wants credentials.
@@ -127,14 +160,45 @@ async function request<T>(creds: WooCreds, path: string, init: { method?: string
 }
 
 async function requestOnce<T>(creds: WooCreds, path: string, init: { method?: string; body?: unknown; query?: Record<string, string> } = {}): Promise<{ data: T; headers: Headers }> {
-  const url = endpoint(creds, path, init.query);
-  const auth = Buffer.from(`${creds.consumerKey}:${creds.consumerSecret}`).toString("base64");
-  const res = await fetchJson<T>(url.toString(), {
-    method: init.method ?? "GET",
-    headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json", Accept: "application/json" },
-    body: init.body === undefined ? undefined : JSON.stringify(init.body),
-  });
+  const method = init.method ?? "GET";
+  let url = endpoint(creds, path, init.query);
+  const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "application/json", "Cache-Control": "no-cache" };
+  if (creds.authMode === "oauth" || creds.authMode === "oauth-http") {
+    url = signOAuth(url, method, creds, creds.authMode === "oauth-http" ? "http" : "https");
+  } else {
+    headers.Authorization = `Basic ${Buffer.from(`${creds.consumerKey}:${creds.consumerSecret}`).toString("base64")}`;
+  }
+  const res = await fetchJson<T>(url.toString(), { method, headers, body: init.body === undefined ? undefined : JSON.stringify(init.body) });
   return { data: res.data, headers: res.headers };
+}
+
+/**
+ * Finds a way of sending the keys that this site accepts: the Basic header
+ * first, then OAuth signed for https, then OAuth signed for http (what
+ * WordPress computes when a proxy hides the TLS from it). A key that is
+ * genuinely wrong fails every mode with "Consumer key is invalid".
+ */
+export async function detectAuthMode(creds: Omit<WooCreds, "authMode">): Promise<WooAuthMode> {
+  const modes: WooAuthMode[] = ["basic", "oauth", "oauth-http"];
+  let lastError: unknown = null;
+  for (const authMode of modes) {
+    try {
+      const { data } = await requestOnce<unknown>({ ...creds, authMode }, "products", { query: { per_page: "1", _cb: randomBytes(4).toString("hex") } });
+      expectArray(data, "products", new URL(creds.siteUrl).host);
+      return authMode;
+    } catch (e) {
+      lastError = e;
+      if (e instanceof HttpError && e.status === 401) {
+        const ignored = e.code === "woocommerce_rest_cannot_view";
+        const badSignature = e.code === "woocommerce_rest_authentication_error" && /signature|timestamp|nonce/i.test(e.message);
+        if (ignored || badSignature) continue;
+        // "Consumer key is invalid", "permissions"…: the keys themselves are the problem.
+        throw new HttpError(401, `${new URL(creds.siteUrl).host} rejected the API keys: ${e.message.replace(/^.*?answered \d+: /, "")}. Check the consumer key and secret, and that the key has Read/Write permissions.`);
+      }
+      throw e;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new HttpError(401, "The API keys were not accepted.");
 }
 
 async function paginate<T>(creds: WooCreds, path: string, query: Record<string, string>): Promise<T[]> {
