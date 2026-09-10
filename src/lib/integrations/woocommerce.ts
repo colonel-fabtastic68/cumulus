@@ -110,7 +110,23 @@ export async function detectPermalinks(siteUrl: string): Promise<{ plainPermalin
   throw new HttpError(502, `The WordPress REST API does not answer at ${new URL(siteUrl).host}: ${attempts.map((a) => `${a.plain ? "?rest_route=" : "/wp-json/"} → ${a.problem}`).join("; ")}. Check that the site is live (not a "coming soon" or password-protected page), that no security plugin disables the REST API, and that WooCommerce is active.`);
 }
 
+export const PLAIN_PERMALINKS_HELP = 'WooCommerce only checks API keys on /wp-json/ addresses, and this site is set to "Plain" permalinks, so every key is treated as anonymous. In WordPress open Settings → Permalinks, choose "Post name", save, then connect again.';
+
+/** Turns a 401 from a site on plain permalinks into the instruction that actually fixes it. */
+function explainAuthFailure(e: unknown, creds: Pick<WooCreds, "plainPermalinks">): unknown {
+  if (creds.plainPermalinks && e instanceof HttpError && e.status === 401) return new HttpError(409, PLAIN_PERMALINKS_HELP);
+  return e;
+}
+
 async function request<T>(creds: WooCreds, path: string, init: { method?: string; body?: unknown; query?: Record<string, string> } = {}): Promise<{ data: T; headers: Headers }> {
+  try {
+    return await requestOnce<T>(creds, path, init);
+  } catch (e) {
+    throw explainAuthFailure(e, creds);
+  }
+}
+
+async function requestOnce<T>(creds: WooCreds, path: string, init: { method?: string; body?: unknown; query?: Record<string, string> } = {}): Promise<{ data: T; headers: Headers }> {
   const url = endpoint(creds, path, init.query);
   const auth = Buffer.from(`${creds.consumerKey}:${creds.consumerSecret}`).toString("base64");
   const res = await fetchJson<T>(url.toString(), {
@@ -147,7 +163,7 @@ export async function verifySite(creds: WooCreds): Promise<{ name?: string; curr
     }
     return { name: data.environment?.site_url, version: data.environment?.version, currency: data.settings?.currency, weightUnit };
   } catch (e) {
-    if (e instanceof HttpError && e.status === 401) throw e;
+    if (e instanceof HttpError && (e.status === 401 || e.status === 409)) throw e;
     // A read-only key may not see system_status; a product listing proves the keys work.
     const probe = await request<unknown>(creds, "products", { query: { per_page: "1" } });
     expectArray(probe.data, "products", new URL(creds.siteUrl).host);
