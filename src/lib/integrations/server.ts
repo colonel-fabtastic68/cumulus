@@ -138,31 +138,63 @@ export function isIntegrationId(id: string): id is IntegrationId {
   return ["shopify", "woocommerce", "quickbooks", "square", "shippo", "easypost"].includes(id);
 }
 
-/** Bounded fetch with a JSON body and a readable error for non-2xx responses. */
+export const USER_AGENT = "Cumulus/0.1 (+https://github.com/colonel-fabtastic68/cumulus)";
+
+/**
+ * Bounded fetch that expects JSON back. Non-2xx answers and non-JSON bodies
+ * (a login page, a bot challenge, a "coming soon" screen) become readable
+ * errors instead of leaking into callers as strings.
+ */
 export async function fetchJson<T>(url: string, init: RequestInit & { timeoutMs?: number } = {}): Promise<{ data: T; headers: Headers; status: number }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), init.timeoutMs ?? 25_000);
+  const host = new URL(url).host;
   try {
-    const res = await fetch(url, { ...init, signal: controller.signal });
+    const headers = new Headers(init.headers);
+    if (!headers.has("user-agent")) headers.set("User-Agent", USER_AGENT);
+    if (!headers.has("accept")) headers.set("Accept", "application/json");
+    const res = await fetch(url, { ...init, headers, signal: controller.signal });
+    if (res.status >= 300 && res.status < 400) {
+      throw new HttpError(502, `${host} redirected the API call to ${res.headers.get("location") ?? "another page"} instead of answering it. The REST API is not being served at that address.`);
+    }
     const text = await res.text();
     let data: unknown = null;
+    let isJson = false;
     try {
       data = text ? JSON.parse(text) : null;
+      isJson = true;
     } catch {
       data = text;
     }
     if (!res.ok) {
-      const detail = typeof data === "string" ? data.slice(0, 300) : describeApiError(data);
-      throw new HttpError(res.status === 401 || res.status === 403 ? 401 : 502, `${new URL(url).host} answered ${res.status}${detail ? `: ${detail}` : ""}`);
+      const detail = isJson ? describeApiError(data) : summarizeHtml(text);
+      throw new HttpError(res.status === 401 || res.status === 403 ? 401 : 502, `${host} answered ${res.status}${detail ? `: ${detail}` : ""}`);
+    }
+    if (!isJson && text.trim()) {
+      throw new HttpError(502, `${host} answered with a web page instead of API data${summarizeHtml(text) ? ` (${summarizeHtml(text)})` : ""}. A security plugin, bot protection, password protection or a "coming soon" mode is probably intercepting REST API requests.`);
     }
     return { data: data as T, headers: res.headers, status: res.status };
   } catch (e) {
     if (e instanceof HttpError) throw e;
-    if ((e as Error).name === "AbortError") throw new HttpError(504, `${new URL(url).host} did not answer in time.`);
-    throw new HttpError(502, `Could not reach ${new URL(url).host}: ${e instanceof Error ? e.message : String(e)}`);
+    if ((e as Error).name === "AbortError") throw new HttpError(504, `${host} did not answer in time.`);
+    throw new HttpError(502, `Could not reach ${host}: ${e instanceof Error ? e.message : String(e)}`);
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** The <title> of an HTML answer, or its first words, for error messages. */
+function summarizeHtml(text: string): string {
+  const title = /<title[^>]*>([^<]{1,120})<\/title>/i.exec(text)?.[1]?.trim();
+  if (title) return title;
+  const words = text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return words.slice(0, 80);
+}
+
+/** Guards list endpoints: anything but an array means the platform answered with something unexpected. */
+export function expectArray<T>(data: unknown, what: string, host: string): T[] {
+  if (Array.isArray(data)) return data as T[];
+  throw new HttpError(502, `${host} did not return a list of ${what} (got ${data === null ? "nothing" : typeof data}).`);
 }
 
 function describeApiError(data: unknown): string {

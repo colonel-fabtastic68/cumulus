@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { HttpError, fetchJson, safeEqual } from "./server";
+import { HttpError, expectArray, fetchJson, safeEqual } from "./server";
 
 /** Shopify Admin REST API client. Needs a custom app's Admin API access token. */
 
@@ -89,8 +89,8 @@ async function paginate<T>(creds: ShopifyCreds, path: string, key: string, query
   let pageInfo: string | undefined;
   for (let page = 0; page < 200; page++) {
     const q: Record<string, string> = pageInfo ? { limit: query.limit ?? "250", page_info: pageInfo } : { ...query, limit: query.limit ?? "250" };
-    const { data, headers } = await request<Record<string, T[]>>(creds, path, { query: q });
-    out.push(...(data[key] ?? []));
+    const { data, headers } = await request<Record<string, unknown>>(creds, path, { query: q });
+    for (const row of expectArray<T>(data?.[key] ?? [], key, creds.shop)) out.push(row);
     const link = headers.get("link") ?? "";
     const next = /<[^>]*[?&]page_info=([^&>]+)[^>]*>;\s*rel="next"/.exec(link);
     if (!next) break;
@@ -129,7 +129,8 @@ export async function setInventoryLevel(creds: ShopifyCreds, inventoryItemId: st
 }
 
 export async function createWebhook(creds: ShopifyCreds, topic: string, address: string): Promise<string> {
-  const { data } = await request<{ webhook: { id: number } }>(creds, "webhooks.json", { method: "POST", body: { webhook: { topic, address, format: "json" } } });
+  const { data } = await request<{ webhook?: { id?: number } }>(creds, "webhooks.json", { method: "POST", body: { webhook: { topic, address, format: "json" } } });
+  if (typeof data?.webhook?.id !== "number") throw new HttpError(502, `${creds.shop} did not confirm the ${topic} webhook.`);
   return String(data.webhook.id);
 }
 

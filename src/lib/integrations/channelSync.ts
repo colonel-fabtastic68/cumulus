@@ -35,10 +35,18 @@ function shopifyCreds(integration: Integration, secrets: Secrets): shopify.Shopi
   return { shop, accessToken: secrets.accessToken };
 }
 
-function wooCreds(integration: Integration, secrets: Secrets): woo.WooCreds {
+/** Connections made before permalink detection existed learn their REST style on first use. */
+async function wooCreds(ctx: ServerContext, integration: Integration, secrets: Secrets): Promise<woo.WooCreds> {
   const siteUrl = integration.config?.siteUrl;
   if (!siteUrl || !secrets.consumerKey || !secrets.consumerSecret) throw new HttpError(409, "WooCommerce credentials are incomplete; connect it again.");
-  return { siteUrl, consumerKey: secrets.consumerKey, consumerSecret: secrets.consumerSecret };
+  let plainPermalinks = integration.config?.plainPermalinks === "1";
+  if (integration.config?.plainPermalinks === undefined) {
+    plainPermalinks = (await woo.detectPermalinks(siteUrl)).plainPermalinks;
+    const config = { ...(integration.config ?? {}), plainPermalinks: plainPermalinks ? "1" : "0" };
+    integration.config = config;
+    await ctx.store.patch("integrations", integration.id, { config });
+  }
+  return { siteUrl, consumerKey: secrets.consumerKey, consumerSecret: secrets.consumerSecret, plainPermalinks };
 }
 
 // ---- products ------------------------------------------------------------------
@@ -120,7 +128,7 @@ function wooRows(list: Array<{ product: woo.WooProduct; variation?: woo.WooVaria
 
 async function syncProducts(ctx: ServerContext, integration: Integration, secrets: Secrets): Promise<NonNullable<SyncResult["products"]>> {
   const id = integration.id as ChannelId;
-  const { rows, skippedNoSku } = id === "shopify" ? shopifyRows(await shopify.listProducts(shopifyCreds(integration, secrets))) : wooRows(await woo.listProducts(wooCreds(integration, secrets)), integration.config?.weightUnit);
+  const { rows, skippedNoSku } = id === "shopify" ? shopifyRows(await shopify.listProducts(shopifyCreds(integration, secrets))) : wooRows(await woo.listProducts(await wooCreds(ctx, integration, secrets)), integration.config?.weightUnit);
   const firstSync = !integration.lastSyncAt;
   const takeStock = firstSync && integration.settings?.takeStockOnFirstSync === true;
   const result = await importItems(ctx.store, ctx.actor, rows.map((r) => (takeStock ? r.row : { ...r.row, qty: undefined })), { setQuantities: takeStock });
@@ -239,7 +247,7 @@ async function upsertIncoming(ctx: ServerContext, integration: Integration, inco
 
 async function syncOrders(ctx: ServerContext, integration: Integration, secrets: Secrets): Promise<NonNullable<SyncResult["orders"]>> {
   const id = integration.id as ChannelId;
-  const incoming = id === "shopify" ? (await shopify.listOpenOrders(shopifyCreds(integration, secrets))).map(fromShopifyOrder) : (await woo.listOpenOrders(wooCreds(integration, secrets))).map(fromWooOrder);
+  const incoming = id === "shopify" ? (await shopify.listOpenOrders(shopifyCreds(integration, secrets))).map(fromShopifyOrder) : (await woo.listOpenOrders(await wooCreds(ctx, integration, secrets))).map(fromWooOrder);
   const items = await ctx.store.list("items");
   const orders = await ctx.store.list("orders");
   const existing = new Map(orders.filter((o) => o.channel === id && o.externalId).map((o) => [o.externalId!, o.id]));
@@ -313,7 +321,7 @@ export async function pushStockToChannel(ctx: ServerContext, integration: Integr
       }
     }
   } else {
-    const creds = wooCreds(integration, secrets);
+    const creds = await wooCreds(ctx, integration, secrets);
     for (const item of items) {
       const ref = item.channels!.woocommerce!;
       try {

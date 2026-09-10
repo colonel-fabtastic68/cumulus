@@ -161,9 +161,9 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
   const store = useStore();
   const toast = useToast();
   const [settings, setSettings] = useState<IntegrationSettings>(() => ({ ...defaultSettings(def), ...(integration.settings ?? {}) }));
-  const [busy, setBusy] = useState<"sync" | "save" | "disconnect" | "push" | null>(null);
+  const [busy, setBusy] = useState<"sync" | "save" | "disconnect" | "push" | "reconnect" | null>(null);
   const [confirm, setConfirm] = useState(false);
-  const [reconnect, setReconnect] = useState(false);
+  const [replace, setReplace] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "critical" | "info"; text: string } | null>(integration.lastError ? { tone: "critical", text: integration.lastError } : null);
   const dirty = JSON.stringify(settings) !== JSON.stringify({ ...defaultSettings(def), ...(integration.settings ?? {}) });
 
@@ -195,10 +195,18 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
       return `Pushed ${r.pushed} stock levels${r.skipped ? `, ${r.skipped} skipped` : ""}${r.errors.length ? ` · ${r.errors.slice(0, 2).join("; ")}` : ""}`;
     });
 
+  // Re-verifies with the stored credentials and registers the webhooks again (settings changes need this too).
+  const reconnect = () =>
+    run("reconnect", async () => {
+      const res = await api<{ integration: Integration }>(`/api/integrations/${def.id}/connect`, { credentials: {}, settings });
+      const hooks = res.integration.webhooks?.length ?? 0;
+      return res.integration.lastError ? `Reconnected with a warning: ${res.integration.lastError}` : `Reconnected · ${hooks} webhook${hooks === 1 ? "" : "s"} registered`;
+    });
+
   const save = () =>
     run("save", async () => {
       await store.patch("integrations", def.id, { settings: { ...(integration.settings ?? {}), ...settings } });
-      return "Settings saved. Webhook topics update the next time you reconnect.";
+      return "Settings saved. Press Reconnect to update the webhooks to match.";
     });
 
   const disconnect = async () => {
@@ -257,14 +265,19 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
         </div>
       )}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
-        <Button size="sm" variant="plain" onClick={() => setReconnect((v) => !v)}>
-          {reconnect ? "Keep current credentials" : "Replace credentials"}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" icon={<Plug />} onClick={() => void reconnect()} loading={busy === "reconnect"} disabled={busy !== null}>
+            Reconnect
+          </Button>
+          <Button size="sm" variant="plain" onClick={() => setReplace((v) => !v)}>
+            {replace ? "Keep current credentials" : "Replace credentials"}
+          </Button>
+        </div>
         <Button size="sm" icon={<Unplug />} className="text-critical" onClick={() => setConfirm(true)} disabled={busy !== null}>
           Disconnect
         </Button>
       </div>
-      {reconnect && <ConnectForm def={def} integration={integration} onClose={onClose} />}
+      {replace && <ConnectForm def={def} integration={integration} onClose={onClose} />}
       <ConfirmDialog open={confirm} onClose={() => setConfirm(false)} onConfirm={() => void disconnect()} destructive title={`Disconnect ${def.name}?`} confirmLabel="Disconnect" loading={busy === "disconnect"} message={<>The stored credentials are deleted and the webhooks removed. Items, orders and shipments already in Cumulus stay as they are.</>} />
     </>
   );

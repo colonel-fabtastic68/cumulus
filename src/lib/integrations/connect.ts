@@ -59,9 +59,10 @@ export async function connectIntegration(ctx: ServerContext, req: Request, id: I
     const consumerKey = clean(creds.consumerKey) || previous?.consumerKey || "";
     const consumerSecret = clean(creds.consumerSecret) || previous?.consumerSecret || "";
     if (!consumerKey || !consumerSecret) throw new HttpError(400, "Enter the consumer key and consumer secret.");
-    const wc = { siteUrl, consumerKey, consumerSecret };
+    const { plainPermalinks } = await woo.detectPermalinks(siteUrl);
+    const wc: woo.WooCreds = { siteUrl, consumerKey, consumerSecret, plainPermalinks };
     const info = await woo.verifySite(wc);
-    Object.assign(config, { siteUrl, ...(info.name ? { siteName: info.name } : {}), ...(info.currency ? { currency: info.currency } : {}), ...(info.weightUnit ? { weightUnit: info.weightUnit } : {}), ...(info.version ? { version: info.version } : {}) });
+    Object.assign(config, { siteUrl, ...(plainPermalinks ? { plainPermalinks: "1" } : {}), ...(info.name ? { siteName: info.name } : {}), ...(info.currency ? { currency: info.currency } : {}), ...(info.weightUnit ? { weightUnit: info.weightUnit } : {}), ...(info.version ? { version: info.version } : {}) });
     secrets.consumerKey = consumerKey;
     secrets.consumerSecret = consumerSecret;
     const url = `${base}/api/integrations/woocommerce/webhook?ws=${encodeURIComponent(ctx.workspaceId)}&t=${secrets.webhookToken}`;
@@ -116,7 +117,7 @@ async function removeWebhooks(existing: Integration | null, secrets: Secrets | n
   for (const hook of existing.webhooks) {
     try {
       if (id === "shopify" && existing.config?.shop && secrets.accessToken) await shopify.deleteWebhook({ shop: existing.config.shop, accessToken: secrets.accessToken }, hook.id);
-      else if (id === "woocommerce" && existing.config?.siteUrl && secrets.consumerKey && secrets.consumerSecret) await woo.deleteWebhook({ siteUrl: existing.config.siteUrl, consumerKey: secrets.consumerKey, consumerSecret: secrets.consumerSecret }, hook.id);
+      else if (id === "woocommerce" && existing.config?.siteUrl && secrets.consumerKey && secrets.consumerSecret) await woo.deleteWebhook({ siteUrl: existing.config.siteUrl, consumerKey: secrets.consumerKey, consumerSecret: secrets.consumerSecret, plainPermalinks: existing.config.plainPermalinks === "1" }, hook.id);
       else if (isCarrier(id) && secrets.token) await CARRIERS[id].removeWebhook(secrets.token, hook.id);
     } catch {
       // Best effort: a webhook that is already gone is fine.
