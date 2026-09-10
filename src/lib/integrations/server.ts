@@ -1,9 +1,9 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { getAuth } from "firebase-admin/auth";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import type { Integration, IntegrationId, Member } from "@/lib/types";
 import type { Actor } from "@/lib/inventory";
 import { AdminFirestoreStore, adminApp, readServiceAccount, type ServiceAccount } from "@/lib/mcp/adminStore";
+import { verifyFirebaseIdToken } from "./verifyIdToken";
 
 /**
  * Shared plumbing for the integration and shipping API routes: the caller's
@@ -54,7 +54,7 @@ export async function authenticate(req: Request, opts: { write?: boolean; manage
   if (!workspaceId || !/^[A-Za-z0-9_-]{1,128}$/.test(workspaceId)) throw new HttpError(400, "Missing workspace.");
   let uid: string;
   try {
-    uid = (await getAuth(adminApp(sa)).verifyIdToken(token)).uid;
+    uid = (await verifyFirebaseIdToken(token, sa.project_id)).uid;
   } catch {
     throw new HttpError(401, "Your session has expired. Sign in again.");
   }
