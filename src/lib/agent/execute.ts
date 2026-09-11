@@ -43,7 +43,11 @@ import type { AgentToolName } from "./tools";
 export interface ExecContext {
   store: Store;
   actor: Actor;
+  /** Calls the app's own API as the signed-in user (hosted mode only); syncs need it. */
+  api?: <T = unknown>(path: string, body?: unknown) => Promise<T>;
 }
+
+const CHANNEL_NAMES: Record<string, string> = { shopify: "Shopify", woocommerce: "WooCommerce", shippo: "Shippo", easypost: "EasyPost", quickbooks: "QuickBooks", square: "Square" };
 
 type Filter = {
   query?: string;
@@ -234,6 +238,42 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
           .filter((c) => c.status === "connected" || c.status === "error")
           .map((c) => ({ platform: c.id, status: c.status, where: c.config?.shop ?? c.config?.siteUrl ?? c.config?.account, lastSyncAt: c.lastSyncAt?.slice(0, 16), lastSync: c.lastSyncSummary, syncs: c.settings, linkedItems: items.filter((i) => !!i.channels?.[c.id as "shopify" | "woocommerce"]).length, lastError: c.lastError })),
       };
+    }
+
+    case "getConnections": {
+      const [integrations, items] = await Promise.all([store.list("integrations"), store.list("items")]);
+      return integrations
+        .filter((c) => c.status !== "not_connected" || Object.keys(c.config ?? {}).length > 0)
+        .map((c) => {
+          const channel = c.id === "shopify" || c.id === "woocommerce";
+          const linked = channel ? items.filter((i) => !!i.channels?.[c.id as "shopify" | "woocommerce"]) : [];
+          const notInStore = channel ? items.filter((i) => i.status === "active" && !i.channels?.[c.id as "shopify" | "woocommerce"]) : [];
+          return {
+            platform: CHANNEL_NAMES[c.id] ?? c.id,
+            id: c.id,
+            status: c.status,
+            where: c.config?.shop ?? c.config?.siteUrl ?? c.config?.account,
+            connectedAt: c.connectedAt?.slice(0, 16),
+            lastSyncAt: c.lastSyncAt?.slice(0, 16),
+            lastSyncResult: c.lastSyncSummary,
+            lastError: c.lastError,
+            settings: c.settings,
+            webhooks: c.webhooks?.map((w) => w.topic),
+            ...(channel ? { linkedItems: linked.length, notInStore: notInStore.length, notInStoreSkus: notInStore.slice(0, 20).map((i) => i.sku) } : {}),
+          };
+        });
+    }
+
+    case "syncChannel": {
+      const channel = String(input.channel);
+      if (!ctx.api) throw new InventoryError("Syncing runs in the hosted app with a signed-in account; this session cannot reach the connection.");
+      const integration = await store.get("integrations", channel as "shopify" | "woocommerce");
+      if (!integration || integration.status === "not_connected") throw new InventoryError(`${CHANNEL_NAMES[channel] ?? channel} is not connected. Connect it under Integrations first.`);
+      const body: Record<string, boolean> = {};
+      for (const k of ["products", "orders", "pushStock", "pushProducts"] as const) if (typeof input[k] === "boolean") body[k] = input[k] as boolean;
+      const res = await ctx.api<{ summary: string; orders?: { warnings: string[] }; products?: { created: number; linked: number; errors: string[] }; push?: { pushed: number; errors: string[] } }>(`/api/integrations/${channel}/sync`, body);
+      const warnings = [...(res.orders?.warnings ?? []), ...(res.products?.errors ?? []), ...(res.push?.errors ?? [])];
+      return { ok: true, summary: res.summary, stockPushed: res.push?.pushed, productsCreated: res.products?.created, warnings: warnings.slice(0, 10) };
     }
 
     case "searchItems": {
@@ -689,6 +729,19 @@ export async function describeProposal(name: AgentToolName, rawInput: unknown, c
       case "createItems": {
         const specs = (input.items as Array<Record<string, unknown>>) ?? [];
         return { title: `Create ${specs.length} item${specs.length === 1 ? "" : "s"}`, lines: specs.slice(0, 20).map((s) => `${s.sku} · ${s.name}${s.openingQty ? ` · opening ${s.openingQty}` : ""}`) };
+      }
+      case "syncChannel": {
+        const channel = CHANNEL_NAMES[String(input.channel)] ?? String(input.channel);
+        const integration = await ctx.store.get("integrations", String(input.channel) as "shopify" | "woocommerce");
+        const s = integration?.settings ?? {};
+        const on = (v: unknown, fallback: boolean | undefined) => (typeof v === "boolean" ? v : fallback);
+        const steps = [
+          on(input.products, s.syncProducts !== false) ? "Pull products in" : null,
+          on(input.orders, s.syncOrders !== false) ? "Pull open orders in" : null,
+          on(input.pushProducts, s.pushProducts) ? "Create items the store does not have yet" : null,
+          on(input.pushStock, s.pushStock) ? "Push stock levels out" : null,
+        ].filter((x): x is string => Boolean(x));
+        return { title: `Sync ${channel} now`, lines: steps.length ? steps : ["Nothing selected to sync"] };
       }
       case "adjustStock": {
         const adj = (input.adjustments as Array<Record<string, unknown>>) ?? [];

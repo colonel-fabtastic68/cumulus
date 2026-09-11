@@ -72,8 +72,22 @@ const bulkChange = {
 export const agentTools = {
   // ---- READ -----------------------------------------------------------------
   getWorkspaceSummary: tool({
-    description: "Overview of the workspace: item counts, inventory value, low-stock count, open orders/RMAs, categories and suppliers. Call this first when you need context.",
+    description: "Overview of the workspace: item counts, inventory value, low-stock count, open orders/RMAs, categories, suppliers and live connections. Call this first when you need context.",
     inputSchema: z.object({}),
+  }),
+  getConnections: tool({
+    description: "The workspace's live connections (Shopify, WooCommerce, Shippo, EasyPost): status, store, what syncs, last sync and its result, last error, how many items are linked and which items are not yet in the store. Never includes credentials.",
+    inputSchema: z.object({}),
+  }),
+  syncChannel: tool({
+    description: "Run a sales-channel sync now: products and open orders in from the store, and optionally push stock levels and new items out. Only works in the hosted app with the channel connected.",
+    inputSchema: z.object({
+      channel: z.enum(["shopify", "woocommerce"]),
+      products: z.boolean().optional().describe("Pull products in (default: the connection's setting)"),
+      orders: z.boolean().optional().describe("Pull open orders in (default: the connection's setting)"),
+      pushStock: z.boolean().optional().describe("Push on-hand counts out for linked items"),
+      pushProducts: z.boolean().optional().describe("Create items the store does not have yet"),
+    }),
   }),
   searchItems: tool({
     description: "Search and filter items in ONE call. Pass a list of SKUs to look several up at once, or a filter. Returns SKU, name, type, category, on-hand, min/max, cost, price, supplier, lead time, status. Use limit to keep results small.",
@@ -208,7 +222,7 @@ export const agentTools = {
 export type AgentTools = typeof agentTools;
 export type AgentToolName = keyof AgentTools;
 
-export const READ_TOOLS: AgentToolName[] = ["getWorkspaceSummary", "searchItems", "getItem", "explodeBom", "whereUsed", "getReport", "previewBulkUpdate"];
+export const READ_TOOLS: AgentToolName[] = ["getWorkspaceSummary", "getConnections", "searchItems", "getItem", "explodeBom", "whereUsed", "getReport", "previewBulkUpdate"];
 export const WRITE_TOOLS: AgentToolName[] = [
   "bulkUpdateItems",
   "createItems",
@@ -223,6 +237,7 @@ export const WRITE_TOOLS: AgentToolName[] = [
   "resolveRma",
   "upsertSupplier",
   "deleteItems",
+  "syncChannel",
 ];
 
 export function isWriteTool(name: string): name is AgentToolName {
@@ -232,6 +247,8 @@ export function isWriteTool(name: string): name is AgentToolName {
 /** Human labels for proposal cards. */
 export const TOOL_LABELS: Record<AgentToolName, string> = {
   getWorkspaceSummary: "Workspace summary",
+  getConnections: "Connections",
+  syncChannel: "Sync channel",
   searchItems: "Search items",
   getItem: "Item detail",
   explodeBom: "Explode BOM",

@@ -161,6 +161,54 @@ export async function createProduct(creds: ShopifyCreds, p: NewShopifyProduct): 
   return { productId: String(created.id), variantId: String(v.id), inventoryItemId: v.inventory_item_id ? String(v.inventory_item_id) : undefined };
 }
 
+async function graphql<T>(creds: ShopifyCreds, query: string, variables: Record<string, unknown> = {}): Promise<T> {
+  const { data } = await fetchJson<{ data?: T; errors?: Array<{ message?: string }> }>(`https://${creds.shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+    method: "POST",
+    headers: { "X-Shopify-Access-Token": creds.accessToken, "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ query, variables }),
+  });
+  if (data.errors?.length) throw new HttpError(502, `${creds.shop} GraphQL: ${data.errors.map((e) => e.message).filter(Boolean).join("; ")}`);
+  if (!data.data) throw new HttpError(502, `${creds.shop} GraphQL returned no data`);
+  return data.data;
+}
+
+const gidTail = (gid: string) => gid.slice(gid.lastIndexOf("/") + 1);
+
+export interface ShopifyRef {
+  productId: string;
+  variantId: string;
+  inventoryItemId?: string;
+}
+
+/** Finds variants by SKU without paging the whole catalogue. */
+export async function findVariantsBySku(creds: ShopifyCreds, skus: string[]): Promise<Map<string, ShopifyRef>> {
+  const out = new Map<string, ShopifyRef>();
+  for (let i = 0; i < skus.length; i += 25) {
+    const chunk = skus.slice(i, i + 25);
+    const search = chunk.map((s) => `sku:${JSON.stringify(s)}`).join(" OR ");
+    const res = await graphql<{ productVariants: { nodes: Array<{ id: string; sku: string | null; product: { id: string }; inventoryItem: { id: string } | null }> } }>(creds, `query($q: String!) { productVariants(first: 100, query: $q) { nodes { id sku product { id } inventoryItem { id } } } }`, { q: search });
+    for (const v of res.productVariants.nodes) {
+      if (!v.sku) continue;
+      out.set(v.sku.trim().toUpperCase(), { productId: gidTail(v.product.id), variantId: gidTail(v.id), inventoryItemId: v.inventoryItem ? gidTail(v.inventoryItem.id) : undefined });
+    }
+  }
+  return out;
+}
+
+/** Sets available quantities for many inventory items in one mutation per 250. */
+export async function setInventoryQuantities(creds: ShopifyCreds, locationId: string, entries: Array<{ inventoryItemId: string; quantity: number }>): Promise<void> {
+  for (let i = 0; i < entries.length; i += 250) {
+    const quantities = entries.slice(i, i + 250).map((e) => ({ inventoryItemId: `gid://shopify/InventoryItem/${e.inventoryItemId}`, locationId: `gid://shopify/Location/${locationId}`, quantity: Math.max(0, Math.round(e.quantity)) }));
+    const res = await graphql<{ inventorySetQuantities: { userErrors: Array<{ field?: string[]; message: string }> } }>(
+      creds,
+      `mutation($input: InventorySetQuantitiesInput!) { inventorySetQuantities(input: $input) { userErrors { field message } } }`,
+      { input: { name: "available", reason: "correction", ignoreCompareQuantity: true, quantities } },
+    );
+    const errors = res.inventorySetQuantities.userErrors;
+    if (errors.length) throw new HttpError(502, `${creds.shop} rejected the stock update: ${errors.map((e) => e.message).join("; ")}`);
+  }
+}
+
 export async function setInventoryLevel(creds: ShopifyCreds, inventoryItemId: string, locationId: string, available: number): Promise<void> {
   await request(creds, "inventory_levels/set.json", { method: "POST", body: { location_id: Number(locationId), inventory_item_id: Number(inventoryItemId), available: Math.max(0, Math.round(available)) } });
 }

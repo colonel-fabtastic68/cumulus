@@ -8,6 +8,7 @@ import { Badge, Banner, Button, IconButton, Markdown, Menu, useToast } from "@/c
 import { agentTools, isWriteTool, TOOL_LABELS, type AgentToolName } from "@/lib/agent/tools";
 import { describeProposal, executeTool, previewPatches, PREVIEWABLE_TOOLS } from "@/lib/agent/execute";
 import { buildAgentContext } from "@/lib/agent/context";
+import { useApi } from "@/lib/api-client";
 import { useCollection, usePreview, useSettings, useStore } from "@/lib/store/provider";
 import { useCurrentUser, canWrite } from "@/lib/auth";
 import type { AgentSession, Item } from "@/lib/types";
@@ -109,7 +110,8 @@ function AgentChat({ onClose, pending, consumePending, pendingSession, consumePe
     latestBody.userName = user.name;
     latestBody.autoApprove = autoApprove;
   }, [context, user.name, autoApprove]);
-  const execCtx = useMemo(() => ({ store, actor: { id: user.id, name: user.name } }), [store, user.id, user.name]);
+  const api = useApi();
+  const execCtx = useMemo(() => ({ store, actor: { id: user.id, name: user.name }, api }), [store, user.id, user.name, api]);
 
   const transport = useMemo(
     () =>

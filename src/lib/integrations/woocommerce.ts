@@ -292,6 +292,40 @@ export async function createProduct(creds: WooCreds, p: NewWooProduct): Promise<
   return { id: String(data.id) };
 }
 
+export interface WooRef {
+  productId: string;
+  variationId?: string;
+}
+
+/** Looks up store records for a set of SKUs in one call (variations come back as type "variation" with a parent_id). */
+export async function findProductsBySku(creds: WooCreds, skus: string[]): Promise<Map<string, WooRef>> {
+  const out = new Map<string, WooRef>();
+  for (let i = 0; i < skus.length; i += 50) {
+    const chunk = skus.slice(i, i + 50);
+    const { data } = await request<unknown>(creds, "products", { query: { sku: chunk.join(","), per_page: "100", status: "any" } });
+    for (const p of expectArray<WooProduct & { parent_id?: number }>(data, "products", new URL(creds.siteUrl).host)) {
+      if (!p.sku) continue;
+      out.set(p.sku.trim().toUpperCase(), p.type === "variation" && p.parent_id ? { productId: String(p.parent_id), variationId: String(p.id) } : { productId: String(p.id) });
+    }
+  }
+  return out;
+}
+
+/** Sets stock on many products with the batch endpoints: one call per 100 simple products, one per parent for variations. */
+export async function batchUpdateStock(creds: WooCreds, updates: Array<WooRef & { qty: number }>): Promise<void> {
+  const simple = updates.filter((u) => !u.variationId);
+  for (let i = 0; i < simple.length; i += 100) {
+    await request(creds, "products/batch", { method: "POST", body: { update: simple.slice(i, i + 100).map((u) => ({ id: Number(u.productId), manage_stock: true, stock_quantity: Math.max(0, Math.round(u.qty)) })) } });
+  }
+  const byParent = new Map<string, Array<WooRef & { qty: number }>>();
+  for (const u of updates) if (u.variationId) byParent.set(u.productId, [...(byParent.get(u.productId) ?? []), u]);
+  for (const [parent, list] of byParent) {
+    for (let i = 0; i < list.length; i += 100) {
+      await request(creds, `products/${parent}/variations/batch`, { method: "POST", body: { update: list.slice(i, i + 100).map((u) => ({ id: Number(u.variationId), manage_stock: true, stock_quantity: Math.max(0, Math.round(u.qty)) })) } });
+    }
+  }
+}
+
 export async function updateStock(creds: WooCreds, productId: string, variationId: string | undefined, qty: number): Promise<void> {
   const path = variationId ? `products/${productId}/variations/${variationId}` : `products/${productId}`;
   await request(creds, path, { method: "PUT", body: { manage_stock: true, stock_quantity: Math.max(0, Math.round(qty)) } });

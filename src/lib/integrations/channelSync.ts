@@ -292,15 +292,30 @@ export async function syncChannel(ctx: ServerContext, integration: Integration, 
   return result;
 }
 
-/** Push on-hand counts to the channel for the given items (or every linked item). */
+/** Runs `fn` over `list` with at most `limit` in flight, keeping result order. */
+async function mapConcurrent<T, R>(list: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(list.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < list.length) {
+      const i = next++;
+      results[i] = await fn(list[i]!);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, list.length) }, worker));
+  return results;
+}
+
+/** Push on-hand counts to the channel for the given items (or every linked item), in as few calls as the platform allows. */
 export async function pushStockToChannel(ctx: ServerContext, integration: Integration, secrets: Secrets, itemIds?: string[]): Promise<{ pushed: number; skipped: number; errors: string[] }> {
   const id = integration.id as ChannelId;
-  const items = (await ctx.store.list("items")).filter((i) => (!itemIds || itemIds.includes(i.id)) && !!i.channels?.[id]);
-  const locations = await ctx.store.list("locations");
+  const [allItems, locations] = await Promise.all([ctx.store.list("items"), ctx.store.list("locations")]);
+  const items = allItems.filter((i) => (!itemIds || itemIds.includes(i.id)) && !!i.channels?.[id]);
   const homeId = defaultLocation(locations).location.id;
   const locationId = integration.settings?.locationId;
   const qtyFor = (item: Item) => (locationId ? qtyAt(item, locationId, homeId) : item.onHand);
   const out = { pushed: 0, skipped: 0, errors: [] as string[] };
+  if (items.length === 0) return out;
   if (id === "shopify") {
     const creds = shopifyCreds(integration, secrets);
     let channelLocationId = integration.settings?.channelLocationId;
@@ -310,29 +325,21 @@ export async function pushStockToChannel(ctx: ServerContext, integration: Integr
       if (!channelLocationId) throw new HttpError(409, "Shopify has no active location to push stock to.");
       await ctx.store.patch("integrations", id, { settings: { ...(integration.settings ?? {}), channelLocationId } });
     }
-    for (const item of items) {
-      const ref = item.channels!.shopify!;
-      if (!ref.inventoryItemId) {
-        out.skipped++;
-        continue;
-      }
-      try {
-        await shopify.setInventoryLevel(creds, ref.inventoryItemId, channelLocationId, qtyFor(item));
-        out.pushed++;
-      } catch (e) {
-        out.errors.push(`${item.sku}: ${e instanceof Error ? e.message : String(e)}`);
-      }
+    const entries = items.filter((i) => i.channels!.shopify!.inventoryItemId).map((i) => ({ inventoryItemId: i.channels!.shopify!.inventoryItemId!, quantity: qtyFor(i) }));
+    out.skipped = items.length - entries.length;
+    try {
+      await shopify.setInventoryQuantities(creds, channelLocationId, entries);
+      out.pushed = entries.length;
+    } catch (e) {
+      out.errors.push(e instanceof Error ? e.message : String(e));
     }
   } else {
     const creds = await wooCreds(ctx, integration, secrets);
-    for (const item of items) {
-      const ref = item.channels!.woocommerce!;
-      try {
-        await woo.updateStock(creds, ref.productId, ref.variationId, qtyFor(item));
-        out.pushed++;
-      } catch (e) {
-        out.errors.push(`${item.sku}: ${e instanceof Error ? e.message : String(e)}`);
-      }
+    try {
+      await woo.batchUpdateStock(creds, items.map((i) => ({ ...i.channels!.woocommerce!, qty: qtyFor(i) })));
+      out.pushed = items.length;
+    } catch (e) {
+      out.errors.push(e instanceof Error ? e.message : String(e));
     }
   }
   return out;
@@ -356,34 +363,38 @@ export async function pushProductsToChannel(ctx: ServerContext, integration: Int
   const publish = integration.settings?.publishProducts === true;
   const ops: WriteOp[] = [];
 
+  const skus = items.map((i) => i.sku.trim());
   if (id === "shopify") {
     const creds = shopifyCreds(integration, secrets);
     // Existing store products that simply were never linked: match by SKU rather than creating twins.
-    const existing = new Map<string, NonNullable<Item["channels"]>["shopify"]>();
-    for (const p of await shopify.listProducts(creds)) for (const v of p.variants) if (v.sku?.trim()) existing.set(v.sku.trim().toUpperCase(), { productId: String(p.id), variantId: String(v.id), inventoryItemId: String(v.inventory_item_id) });
-    for (const item of items) {
+    const existing = await shopify.findVariantsBySku(creds, skus);
+    const stockEntries: Array<{ inventoryItemId: string; quantity: number }> = [];
+    await mapConcurrent(items, 4, async (item) => {
       try {
         let ref = existing.get(item.sku.toUpperCase());
         if (ref) out.linked++;
         else {
           ref = await shopify.createProduct(creds, { title: item.name, sku: item.sku, price: item.price, description: item.description, vendor: item.brand, productType: item.category, tags: item.tags, barcode: item.barcode, weight: item.weight, weightUnit: item.weightUnit, publish });
           out.created++;
-          const channelLocationId = integration.settings?.channelLocationId;
-          if (ref.inventoryItemId && channelLocationId && qtyFor(item) > 0) await shopify.setInventoryLevel(creds, ref.inventoryItemId, channelLocationId, qtyFor(item));
+          if (ref.inventoryItemId && qtyFor(item) > 0) stockEntries.push({ inventoryItemId: ref.inventoryItemId, quantity: qtyFor(item) });
         }
         ops.push({ op: "patch", collection: "items", id: item.id, patch: { channels: { ...(item.channels ?? {}), shopify: ref } } });
       } catch (e) {
         out.errors.push(`${item.sku}: ${e instanceof Error ? e.message : String(e)}`);
       }
+    });
+    const channelLocationId = integration.settings?.channelLocationId;
+    if (stockEntries.length && channelLocationId) {
+      try {
+        await shopify.setInventoryQuantities(creds, channelLocationId, stockEntries);
+      } catch (e) {
+        out.errors.push(`Stock on new products: ${e instanceof Error ? e.message : String(e)}`);
+      }
     }
   } else {
     const creds = await wooCreds(ctx, integration, secrets);
-    const existing = new Map<string, NonNullable<Item["channels"]>["woocommerce"]>();
-    for (const { product, variation } of await woo.listProducts(creds)) {
-      const sku = (variation ?? product).sku?.trim();
-      if (sku) existing.set(sku.toUpperCase(), { productId: String(product.id), variationId: variation ? String(variation.id) : undefined });
-    }
-    for (const item of items) {
+    const existing = await woo.findProductsBySku(creds, skus);
+    await mapConcurrent(items, 4, async (item) => {
       try {
         let ref = existing.get(item.sku.toUpperCase());
         if (ref) out.linked++;
@@ -396,7 +407,7 @@ export async function pushProductsToChannel(ctx: ServerContext, integration: Int
       } catch (e) {
         out.errors.push(`${item.sku}: ${e instanceof Error ? e.message : String(e)}`);
       }
-    }
+    });
   }
   if (ops.length) await ctx.store.batch(ops);
   return out;

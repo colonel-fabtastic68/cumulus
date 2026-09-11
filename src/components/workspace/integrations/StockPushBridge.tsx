@@ -5,7 +5,7 @@ import { useCollection, useItems } from "@/lib/store/provider";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/api-client";
 
-const DEBOUNCE_MS = 2500;
+const DEBOUNCE_MS = 1200;
 
 /**
  * Factor 40: when on-hand changes on an item linked to a channel that mirrors
