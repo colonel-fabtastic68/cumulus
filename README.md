@@ -62,6 +62,10 @@ Set `CUMULUS_MCP_TOKEN` to require a bearer token. To serve the **live workspace
 | 16 · Deactivating old part numbers | Superseded status with replacement link; agent sweep for inactive parts; bulk deactivate. |
 | 21 · Min/Max | Per item; Home + Reports → Low stock with reorder quantities grouped by supplier. |
 | Import / migration | Import → CSV with AI column mapping, preview, upsert by SKU. |
+| Exports | Exports → any dataset (items, ledger, orders, quotes, …) as CSV, TSV, Excel, JSON, JSON Lines, Markdown or a print view for PDF; whole company, a filter, or specific SKUs. Built in the browser, nothing uploaded. |
+| Nimbus · Chat | Full-page chat with saved conversations for the whole team, plus the docked panel (⌘J) on every page. |
+| Nimbus · Quotes | Quotes priced from your items, labour rate and margins; Nimbus drafts lines from a sentence; print/PDF, mark sent/accepted/declined, raise the sales order on acceptance. |
+| Nimbus · Projections | Stock, demand, value and cost projected from the ledger for the company, a category or a SKU; seasonality, growth and price/cost scenarios, or describe a what-if in words. |
 | 24 · Cross-referencing / part interchange | Item → Cross-references: OEM, aftermarket, competitor, supplier numbers and nicknames. Search, scan and Nimbus all match them; superseded numbers resolve to the replacement. |
 | 29 · Bins and locations | Settings → Locations (warehouses, stores, trucks, trailers). Stock is held per location with a bin per item; Item → Locations, inventory list filter by location, put-away bin on receiving. |
 | 30 · Warehouse transfers | Transfers page: pick, scan or paste a list, send between locations (in transit at neither end), receive with shortfalls written off. |
@@ -93,6 +97,10 @@ src/
   lib/store/            Store interface + LocalStore (localStorage) + FirestoreStore
   lib/inventory.ts      all mutations & reports (BOM explosion, receiving, builds, transfers, shipping, imports…)
   lib/kpis.ts           turnover, days on hand, fill rate, stockouts from the ledger
+  lib/quotes.ts         quote totals, drafting from Nimbus, status flow, order from quote
+  lib/projections.ts    rebuilt stock history + usage/seasonality/growth forecast
+  lib/export/           dataset tables, CSV/TSV/JSON/JSONL/Markdown/PDF, dependency-free XLSX + ZIP writers
+  lib/gemini.ts         structured Gemini calls (quote drafter, scenario reader) with model fallback
   lib/scan.ts           barcode / SKU / cross-reference matching
   lib/integrations/     server-side channel + carrier clients (Shopify, WooCommerce, Shippo, EasyPost)
   app/api/integrations  connect / disconnect / sync / webhook / push-stock / cron routes

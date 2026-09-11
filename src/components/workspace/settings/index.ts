@@ -7,3 +7,4 @@ export * from "./DataSection";
 export * from "./AboutSection";
 export * from "./LocationsSection";
 export * from "./ShippingSection";
+export * from "./QuotingSection";

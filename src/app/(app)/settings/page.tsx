@@ -5,7 +5,7 @@ import { useSettings } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { Banner, Page, Section } from "@/components/ui";
-import { AboutSection, AgentSection, CompanySection, DataSection, InventoryPolicySection, LocationsSection, ShippingSection } from "@/components/workspace/settings";
+import { AboutSection, AgentSection, CompanySection, DataSection, InventoryPolicySection, LocationsSection, QuotingSection, ShippingSection } from "@/components/workspace/settings";
 import { canManageTeam } from "@/components/workspace/team";
 
 function Row({ children }: { children: ReactNode }) {
@@ -56,6 +56,10 @@ export default function SettingsPage() {
           </Section>
         </Row>
         <Row>
+          <Section title="Quoting" description="Labour rate, margins, tax and terms that every quote starts from.">
+            <QuotingSection key={formKey} settings={settings} readOnly={readOnly} />
+          </Section>
+
           <Section title="Nimbus" description="Whether Nimbus may change data on its own, and whether the model is configured.">
             <AgentSection key={formKey} settings={settings} readOnly={readOnly} />
           </Section>

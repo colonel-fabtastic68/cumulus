@@ -178,5 +178,6 @@ export function emptySnapshot(): WorkspaceSnapshot {
     locations: [],
     transfers: [],
     shipments: [],
+    quotes: [],
   };
 }

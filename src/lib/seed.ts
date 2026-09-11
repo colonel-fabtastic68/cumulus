@@ -567,6 +567,7 @@ function generate(overrides: Map<string, { min: number; max: number }>, behind: 
     locations: [],
     transfers: [],
     shipments: [],
+    quotes: [],
   };
 }
 
@@ -644,6 +645,7 @@ export function freshWorkspace(opts: { members?: Member[]; companyName?: string;
     locations: [],
     transfers: [],
     shipments: [],
+    quotes: [],
   };
 }
 

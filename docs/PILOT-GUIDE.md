@@ -68,6 +68,12 @@ Try these, in your own words:
 - Shopify or WooCommerce: paste the API credentials from your store (the modal lists where to find them). Products come in by SKU, open orders become sales orders, and, when switched on, on-hand counts go back out.
 - Nothing is demo data: a fresh workspace stays empty until you connect or import.
 
+### 6f. Quotes, projections and exports (Nimbus menu, Exports)
+- Nimbus → Chat is the full-page conversation; every chat is saved for the team in the rail on the left.
+- Nimbus → Quotes → New quote: type what the customer wants ("12 overdrive pedals assembled and tested, 2 hours setup") and press Draft lines. Nimbus only uses your items and the labour rate from Settings → Quoting. Adjust, print (Save as PDF), mark sent, and on acceptance raise the sales order in one step.
+- Nimbus → Projections: pick the company, a category or a SKU and a horizon. Type a scenario ("orders up 25% through the holidays", "costs up 8% next quarter") and the dials move. Check the per-item table for run-out and order-by dates.
+- Exports: tick datasets, choose whole company / filter / specific SKUs (or select rows on Inventory → Export), pick CSV, Excel, JSON, JSON Lines, TSV, Markdown or PDF.
+
 ### 7. Reports
 - Low stock: are the days-of-cover and lead-time columns useful for deciding what to order first?
 - Shelf life: which batch has sat longest? Would you discount it?

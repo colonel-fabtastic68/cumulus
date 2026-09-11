@@ -71,16 +71,22 @@ export function AgentPanel() {
   );
 }
 
-interface AgentChatProps {
-  onClose: () => void;
+export interface AgentChatProps {
+  onClose?: () => void;
   pending: { prompt: string; send: boolean; nonce: number } | null;
   consumePending: () => void;
   pendingSession: { id: string; nonce: number } | null;
   consumePendingSession: () => void;
   pageContext: { page?: string; selectedSkus?: string[] };
+  /** "panel" is the docked column; "page" is the full-width chat on the Nimbus page. */
+  variant?: "panel" | "page";
+  /** Bump to start a fresh conversation from outside. */
+  newChatNonce?: number;
+  /** Told which saved conversation is open, so a rail can highlight it. */
+  onSessionChange?: (sessionId: string) => void;
 }
 
-function AgentChat({ onClose, pending, consumePending, pendingSession, consumePendingSession, pageContext }: AgentChatProps) {
+export function AgentChat({ onClose, pending, consumePending, pendingSession, consumePendingSession, pageContext, variant = "panel", newChatNonce, onSessionChange }: AgentChatProps) {
   const store = useStore();
   const user = useCurrentUser();
   const settings = useSettings();
@@ -206,11 +212,14 @@ function AgentChat({ onClose, pending, consumePending, pendingSession, consumePe
 
   const newChat = () => {
     stop();
-    setSessionId(newId("chat"));
+    const id = newId("chat");
+    setSessionId(id);
     setInitialMessages([]);
     setHistorical(false);
     setInput("");
     clearError();
+    onSessionChange?.(id);
+    textareaRef.current?.focus();
   };
 
   const loadSession = (s: AgentSession) => {
@@ -219,7 +228,21 @@ function AgentChat({ onClose, pending, consumePending, pendingSession, consumePe
     setInitialMessages(s.messages as AgentUIMessage[]);
     setHistorical(true);
     clearError();
+    onSessionChange?.(s.id);
   };
+
+  // "New chat" pressed in a rail outside this component.
+  useEffect(() => {
+    if (!newChatNonce) return;
+    const t = setTimeout(newChat, 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newChatNonce]);
+
+  useEffect(() => {
+    onSessionChange?.(sessionId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Open a saved conversation requested from elsewhere (e.g. the Agents page).
   useEffect(() => {
@@ -251,9 +274,11 @@ function AgentChat({ onClose, pending, consumePending, pendingSession, consumePe
   };
 
   const recent = [...sessions].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 12);
+  const page = variant === "page";
 
   return (
     <>
+      {!page && (
       <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface-subdued/80 px-3">
         <span className="flex h-7 w-7 items-center justify-center rounded-[8px] bg-accent-soft text-accent">
           <Sparkles className="h-4 w-4" />
@@ -292,22 +317,29 @@ function AgentChat({ onClose, pending, consumePending, pendingSession, consumePe
           <X className="h-4 w-4" />
         </IconButton>
       </div>
+      )}
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+      <div ref={scrollRef} className={cn("min-h-0 flex-1 overflow-y-auto", page ? "px-6 py-6" : "px-4 py-4")}>
+        <div className={cn(page && "mx-auto w-full max-w-[820px]")}>
         {needsKey && (
           <Banner tone="warning" title="Add a Gemini API key to enable Nimbus" className="mb-3">
             Create a key at aistudio.google.com/apikey, put it in <code>.env.local</code> as <code>GOOGLE_GENERATIVE_AI_API_KEY</code>, then restart <code>npm run dev</code>.
           </Banner>
         )}
         {messages.length === 0 ? (
-          <div className="flex h-full flex-col justify-end">
-            <div className="mb-4">
-              <div className="text-[15px] font-semibold">What should we do with the inventory?</div>
-              <p className="mt-1 text-[12.5px] text-text-secondary">I can read every item, BOM and movement, run reports, and make bulk changes. Changes are shown to you first.</p>
+          <div className={cn("flex flex-col", page ? "justify-center pt-10" : "h-full justify-end")}>
+            <div className={cn("mb-4", page && "text-center")}>
+              {page && (
+                <span className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-[12px] bg-accent-soft text-accent">
+                  <Sparkles className="h-5 w-5" />
+                </span>
+              )}
+              <div className={cn("font-semibold", page ? "text-[20px]" : "text-[15px]")}>What should we do with the inventory?</div>
+              <p className={cn("mt-1 text-text-secondary", page ? "text-[13.5px]" : "text-[12.5px]")}>I can read every item, BOM and movement, run reports, and make bulk changes. Changes are shown to you first.</p>
             </div>
-            <div className="flex flex-col gap-1.5">
+            <div className={cn("flex gap-1.5", page ? "flex-wrap justify-center" : "flex-col")}>
               {suggestions.map((s) => (
-                <button key={s} type="button" onClick={() => { setInput(s); textareaRef.current?.focus(); }} className="rounded-[var(--radius)] border border-border bg-surface px-3 py-2 text-left text-[12.5px] text-text-secondary hover:border-border-strong hover:text-text">
+                <button key={s} type="button" onClick={() => { setInput(s); textareaRef.current?.focus(); }} className={cn("rounded-[var(--radius)] border border-border bg-surface px-3 py-2 text-left text-[12.5px] text-text-secondary hover:border-border-strong hover:text-text", page && "max-w-[380px]")}>
                   {s}
                 </button>
               ))}
@@ -331,10 +363,11 @@ function AgentChat({ onClose, pending, consumePending, pendingSession, consumePe
             )}
           </div>
         )}
+        </div>
       </div>
 
-      <div className="shrink-0 border-t border-border p-3">
-        <div className="flex items-end gap-2 rounded-[var(--radius)] border border-border-strong/70 bg-surface p-1.5 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20">
+      <div className={cn("shrink-0 border-t border-border", page ? "px-6 py-4" : "p-3")}>
+        <div className={cn("flex items-end gap-2 rounded-[var(--radius)] border border-border-strong/70 bg-surface p-1.5 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20", page && "mx-auto w-full max-w-[820px]")}>
           <textarea
             ref={textareaRef}
             value={input}
@@ -359,7 +392,7 @@ function AgentChat({ onClose, pending, consumePending, pendingSession, consumePe
             </IconButton>
           )}
         </div>
-        <div className="mt-1.5 text-[11px] text-text-tertiary">Enter to send · Shift+Enter for a new line</div>
+        <div className={cn("mt-1.5 text-[11px] text-text-tertiary", page && "mx-auto w-full max-w-[820px]")}>Enter to send · Shift+Enter for a new line{page ? ` · ${autoApprove ? "Nimbus auto-applies changes" : "changes are shown to you before they apply"}` : ""}</div>
       </div>
     </>
   );

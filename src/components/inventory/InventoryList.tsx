@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, ArrowLeftRight, Boxes, Download, FileDown, FilterX, Hammer, MoreHorizontal, Pencil, Plus, SlidersHorizontal, Sparkles, Trash2 } from "lucide-react";
+import { Archive, ArrowLeftRight, Boxes, Download, FileDown, FilterX, Hammer, MoreHorizontal, Pencil, Plus, SlidersHorizontal, Sparkles, Trash2, Upload } from "lucide-react";
 import type { Item } from "@/lib/types";
 import { deactivateItems, deleteItems, inventoryValue, isLowStock, qtyAt } from "@/lib/inventory";
 import { useDefaultLocation, useLocations } from "@/lib/locations";
@@ -217,6 +217,9 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
           </Button>
         </>
       )}
+      <Button size="sm" icon={<Upload />} onClick={() => router.push(`/exports?dataset=items&skus=${encodeURIComponent(selectedSkus.join(","))}`)} disabled={sel.size === 0}>
+        Export
+      </Button>
       <Button size="sm" icon={<Sparkles />} onClick={askAboutSelection} disabled={sel.size === 0}>
         Ask Nimbus
       </Button>

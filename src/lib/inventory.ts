@@ -410,7 +410,7 @@ async function loadSettings(store: Store): Promise<WorkspaceSettings> {
 export async function nextNumber(store: Store, kind: keyof WorkspaceSettings["counters"]): Promise<{ number: string; ops: WriteOp[] }> {
   const settings = await loadSettings(store);
   const n = settings.counters[kind] ?? 1001;
-  const prefix = { receipt: "RCV", build: "BLD", order: "SO", rma: "RMA", transfer: "TR", shipment: "SH" }[kind];
+  const prefix = { receipt: "RCV", build: "BLD", order: "SO", rma: "RMA", transfer: "TR", shipment: "SH", quote: "QT" }[kind];
   const ops: WriteOp[] = [
     { op: "patch", collection: "settings", id: "default", patch: { counters: { ...settings.counters, [kind]: n + 1 }, updatedAt: nowIso() } },
   ];

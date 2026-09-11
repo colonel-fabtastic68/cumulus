@@ -3,14 +3,14 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Building2, Check, ChevronsUpDown, Mail, Plus } from "lucide-react";
+import { Building2, Check, ChevronDown, ChevronsUpDown, Mail, Plus } from "lucide-react";
 import { CloudMark, Kbd, Menu, type MenuItem } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { useCollection, useSettings } from "@/lib/store/provider";
 import { isLowStock } from "@/lib/inventory";
 import { useSession } from "@/lib/session";
 import { APP_HOME } from "@/lib/auth-routes";
-import { isNavActive, NAV, NAV_SECONDARY, type NavItem } from "./nav";
+import { isChildNavActive, isNavActive, NAV, NAV_SECONDARY, type NavItem } from "./nav";
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
@@ -35,6 +35,43 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     const Icon = n.icon;
     const active = isNavActive(n.href, pathname);
     const count = counts[n.href];
+    // A group: the parent row opens its first page; the children show while any of them is open.
+    if (n.children?.length) {
+      return (
+        <div key={n.href} className="flex flex-col gap-0.5">
+          <Link
+            href={n.children[0]!.href}
+            onClick={onNavigate}
+            aria-expanded={active}
+            className={cn("group flex h-8 items-center gap-2.5 rounded-[var(--radius-sm)] px-2.5 text-[13px] font-[550] transition-colors", active ? "text-text" : "text-text hover:bg-[rgba(0,0,0,0.04)]")}
+          >
+            <Icon className={cn("h-4 w-4", active ? "text-text" : "text-icon")} />
+            <span className="flex-1">{n.label}</span>
+            <ChevronDown className={cn("h-3.5 w-3.5 text-text-tertiary transition-transform", active ? "rotate-0" : "-rotate-90")} />
+          </Link>
+          {active &&
+            n.children.map((c) => {
+              const ChildIcon = c.icon;
+              const childActive = isChildNavActive(c, n.children!, pathname);
+              return (
+                <Link
+                  key={c.href}
+                  href={c.href}
+                  onClick={onNavigate}
+                  aria-current={childActive ? "page" : undefined}
+                  className={cn(
+                    "group ml-4 flex h-7 items-center gap-2 rounded-[var(--radius-sm)] px-2.5 text-[12.5px] font-[550] transition-colors",
+                    childActive ? "bg-surface text-text shadow-[var(--shadow-100),0_0_0_1px_rgba(26,26,26,0.07)]" : "text-text-secondary hover:bg-[rgba(0,0,0,0.04)] hover:text-text",
+                  )}
+                >
+                  <ChildIcon className={cn("h-3.5 w-3.5", childActive ? "text-text" : "text-icon")} />
+                  <span className="flex-1">{c.label}</span>
+                </Link>
+              );
+            })}
+        </div>
+      );
+    }
     return (
       <Link
         key={n.href}

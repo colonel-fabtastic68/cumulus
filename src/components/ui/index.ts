@@ -10,3 +10,4 @@ export * from "./Markdown";
 export * from "./QueryParam";
 export * from "./Combobox";
 export * from "./CloudMark";
+export * from "./Chart";

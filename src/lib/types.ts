@@ -481,7 +481,11 @@ export type ActivityType =
   | "integration.connected"
   | "integration.disconnected"
   | "integration.synced"
-  | "shipment.tracked";
+  | "shipment.tracked"
+  | "quote.created"
+  | "quote.sent"
+  | "quote.accepted"
+  | "quote.declined";
 
 export interface ActivityEvent {
   id: ID;
@@ -489,7 +493,7 @@ export interface ActivityEvent {
   message: string;
   actorId: string;
   actorName: string;
-  entityType?: "item" | "receipt" | "build" | "order" | "rma" | "supplier" | "member" | "transfer" | "shipment" | "integration" | "location";
+  entityType?: "item" | "receipt" | "build" | "order" | "rma" | "supplier" | "member" | "transfer" | "shipment" | "integration" | "location" | "quote";
   entityId?: ID;
   /** Free-form details, e.g. { count: 12 } for bulk operations. */
   meta?: Record<string, unknown>;
@@ -567,9 +571,11 @@ export interface WorkspaceSettings {
     rma: number;
     transfer?: number;
     shipment?: number;
+    quote?: number;
   };
   shipping?: ShippingSettings;
   scanning?: ScanningSettings;
+  quoting?: QuotingSettings;
   updatedAt: string;
 }
 
@@ -592,6 +598,67 @@ export interface ParcelDefaults {
 export interface ScanningSettings {
   /** Treat fast keyboard input ending in Enter as a barcode scan anywhere in the app. */
   keyboardWedge: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Quotes
+// ---------------------------------------------------------------------------
+
+export type QuoteStatus = "draft" | "sent" | "accepted" | "declined" | "expired";
+export type QuoteLineKind = "item" | "labor" | "other";
+
+export interface QuoteLine {
+  id: ID;
+  kind: QuoteLineKind;
+  /** Inventory item for "item" lines. */
+  itemId?: ID;
+  description: string;
+  qty: number;
+  /** Unit for the quantity: the item's unit, "h" for labour, free text otherwise. */
+  unit?: string;
+  unitPrice: number;
+  /** What the line costs the business per unit, for margin. Item cost, labour cost rate, or supplier price. */
+  unitCost?: number;
+  discountPct?: number;
+  note?: string;
+}
+
+export interface Quote {
+  id: ID;
+  number: string; // QT-1001
+  customer: string;
+  customerEmail?: string;
+  status: QuoteStatus;
+  lines: QuoteLine[];
+  /** Whole-quote discount on the subtotal. */
+  discountPct?: number;
+  taxPct?: number;
+  currency: string;
+  validUntil?: string;
+  notes?: string;
+  terms?: string;
+  /** The request the quote was drafted from, when Nimbus wrote it. */
+  sourcePrompt?: string;
+  /** Sales order created from this quote, if accepted. */
+  orderId?: ID;
+  sentAt?: string;
+  decidedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+}
+
+export interface QuotingSettings {
+  /** What an hour of labour is charged at. */
+  laborRate: number;
+  /** What an hour of labour costs the business, for margin. */
+  laborCost?: number;
+  /** Target margin used when an item has no list price. */
+  defaultMarginPct?: number;
+  taxPct?: number;
+  /** Days a quote stays valid. */
+  validDays: number;
+  terms?: string;
 }
 
 /** Persisted agent chat session so teammates can see what Nimbus did. */
@@ -627,6 +694,7 @@ export interface CollectionMap {
   locations: Location;
   transfers: Transfer;
   shipments: Shipment;
+  quotes: Quote;
 }
 
 export type CollectionName = keyof CollectionMap;
@@ -648,6 +716,7 @@ export const COLLECTIONS: CollectionName[] = [
   "locations",
   "transfers",
   "shipments",
+  "quotes",
 ];
 
 /** A full snapshot of a workspace. Used for seed data, export and import. */
