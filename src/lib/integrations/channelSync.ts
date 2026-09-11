@@ -353,6 +353,7 @@ export async function pushProductsToChannel(ctx: ServerContext, integration: Int
   const homeId = defaultLocation(locations).location.id;
   const locationId = integration.settings?.locationId;
   const qtyFor = (item: Item) => Math.max(0, locationId ? qtyAt(item, locationId, homeId) : item.onHand);
+  const publish = integration.settings?.publishProducts === true;
   const ops: WriteOp[] = [];
 
   if (id === "shopify") {
@@ -365,7 +366,7 @@ export async function pushProductsToChannel(ctx: ServerContext, integration: Int
         let ref = existing.get(item.sku.toUpperCase());
         if (ref) out.linked++;
         else {
-          ref = await shopify.createProduct(creds, { title: item.name, sku: item.sku, price: item.price, description: item.description, vendor: item.brand, productType: item.category, tags: item.tags, barcode: item.barcode, weight: item.weight, weightUnit: item.weightUnit });
+          ref = await shopify.createProduct(creds, { title: item.name, sku: item.sku, price: item.price, description: item.description, vendor: item.brand, productType: item.category, tags: item.tags, barcode: item.barcode, weight: item.weight, weightUnit: item.weightUnit, publish });
           out.created++;
           const channelLocationId = integration.settings?.channelLocationId;
           if (ref.inventoryItemId && channelLocationId && qtyFor(item) > 0) await shopify.setInventoryLevel(creds, ref.inventoryItemId, channelLocationId, qtyFor(item));
@@ -387,7 +388,7 @@ export async function pushProductsToChannel(ctx: ServerContext, integration: Int
         let ref = existing.get(item.sku.toUpperCase());
         if (ref) out.linked++;
         else {
-          const created = await woo.createProduct(creds, { name: item.name, sku: item.sku, price: item.price, description: item.description, stockQuantity: qtyFor(item), weight: item.weight, dimensions: item.dimensions, barcode: item.barcode });
+          const created = await woo.createProduct(creds, { name: item.name, sku: item.sku, price: item.price, description: item.description, stockQuantity: qtyFor(item), weight: item.weight, dimensions: item.dimensions, barcode: item.barcode, publish });
           ref = { productId: created.id };
           out.created++;
         }

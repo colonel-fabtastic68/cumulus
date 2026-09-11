@@ -27,7 +27,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       let products: Awaited<ReturnType<typeof pushProductsToChannel>> | undefined;
       if (body.pushProducts ?? integration.settings?.pushProducts) {
         products = await pushProductsToChannel(ctx, integration, secrets);
-        if (products.created || products.linked) result.summary += ` · ${products.created} new draft product${products.created === 1 ? "" : "s"} pushed${products.linked ? `, ${products.linked} linked by SKU` : ""}`;
+        if (products.created || products.linked) result.summary += ` · ${products.created} new ${integration.settings?.publishProducts ? "live" : "draft"} product${products.created === 1 ? "" : "s"} pushed${products.linked ? `, ${products.linked} linked by SKU` : ""}`;
         if (products.errors.length) await ctx.store.patch("integrations", id, { lastError: `Product push: ${products.errors.slice(0, 3).join("; ")}` });
       }
       let push: Awaited<ReturnType<typeof pushStockToChannel>> | undefined;

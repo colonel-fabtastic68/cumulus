@@ -505,8 +505,10 @@ export interface IntegrationSettings {
   syncOrders?: boolean;
   /** Push Cumulus on-hand counts to the channel after every stock change. */
   pushStock?: boolean;
-  /** Create items that are not in the channel yet as draft products there (on sync and stock pushes). */
+  /** Create items that are not in the channel yet as products there: a few seconds after they are added here, and on every sync. */
   pushProducts?: boolean;
+  /** Pushed products go live at once instead of waiting as drafts. */
+  publishProducts?: boolean;
   /** On the first product sync, take the channel's quantities as the opening counts. */
   takeStockOnFirstSync?: boolean;
   /** Apply stock changes reported by the channel (webhooks) as counts. Off means Cumulus is the source of truth. */

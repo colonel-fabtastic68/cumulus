@@ -193,7 +193,7 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
       const r = res.results[def.id];
       if (!r) return "Pushing is off for this connection; turn on “Push stock levels out” or “Push new items” and save.";
       const parts = [`${r.pushed} stock level${r.pushed === 1 ? "" : "s"} pushed`];
-      if (r.created) parts.push(`${r.created} new draft product${r.created === 1 ? "" : "s"} created`);
+      if (r.created) parts.push(`${r.created} new ${integration.settings?.publishProducts ? "live" : "draft"} product${r.created === 1 ? "" : "s"} created`);
       if (r.linked) parts.push(`${r.linked} linked by SKU`);
       if (r.skipped) parts.push(`${r.skipped} skipped`);
       return `${parts.join(", ")}${r.errors.length ? ` · ${r.errors.slice(0, 2).join("; ")}` : ""}`;

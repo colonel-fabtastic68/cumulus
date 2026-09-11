@@ -268,15 +268,17 @@ export interface NewWooProduct {
   weight?: number;
   dimensions?: { length?: number; width?: number; height?: number };
   barcode?: string;
+  /** Publish at once; otherwise the product waits as a draft. */
+  publish?: boolean;
 }
 
-/** Creates a simple product as a draft, so nothing goes live on the storefront until someone publishes it. */
+/** Creates a simple product, as a draft unless asked to publish it straight away. */
 export async function createProduct(creds: WooCreds, p: NewWooProduct): Promise<{ id: string }> {
   const body: Record<string, unknown> = {
     name: p.name,
     sku: p.sku,
     type: "simple",
-    status: "draft",
+    status: p.publish ? "publish" : "draft",
     manage_stock: true,
     stock_quantity: Math.max(0, Math.round(p.stockQuantity ?? 0)),
   };

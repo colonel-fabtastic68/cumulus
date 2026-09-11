@@ -135,9 +135,11 @@ export interface NewShopifyProduct {
   barcode?: string;
   weight?: number;
   weightUnit?: string;
+  /** Make it active and published to the online store at once; otherwise it waits as a draft. */
+  publish?: boolean;
 }
 
-/** Creates a single-variant product as a draft; stock is set afterwards through inventory levels. */
+/** Creates a single-variant product, as a draft unless asked to publish it; stock is set afterwards through inventory levels. */
 export async function createProduct(creds: ShopifyCreds, p: NewShopifyProduct): Promise<{ productId: string; variantId: string; inventoryItemId?: string }> {
   const variant: Record<string, unknown> = { sku: p.sku, inventory_management: "shopify", inventory_policy: "deny" };
   if (p.price !== undefined && p.price > 0) variant.price = p.price.toFixed(2);
@@ -146,7 +148,8 @@ export async function createProduct(creds: ShopifyCreds, p: NewShopifyProduct): 
     variant.weight = p.weight;
     if (p.weightUnit && ["g", "kg", "oz", "lb"].includes(p.weightUnit)) variant.weight_unit = p.weightUnit;
   }
-  const product: Record<string, unknown> = { title: p.title, status: "draft", variants: [variant] };
+  const product: Record<string, unknown> = { title: p.title, status: p.publish ? "active" : "draft", variants: [variant] };
+  if (p.publish) product.published_at = new Date().toISOString();
   if (p.description) product.body_html = p.description;
   if (p.vendor) product.vendor = p.vendor;
   if (p.productType) product.product_type = p.productType;
