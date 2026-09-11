@@ -182,20 +182,23 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
 
   const sync = () =>
     run("sync", async () => {
-      const res = await api<{ summary: string; orders?: { warnings: string[] } }>(`/api/integrations/${def.id}/sync`, {});
-      const warn = res.orders?.warnings?.length ? ` · ${res.orders.warnings.slice(0, 2).join("; ")}` : "";
+      const res = await api<{ summary: string; errors?: string[] }>(`/api/integrations/${def.id}/sync`, {});
+      const warn = res.errors?.length ? ` · ${res.errors.slice(0, 2).join("; ")}` : "";
       return `Synced: ${res.summary}${warn}`;
     });
 
   const push = () =>
     run("push", async () => {
-      const res = await api<{ results: Record<string, { pushed: number; skipped: number; created?: number; linked?: number; errors: string[] }> }>("/api/integrations/push-stock", {});
+      const res = await api<{ results: Record<string, { pushed: number; created?: number; linked?: number; updated?: number; removed: number; errors: string[] }> }>("/api/integrations/push-stock", {});
       const r = res.results[def.id];
-      if (!r) return "Pushing is off for this connection; turn on “Push stock levels out” or “Push new items” and save.";
-      const parts = [`${r.pushed} stock level${r.pushed === 1 ? "" : "s"} pushed`];
+      if (!r) return "This connection is not active.";
+      const parts: string[] = [];
+      if (r.removed) parts.push(`${r.removed} removed from the store`);
       if (r.created) parts.push(`${r.created} new ${integration.settings?.publishProducts ? "live" : "draft"} product${r.created === 1 ? "" : "s"} created`);
       if (r.linked) parts.push(`${r.linked} linked by SKU`);
-      if (r.skipped) parts.push(`${r.skipped} skipped`);
+      if (r.updated) parts.push(`${r.updated} product${r.updated === 1 ? "" : "s"} updated`);
+      if (r.pushed) parts.push(`${r.pushed} stock level${r.pushed === 1 ? "" : "s"} pushed`);
+      if (parts.length === 0) parts.push(integration.settings?.pushStock || integration.settings?.pushProducts || integration.settings?.pushDetails ? "Nothing to push; everything is in step" : "Pushing is off; turn on the push toggles below and save");
       return `${parts.join(", ")}${r.errors.length ? ` · ${r.errors.slice(0, 2).join("; ")}` : ""}`;
     });
 

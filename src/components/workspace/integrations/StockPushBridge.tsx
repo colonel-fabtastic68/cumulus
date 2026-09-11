@@ -7,38 +7,57 @@ import { useApi } from "@/lib/api-client";
 
 const DEBOUNCE_MS = 1200;
 
+interface Seen {
+  onHand: number;
+  updatedAt: string;
+  linked: boolean;
+}
+
 /**
- * Factor 40: when on-hand changes on an item linked to a channel that mirrors
- * stock, ask the server to push the new count. Debounced, and only in the
- * hosted mode where the server holds the channel credentials.
+ * Factor 40: keeps connected stores in step with what happens here. A stock
+ * change, a new item, an edit or a deletion is noticed from the live item
+ * list and, after a short pause, the server pushes the outbound half of the
+ * sync for just those items (deletions are picked up from their tombstones).
+ * Only in the hosted mode, where the server holds the store credentials.
  */
 export function StockPushBridge() {
   const { mode } = useSession();
   const items = useItems();
   const integrations = useCollection("integrations");
   const api = useApi();
-  const previous = useRef<Map<string, number> | null>(null);
-  const pending = useRef(new Set<string>());
+  const previous = useRef<Map<string, Seen> | null>(null);
+  const pendingStock = useRef(new Set<string>());
+  const pendingDetails = useRef(new Set<string>());
+  const pendingDelete = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const active = mode === "firestore" && integrations.some((i) => (i.id === "shopify" || i.id === "woocommerce") && i.status === "connected" && (i.settings?.pushStock === true || i.settings?.pushProducts === true));
+  const active = mode === "firestore" && integrations.some((i) => (i.id === "shopify" || i.id === "woocommerce") && i.status === "connected");
 
   useEffect(() => {
-    const snapshot = new Map(items.map((i) => [i.id, i.onHand]));
+    const snapshot = new Map<string, Seen>(items.map((i) => [i.id, { onHand: i.onHand, updatedAt: i.updatedAt, linked: !!i.channels }]));
     const before = previous.current;
     previous.current = snapshot;
     if (!active || !before) return;
     for (const item of items) {
       const was = before.get(item.id);
-      // A changed count on a linked item, or an item that did not exist a moment ago (a new part to create in the store).
-      if ((was !== undefined && was !== item.onHand && item.channels) || (was === undefined && !item.channels && item.status === "active")) pending.current.add(item.id);
+      if (!was) {
+        if (!item.channels && item.status === "active") pendingStock.current.add(item.id); // new item → create in the store
+        continue;
+      }
+      if (!item.channels) continue;
+      if (was.onHand !== item.onHand) pendingStock.current.add(item.id);
+      else if (was.updatedAt !== item.updatedAt) pendingDetails.current.add(item.id);
     }
-    if (pending.current.size === 0) return;
+    for (const [id, was] of before) if (was.linked && !snapshot.has(id)) pendingDelete.current = true;
+    if (pendingStock.current.size === 0 && pendingDetails.current.size === 0 && !pendingDelete.current) return;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
-      const ids = Array.from(pending.current);
-      pending.current.clear();
-      api("/api/integrations/push-stock", { itemIds: ids }).catch(() => {
-        // The scheduled sync reconciles anything a push misses.
+      const itemIds = Array.from(pendingStock.current);
+      const detailIds = Array.from(pendingDetails.current);
+      pendingStock.current.clear();
+      pendingDetails.current.clear();
+      pendingDelete.current = false;
+      api("/api/integrations/push-stock", { itemIds, detailIds }).catch(() => {
+        // The scheduled pass reconciles anything a push misses.
       });
     }, DEBOUNCE_MS);
   }, [items, active, api]);

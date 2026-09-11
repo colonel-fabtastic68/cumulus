@@ -513,6 +513,12 @@ export interface IntegrationSettings {
   pushProducts?: boolean;
   /** Pushed products go live at once instead of waiting as drafts. */
   publishProducts?: boolean;
+  /** Send name, price, description, weight, barcode and active/inactive to the store when an item changes here. */
+  pushDetails?: boolean;
+  /** Deleting an item here removes its product from the store (WooCommerce trash, Shopify archive). Undefined counts as on. */
+  removeFromStoreOnDelete?: boolean;
+  /** When the store deletes a product, mark the item inactive here (always unlinked). */
+  deactivateOnStoreDelete?: boolean;
   /** On the first product sync, take the channel's quantities as the opening counts. */
   takeStockOnFirstSync?: boolean;
   /** Apply stock changes reported by the channel (webhooks) as counts. Off means Cumulus is the source of truth. */
@@ -537,7 +543,20 @@ export interface Integration {
   lastError?: string;
   /** Webhooks registered on the platform, so they can be removed on disconnect. */
   webhooks?: Array<{ id: string; topic: string }>;
+  /** Last time item details were pushed out; items updated after this go on the next push. */
+  lastDetailsPushAt?: string;
   createdAt: string;
+}
+
+/** Left behind when a linked item is deleted, so the next push can remove the store product. */
+export interface ChannelTombstone {
+  id: ID;
+  channel: "shopify" | "woocommerce";
+  sku: string;
+  itemId: ID;
+  ref: NonNullable<ChannelRefs["shopify"]> | NonNullable<ChannelRefs["woocommerce"]>;
+  deletedAt: string;
+  deletedBy: string;
 }
 
 export interface AgentAutomation {
@@ -695,6 +714,7 @@ export interface CollectionMap {
   transfers: Transfer;
   shipments: Shipment;
   quotes: Quote;
+  channelTombstones: ChannelTombstone;
 }
 
 export type CollectionName = keyof CollectionMap;
@@ -717,6 +737,7 @@ export const COLLECTIONS: CollectionName[] = [
   "transfers",
   "shipments",
   "quotes",
+  "channelTombstones",
 ];
 
 /** A full snapshot of a workspace. Used for seed data, export and import. */

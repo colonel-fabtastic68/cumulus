@@ -47,6 +47,8 @@ export interface WooProduct {
   id: number;
   name: string;
   sku: string;
+  date_modified_gmt?: string;
+  description?: string;
   type: "simple" | "variable" | "grouped" | "external" | string;
   status: "publish" | "draft" | "pending" | "private" | string;
   price: string;
@@ -323,6 +325,44 @@ export async function batchUpdateStock(creds: WooCreds, updates: Array<WooRef & 
     for (let i = 0; i < list.length; i += 100) {
       await request(creds, `products/${parent}/variations/batch`, { method: "POST", body: { update: list.slice(i, i + 100).map((u) => ({ id: Number(u.variationId), manage_stock: true, stock_quantity: Math.max(0, Math.round(u.qty)) })) } });
     }
+  }
+}
+
+export interface WooProductPatch {
+  name?: string;
+  description?: string;
+  price?: number;
+  weight?: number;
+  dimensions?: { length?: number; width?: number; height?: number };
+  barcode?: string;
+  /** publish / draft */
+  status?: "publish" | "draft";
+}
+
+/** Updates the fields Cumulus owns on a product or variation. */
+export async function updateProduct(creds: WooCreds, ref: WooRef, p: WooProductPatch): Promise<void> {
+  const body: Record<string, unknown> = {};
+  if (p.name !== undefined && !ref.variationId) body.name = p.name;
+  if (p.description !== undefined && !ref.variationId) body.description = p.description;
+  if (p.price !== undefined) body.regular_price = p.price > 0 ? String(p.price) : "";
+  if (p.weight !== undefined) body.weight = p.weight ? String(p.weight) : "";
+  if (p.dimensions) body.dimensions = { length: String(p.dimensions.length ?? ""), width: String(p.dimensions.width ?? ""), height: String(p.dimensions.height ?? "") };
+  if (p.barcode !== undefined) body.global_unique_id = p.barcode;
+  if (p.status) body.status = p.status;
+  if (Object.keys(body).length === 0) return;
+  const path = ref.variationId ? `products/${ref.productId}/variations/${ref.variationId}` : `products/${ref.productId}`;
+  await request(creds, path, { method: "PUT", body });
+}
+
+/** Moves a product to the trash (recoverable in WooCommerce) or deletes it outright. */
+export async function deleteProduct(creds: WooCreds, ref: WooRef, opts: { force?: boolean } = {}): Promise<void> {
+  const path = ref.variationId ? `products/${ref.productId}/variations/${ref.variationId}` : `products/${ref.productId}`;
+  try {
+    await request(creds, path, { method: "DELETE", query: { force: opts.force ? "true" : "false" } });
+  } catch (e) {
+    // Already gone counts as done.
+    if (e instanceof HttpError && (e.status === 404 || e.code === "woocommerce_rest_product_invalid_id" || e.code === "woocommerce_rest_invalid_id")) return;
+    throw e;
   }
 }
 

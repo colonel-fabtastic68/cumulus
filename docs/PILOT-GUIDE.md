@@ -66,6 +66,7 @@ Try these, in your own words:
 
 ### 6e. Connect a store (Integrations, hosted mode only)
 - Shopify or WooCommerce: paste the API credentials from your store (the modal lists where to find them). Products come in by SKU, open orders become sales orders, and, when switched on, on-hand counts go back out.
+- It is two-way: edit, deactivate or delete an item here and the store follows a moment later (deleted items go to the store's trash or archive); edit or delete a product in the store and the item here is updated or unlinked. Each direction has its own toggle in the connection settings.
 - Nothing is demo data: a fresh workspace stays empty until you connect or import.
 
 ### 6f. Quotes, projections and exports (Nimbus menu, Exports)

@@ -29,6 +29,8 @@ export interface ShopifyProduct {
   id: number;
   title: string;
   handle: string;
+  updated_at?: string;
+  body_html?: string | null;
   status: "active" | "archived" | "draft";
   vendor: string;
   product_type: string;
@@ -206,6 +208,38 @@ export async function setInventoryQuantities(creds: ShopifyCreds, locationId: st
     );
     const errors = res.inventorySetQuantities.userErrors;
     if (errors.length) throw new HttpError(502, `${creds.shop} rejected the stock update: ${errors.map((e) => e.message).join("; ")}`);
+  }
+}
+
+export async function updateProduct(creds: ShopifyCreds, productId: string, p: { title?: string; body_html?: string; status?: "active" | "draft" | "archived"; vendor?: string; product_type?: string; tags?: string[] }): Promise<void> {
+  const product: Record<string, unknown> = { id: Number(productId) };
+  if (p.title !== undefined) product.title = p.title;
+  if (p.body_html !== undefined) product.body_html = p.body_html;
+  if (p.status) product.status = p.status;
+  if (p.vendor !== undefined) product.vendor = p.vendor;
+  if (p.product_type !== undefined) product.product_type = p.product_type;
+  if (p.tags) product.tags = p.tags.join(", ");
+  await request(creds, `products/${productId}.json`, { method: "PUT", body: { product } });
+}
+
+export async function updateVariant(creds: ShopifyCreds, variantId: string, v: { price?: number; sku?: string; barcode?: string; weight?: number; weight_unit?: string }): Promise<void> {
+  const variant: Record<string, unknown> = { id: Number(variantId) };
+  if (v.price !== undefined) variant.price = v.price.toFixed(2);
+  if (v.sku !== undefined) variant.sku = v.sku;
+  if (v.barcode !== undefined) variant.barcode = v.barcode;
+  if (v.weight !== undefined) variant.weight = v.weight;
+  if (v.weight_unit && ["g", "kg", "oz", "lb"].includes(v.weight_unit)) variant.weight_unit = v.weight_unit;
+  await request(creds, `variants/${variantId}.json`, { method: "PUT", body: { variant } });
+}
+
+/** Archives (default) or deletes a product. Archiving keeps orders and history intact in Shopify. */
+export async function removeProduct(creds: ShopifyCreds, productId: string, opts: { hardDelete?: boolean } = {}): Promise<void> {
+  try {
+    if (opts.hardDelete) await request(creds, `products/${productId}.json`, { method: "DELETE" });
+    else await updateProduct(creds, productId, { status: "archived" });
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 404) return;
+    throw e;
   }
 }
 

@@ -25,7 +25,7 @@ export interface SyncOptions {
 
 export interface SyncResult {
   summary: string;
-  products?: { seen: number; created: number; updated: number; skippedNoSku: number };
+  products?: { seen: number; created: number; updated: number; skippedNoSku: number; unlinked?: number };
   orders?: { seen: number; created: number; alreadyIn: number; skippedNoLines: number; warnings: string[] };
 }
 
@@ -58,6 +58,8 @@ interface ChannelRow {
   row: ImportRow;
   ref: NonNullable<Item["channels"]>;
   weightUnit?: string;
+  /** When the store last changed the record, so unchanged products are not re-imported over local edits. */
+  modifiedAt?: string;
 }
 
 function shopifyRows(products: shopify.ShopifyProduct[]): { rows: ChannelRow[]; skippedNoSku: number } {
@@ -89,6 +91,7 @@ function shopifyRows(products: shopify.ShopifyProduct[]): { rows: ChannelRow[]; 
         },
         ref: { shopify: { productId: String(p.id), variantId: String(v.id), inventoryItemId: String(v.inventory_item_id) } },
         weightUnit: v.weight_unit,
+        modifiedAt: p.updated_at ? new Date(p.updated_at).toISOString() : undefined,
       });
     }
   }
@@ -124,6 +127,7 @@ function wooRows(list: Array<{ product: woo.WooProduct; variation?: woo.WooVaria
       },
       ref: { woocommerce: { productId: String(product.id), variationId: variation ? String(variation.id) : undefined } },
       weightUnit: weightUnit,
+      modifiedAt: (variation?.date_modified_gmt ?? product.date_modified_gmt) ? new Date(`${variation?.date_modified_gmt ?? product.date_modified_gmt}Z`).toISOString() : undefined,
     });
   }
   return { rows, skippedNoSku };
@@ -134,20 +138,157 @@ async function syncProducts(ctx: ServerContext, integration: Integration, secret
   const { rows, skippedNoSku } = id === "shopify" ? shopifyRows(await shopify.listProducts(shopifyCreds(integration, secrets))) : wooRows(await woo.listProducts(await wooCreds(ctx, integration, secrets)), integration.config?.weightUnit);
   const firstSync = !integration.lastSyncAt;
   const takeStock = firstSync && integration.settings?.takeStockOnFirstSync === true;
-  const result = await importItems(ctx.store, ctx.actor, rows.map((r) => (takeStock ? r.row : { ...r.row, qty: undefined })), { setQuantities: takeStock });
+  const before = await ctx.store.list("items");
+  const knownSkus = new Set(before.map((i) => i.sku.toUpperCase()));
+  // After the first sync only records the store changed since then are re-imported; the rest keep local edits.
+  const since = integration.lastSyncAt ? new Date(integration.lastSyncAt).getTime() - 5 * 60_000 : 0;
+  const toImport = rows.filter((r) => firstSync || !knownSkus.has(r.row.sku.toUpperCase()) || !r.modifiedAt || new Date(r.modifiedAt).getTime() > since);
+  const result = await importItems(ctx.store, ctx.actor, toImport.map((r) => (takeStock ? r.row : { ...r.row, qty: undefined })), { setQuantities: takeStock });
   // Remember which channel record each item mirrors, so orders and stock pushes match by id, not just SKU.
+  const items = await ctx.store.list("items");
+  const bySku = new Map(items.map((i) => [i.sku.toUpperCase(), i]));
+  const ops: WriteOp[] = [];
+  const storeKeys = new Set<string>();
+  for (const r of rows) {
+    const ref = r.ref[id]!;
+    storeKeys.add(channelKey(ref));
+    const item = bySku.get(r.row.sku.toUpperCase());
+    if (!item) continue;
+    const current = item.channels?.[id];
+    const patch: Partial<Item> = {};
+    if (!current || channelKey(current) !== channelKey(ref)) patch.channels = { ...(item.channels ?? {}), ...r.ref };
+    if (r.weightUnit && r.row.weight && item.weightUnit !== r.weightUnit) patch.weightUnit = r.weightUnit;
+    if (Object.keys(patch).length) ops.push({ op: "patch", collection: "items", id: item.id, patch });
+  }
+  // Products that vanished from the store: unlink the item (and deactivate it when asked to).
+  // An empty listing is treated as a failed read rather than an emptied store, so nothing is unlinked on a hiccup.
+  let unlinked = 0;
+  const deactivate = integration.settings?.deactivateOnStoreDelete === true;
+  for (const item of rows.length === 0 ? [] : items) {
+    const ref = item.channels?.[id];
+    if (!ref || storeKeys.has(channelKey(ref))) continue;
+    const channels = { ...(item.channels ?? {}) };
+    delete channels[id];
+    const patch: Partial<Item> = { channels };
+    if (deactivate && item.status === "active") patch.status = "inactive";
+    ops.push({ op: "patch", collection: "items", id: item.id, patch });
+    unlinked++;
+  }
+  if (unlinked) ops.push(activityOp(ctx.actor, "integration.synced", `${NAME[id]} no longer has ${unlinked} linked product${unlinked === 1 ? "" : "s"}; ${deactivate ? "deactivated and " : ""}unlinked here`, { entityType: "integration", entityId: id }));
+  if (ops.length) await ctx.store.batch(ops);
+  return { seen: rows.length + skippedNoSku, created: result.created, updated: result.updated, skippedNoSku, unlinked };
+}
+
+const NAME: Record<ChannelId, string> = { shopify: "Shopify", woocommerce: "WooCommerce" };
+
+function channelKey(ref: { productId: string; variantId?: string; variationId?: string }): string {
+  return `${ref.productId}:${"variantId" in ref ? (ref.variantId ?? "") : (ref.variationId ?? "")}`;
+}
+
+/** Removes store products for items deleted here, then clears the tombstones. */
+export async function processTombstones(ctx: ServerContext, integration: Integration, secrets: Secrets): Promise<{ removed: number; errors: string[] }> {
+  const id = integration.id as ChannelId;
+  const tombstones = (await ctx.store.list("channelTombstones")).filter((t) => t.channel === id);
+  const out = { removed: 0, errors: [] as string[] };
+  if (tombstones.length === 0) return out;
+  const remove = integration.settings?.removeFromStoreOnDelete !== false;
+  const done: WriteOp[] = [];
+  if (remove) {
+    if (id === "shopify") {
+      const creds = shopifyCreds(integration, secrets);
+      for (const t of tombstones) {
+        try {
+          await shopify.removeProduct(creds, (t.ref as { productId: string }).productId);
+          out.removed++;
+          done.push({ op: "remove", collection: "channelTombstones", id: t.id });
+        } catch (e) {
+          out.errors.push(`${t.sku}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+    } else {
+      const creds = await wooCreds(ctx, integration, secrets);
+      for (const t of tombstones) {
+        try {
+          await woo.deleteProduct(creds, t.ref as woo.WooRef);
+          out.removed++;
+          done.push({ op: "remove", collection: "channelTombstones", id: t.id });
+        } catch (e) {
+          out.errors.push(`${t.sku}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+    }
+  } else {
+    for (const t of tombstones) done.push({ op: "remove", collection: "channelTombstones", id: t.id });
+  }
+  if (out.removed) done.push(activityOp(ctx.actor, "integration.synced", `Removed ${out.removed} product${out.removed === 1 ? "" : "s"} from ${NAME[id]} for items deleted here`, { entityType: "integration", entityId: id }));
+  if (done.length) await ctx.store.batch(done);
+  return out;
+}
+
+/** Sends name, price, description and status for linked items changed since the last push (or the given ids). */
+export async function pushItemDetails(ctx: ServerContext, integration: Integration, secrets: Secrets, itemIds?: string[]): Promise<{ updated: number; errors: string[] }> {
+  const id = integration.id as ChannelId;
+  const since = integration.lastDetailsPushAt ?? integration.lastSyncAt ?? integration.connectedAt ?? "";
+  const items = (await ctx.store.list("items")).filter((i) => !!i.channels?.[id] && (itemIds ? itemIds.includes(i.id) : i.updatedAt > since));
+  const out = { updated: 0, errors: [] as string[] };
+  const startedAt = nowIso();
+  if (items.length === 0) return out;
+  if (id === "shopify") {
+    const creds = shopifyCreds(integration, secrets);
+    await mapConcurrent(items, 4, async (item) => {
+      const ref = item.channels!.shopify!;
+      try {
+        await shopify.updateProduct(creds, ref.productId, { title: item.name, body_html: item.description ?? "", vendor: item.brand, product_type: item.category, tags: item.tags, status: item.status === "active" ? undefined : "archived" });
+        await shopify.updateVariant(creds, ref.variantId, { price: item.price, sku: item.sku, barcode: item.barcode ?? "", weight: item.weight, weight_unit: item.weightUnit });
+        out.updated++;
+      } catch (e) {
+        out.errors.push(`${item.sku}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    });
+  } else {
+    const creds = await wooCreds(ctx, integration, secrets);
+    await mapConcurrent(items, 4, async (item) => {
+      try {
+        await woo.updateProduct(creds, item.channels!.woocommerce!, { name: item.name, description: item.description ?? "", price: item.price, weight: item.weight ?? 0, dimensions: item.dimensions, barcode: item.barcode ?? "", status: item.status === "active" ? undefined : "draft" });
+        out.updated++;
+      } catch (e) {
+        out.errors.push(`${item.sku}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    });
+  }
+  if (!itemIds) await ctx.store.patch("integrations", id, { lastDetailsPushAt: startedAt });
+  return out;
+}
+
+/** Unlinks (and optionally deactivates) the item whose store product was deleted. */
+async function productDeletedInStore(ctx: ServerContext, integration: Integration, match: (item: Item) => boolean): Promise<string> {
+  const id = integration.id as ChannelId;
+  const items = (await ctx.store.list("items")).filter((i) => !!i.channels?.[id] && match(i));
+  if (items.length === 0) return "no linked item";
+  const deactivate = integration.settings?.deactivateOnStoreDelete === true;
+  const ops: WriteOp[] = items.map((item) => {
+    const channels = { ...(item.channels ?? {}) };
+    delete channels[id];
+    return { op: "patch", collection: "items", id: item.id, patch: { channels, ...(deactivate && item.status === "active" ? { status: "inactive" as const } : {}) } };
+  });
+  ops.push(activityOp(ctx.actor, "integration.synced", `${NAME[id]} deleted ${items.map((i) => i.sku).join(", ")}; ${deactivate ? "deactivated and " : ""}unlinked here`, { entityType: "integration", entityId: id }));
+  await ctx.store.batch(ops);
+  return `${items.map((i) => i.sku).join(", ")} unlinked${deactivate ? " and deactivated" : ""}`;
+}
+
+/** Applies a store-side product edit to the linked item (name, price, description…), then links it. */
+async function productUpdatedInStore(ctx: ServerContext, integration: Integration, rows: ChannelRow[]): Promise<string> {
+  if (rows.length === 0) return "no SKU on the product";
+  const result = await importItems(ctx.store, ctx.actor, rows.map((r) => ({ ...r.row, qty: undefined })), {});
   const items = await ctx.store.list("items");
   const bySku = new Map(items.map((i) => [i.sku.toUpperCase(), i]));
   const ops: WriteOp[] = [];
   for (const r of rows) {
     const item = bySku.get(r.row.sku.toUpperCase());
-    if (!item) continue;
-    const patch: Partial<Item> = { channels: { ...(item.channels ?? {}), ...r.ref } };
-    if (r.weightUnit && r.row.weight && item.weightUnit !== r.weightUnit) patch.weightUnit = r.weightUnit;
-    ops.push({ op: "patch", collection: "items", id: item.id, patch });
+    if (item) ops.push({ op: "patch", collection: "items", id: item.id, patch: { channels: { ...(item.channels ?? {}), ...r.ref } } });
   }
   if (ops.length) await ctx.store.batch(ops);
-  return { seen: rows.length + skippedNoSku, created: result.created, updated: result.updated, skippedNoSku };
+  return `${rows.map((r) => r.row.sku).join(", ")}: ${result.created ? "created" : "updated"} from the store`;
 }
 
 // ---- orders --------------------------------------------------------------------
@@ -279,7 +420,7 @@ export async function syncChannel(ctx: ServerContext, integration: Integration, 
   if (what.products) {
     result.products = await syncProducts(ctx, integration, secrets);
     const p = result.products;
-    parts.push(`${p.seen} product${p.seen === 1 ? "" : "s"} (${p.created} new, ${p.updated} updated${p.skippedNoSku ? `, ${p.skippedNoSku} without SKU skipped` : ""})`);
+    parts.push(`${p.seen} product${p.seen === 1 ? "" : "s"} (${p.created} new, ${p.updated} updated${p.unlinked ? `, ${p.unlinked} gone from the store` : ""}${p.skippedNoSku ? `, ${p.skippedNoSku} without SKU skipped` : ""})`);
   }
   if (what.orders) {
     result.orders = await syncOrders(ctx, integration, secrets);
@@ -426,6 +567,16 @@ export async function handleChannelWebhook(ctx: ServerContext, integration: Inte
       if (!incoming.cancelled && (body.fulfillment_status === "fulfilled" || ["voided", "refunded"].includes(String(body.financial_status)))) return `${incoming.externalRef} ignored (${body.fulfillment_status ?? body.financial_status})`;
       return `${incoming.externalRef}: ${await applyIncoming(ctx, integration, incoming)}`;
     }
+    if (topic === "products/delete") {
+      const productId = String(body.id ?? "");
+      if (!productId) return "ignored";
+      return productDeletedInStore(ctx, integration, (i) => i.channels?.shopify?.productId === productId);
+    }
+    if (topic === "products/update") {
+      if (!settings.syncProducts) return "products sync is off";
+      const { rows } = shopifyRows([body as unknown as shopify.ShopifyProduct]);
+      return productUpdatedInStore(ctx, integration, rows);
+    }
     if (topic === "inventory_levels/update") {
       if (!settings.acceptStockFromChannel) return "stock from channel is off";
       const inventoryItemId = String(body.inventory_item_id ?? "");
@@ -447,16 +598,96 @@ export async function handleChannelWebhook(ctx: ServerContext, integration: Inte
     if (!incoming.cancelled && !["processing", "on-hold"].includes(status)) return `${incoming.externalRef} ignored (${status})`;
     return `${incoming.externalRef}: ${await applyIncoming(ctx, integration, incoming)}`;
   }
-  if (topic === "product.updated") {
-    if (!settings.acceptStockFromChannel) return "stock from channel is off";
+  if (topic === "product.deleted") {
     const productId = String(body.id ?? "");
-    const qty = body.manage_stock ? Number(body.stock_quantity) : NaN;
-    if (!productId || !Number.isFinite(qty)) return "ignored";
-    const item = (await ctx.store.list("items")).find((i) => i.channels?.woocommerce?.productId === productId && !i.channels?.woocommerce?.variationId);
-    if (!item) return "no linked item";
-    return await countFromChannel(ctx, integration, item, qty);
+    if (!productId) return "ignored";
+    return productDeletedInStore(ctx, integration, (i) => i.channels?.woocommerce?.productId === productId);
+  }
+  if (topic === "product.updated") {
+    const productId = String(body.id ?? "");
+    if (!productId) return "ignored";
+    const notes: string[] = [];
+    if (String(body.status ?? "") === "trash") return productDeletedInStore(ctx, integration, (i) => i.channels?.woocommerce?.productId === productId);
+    if (settings.syncProducts) {
+      const { rows } = wooRows([{ product: body as unknown as woo.WooProduct }], integration.config?.weightUnit);
+      if (rows.length) notes.push(await productUpdatedInStore(ctx, integration, rows));
+    }
+    if (settings.acceptStockFromChannel) {
+      const qty = body.manage_stock ? Number(body.stock_quantity) : NaN;
+      const item = (await ctx.store.list("items")).find((i) => i.channels?.woocommerce?.productId === productId && !i.channels?.woocommerce?.variationId);
+      if (item && Number.isFinite(qty)) notes.push(await countFromChannel(ctx, integration, item, qty));
+    }
+    return notes.join(" · ") || "nothing to apply";
   }
   return `unhandled topic ${topic}`;
+}
+
+export interface RunOptions {
+  products?: boolean;
+  orders?: boolean;
+  pushProducts?: boolean;
+  pushDetails?: boolean;
+  pushStock?: boolean;
+  /** Limit the outbound pushes to these items. */
+  itemIds?: string[];
+  /** Items whose details (name, price, description…) changed; defaults to "changed since the last push" when nothing is given. */
+  detailIds?: string[];
+}
+
+export interface RunResult {
+  summary: string;
+  removed: number;
+  products?: SyncResult["products"];
+  orders?: SyncResult["orders"];
+  created?: number;
+  linked?: number;
+  detailsUpdated?: number;
+  stockPushed?: number;
+  errors: string[];
+}
+
+/** The whole two-way pass in the right order: deletes out, products and orders in, new items out, edits out, stock out. */
+export async function runChannelSync(ctx: ServerContext, integration: Integration, secrets: Secrets, opts: RunOptions): Promise<RunResult> {
+  const s = integration.settings ?? {};
+  const errors: string[] = [];
+  const parts: string[] = [];
+  const tomb = await processTombstones(ctx, integration, secrets);
+  errors.push(...tomb.errors);
+  if (tomb.removed) parts.push(`${tomb.removed} removed from the store`);
+  const result: RunResult = { summary: "", removed: tomb.removed, errors };
+  const doProducts = opts.products ?? s.syncProducts !== false;
+  const doOrders = opts.orders ?? s.syncOrders !== false;
+  if ((doProducts || doOrders) && !opts.itemIds) {
+    const sync = await syncChannel(ctx, integration, secrets, { products: doProducts, orders: doOrders });
+    result.products = sync.products;
+    result.orders = sync.orders;
+    parts.push(sync.summary);
+    errors.push(...(sync.orders?.warnings ?? []));
+  }
+  if (opts.pushProducts ?? s.pushProducts) {
+    const p = await pushProductsToChannel(ctx, integration, secrets, opts.itemIds);
+    result.created = p.created;
+    result.linked = p.linked;
+    errors.push(...p.errors);
+    if (p.created || p.linked) parts.push(`${p.created} new ${s.publishProducts ? "live" : "draft"} product${p.created === 1 ? "" : "s"} pushed${p.linked ? `, ${p.linked} linked by SKU` : ""}`);
+  }
+  if (opts.pushDetails ?? s.pushDetails) {
+    const d = await pushItemDetails(ctx, integration, secrets, opts.detailIds ?? (opts.itemIds ? [] : undefined));
+    result.detailsUpdated = d.updated;
+    errors.push(...d.errors);
+    if (d.updated) parts.push(`${d.updated} product${d.updated === 1 ? "" : "s"} updated in the store`);
+  }
+  if (opts.pushStock ?? s.pushStock) {
+    const st = await pushStockToChannel(ctx, integration, secrets, opts.itemIds);
+    result.stockPushed = st.pushed;
+    errors.push(...st.errors);
+    if (st.pushed) parts.push(`${st.pushed} stock level${st.pushed === 1 ? "" : "s"} pushed`);
+  }
+  result.summary = parts.join(" · ") || "Nothing to do";
+  const patch: Partial<Integration> = { lastError: errors.length ? errors.slice(0, 3).join("; ") : undefined };
+  if (!opts.itemIds) patch.lastSyncSummary = result.summary;
+  await ctx.store.patch("integrations", integration.id, patch);
+  return result;
 }
 
 async function applyIncoming(ctx: ServerContext, integration: Integration, incoming: IncomingOrder): Promise<string> {

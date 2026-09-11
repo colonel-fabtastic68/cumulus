@@ -271,9 +271,8 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
       if (!integration || integration.status === "not_connected") throw new InventoryError(`${CHANNEL_NAMES[channel] ?? channel} is not connected. Connect it under Integrations first.`);
       const body: Record<string, boolean> = {};
       for (const k of ["products", "orders", "pushStock", "pushProducts"] as const) if (typeof input[k] === "boolean") body[k] = input[k] as boolean;
-      const res = await ctx.api<{ summary: string; orders?: { warnings: string[] }; products?: { created: number; linked: number; errors: string[] }; push?: { pushed: number; errors: string[] } }>(`/api/integrations/${channel}/sync`, body);
-      const warnings = [...(res.orders?.warnings ?? []), ...(res.products?.errors ?? []), ...(res.push?.errors ?? [])];
-      return { ok: true, summary: res.summary, stockPushed: res.push?.pushed, productsCreated: res.products?.created, warnings: warnings.slice(0, 10) };
+      const res = await ctx.api<{ summary: string; errors?: string[]; stockPushed?: number; created?: number; detailsUpdated?: number; removed?: number }>(`/api/integrations/${channel}/sync`, body);
+      return { ok: true, summary: res.summary, stockPushed: res.stockPushed, productsCreated: res.created, productsUpdated: res.detailsUpdated, productsRemoved: res.removed, warnings: (res.errors ?? []).slice(0, 10) };
     }
 
     case "searchItems": {

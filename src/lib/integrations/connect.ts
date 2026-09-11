@@ -45,7 +45,7 @@ export async function connectIntegration(ctx: ServerContext, req: Request, id: I
     if (apiSecret) secrets.apiSecret = apiSecret;
     if (!settings.channelLocationId && info.primaryLocationId) settings.channelLocationId = info.primaryLocationId;
     const url = `${base}/api/integrations/shopify/webhook?ws=${encodeURIComponent(ctx.workspaceId)}&t=${secrets.webhookToken}`;
-    const topics = ["orders/create", "orders/updated", "orders/cancelled", ...(settings.acceptStockFromChannel ? ["inventory_levels/update"] : [])];
+    const topics = ["orders/create", "orders/updated", "orders/cancelled", "products/update", "products/delete", ...(settings.acceptStockFromChannel ? ["inventory_levels/update"] : [])];
     await removeWebhooks(existing, previous, id);
     for (const topic of topics) {
       try {
@@ -68,7 +68,7 @@ export async function connectIntegration(ctx: ServerContext, req: Request, id: I
     secrets.consumerKey = consumerKey;
     secrets.consumerSecret = consumerSecret;
     const url = `${base}/api/integrations/woocommerce/webhook?ws=${encodeURIComponent(ctx.workspaceId)}&t=${secrets.webhookToken}`;
-    const topics = ["order.created", "order.updated", ...(settings.acceptStockFromChannel ? ["product.updated"] : [])];
+    const topics = ["order.created", "order.updated", "product.updated", "product.deleted"];
     await removeWebhooks(existing, previous, id);
     for (const topic of topics) {
       try {

@@ -179,5 +179,6 @@ export function emptySnapshot(): WorkspaceSnapshot {
     transfers: [],
     shipments: [],
     quotes: [],
+    channelTombstones: [],
   };
 }

@@ -1,26 +1,30 @@
-import { isChannel, pushProductsToChannel, pushStockToChannel } from "@/lib/integrations/channelSync";
+import { isChannel, runChannelSync } from "@/lib/integrations/channelSync";
 import { authenticate, jsonError, readJson, readSecrets } from "@/lib/integrations/server";
 
 export const maxDuration = 60;
 
-/** Pushes the current on-hand count of the given items to every connected channel that mirrors stock. */
+/**
+ * The outbound half for a few items: store products removed for deleted
+ * items, new items created, changed details and counts pushed. Called by the
+ * page bridge shortly after a change, and by "Push to store".
+ */
 export async function POST(req: Request) {
   try {
     const ctx = await authenticate(req, { write: true });
-    const body = await readJson<{ itemIds?: string[] }>(req);
-    const itemIds = Array.isArray(body.itemIds) ? body.itemIds.filter((x): x is string => typeof x === "string").slice(0, 500) : undefined;
-    const integrations = (await ctx.store.list("integrations")).filter((i) => isChannel(i.id) && i.status === "connected" && (i.settings?.pushStock || i.settings?.pushProducts));
-    const results: Record<string, { pushed: number; skipped: number; created?: number; linked?: number; errors: string[] }> = {};
+    const body = await readJson<{ itemIds?: string[]; detailIds?: string[] }>(req);
+    const ids = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string").slice(0, 500) : undefined);
+    const itemIds = ids(body.itemIds);
+    const detailIds = ids(body.detailIds);
+    const integrations = (await ctx.store.list("integrations")).filter((i) => isChannel(i.id) && i.status === "connected");
+    const results: Record<string, { pushed: number; created?: number; linked?: number; updated?: number; removed: number; errors: string[] }> = {};
     for (const integration of integrations) {
       const secrets = await readSecrets(ctx, integration.id);
       if (!secrets) continue;
       try {
-        const created = integration.settings?.pushProducts ? await pushProductsToChannel(ctx, integration, secrets, itemIds) : undefined;
-        const stock = integration.settings?.pushStock ? await pushStockToChannel(ctx, integration, secrets, itemIds) : { pushed: 0, skipped: 0, errors: [] as string[] };
-        results[integration.id] = { ...stock, created: created?.created, linked: created?.linked, errors: [...(created?.errors ?? []), ...stock.errors] };
-        if (results[integration.id]!.errors.length) await ctx.store.patch("integrations", integration.id, { lastError: `Stock push: ${results[integration.id]!.errors.slice(0, 3).join("; ")}` });
+        const r = await runChannelSync(ctx, integration, secrets, { products: false, orders: false, itemIds, detailIds });
+        results[integration.id] = { pushed: r.stockPushed ?? 0, created: r.created, linked: r.linked, updated: r.detailsUpdated, removed: r.removed, errors: r.errors };
       } catch (e) {
-        results[integration.id] = { pushed: 0, skipped: 0, errors: [e instanceof Error ? e.message : String(e)] };
+        results[integration.id] = { pushed: 0, removed: 0, errors: [e instanceof Error ? e.message : String(e)] };
       }
     }
     return Response.json({ results });

@@ -1170,6 +1170,14 @@ export async function deleteItems(store: Store, actor: Actor, itemIds: string[])
     if (it.bom.some((l) => ids.has(l.itemId))) ops.push({ op: "patch", collection: "items", id: it.id, patch: { bom: it.bom.filter((l) => !ids.has(l.itemId)) } });
   }
   const names = items.filter((i) => ids.has(i.id)).map((i) => i.sku);
+  // Linked store products are removed on the next push (a tombstone survives the item).
+  for (const it of items) {
+    if (!ids.has(it.id) || !it.channels) continue;
+    for (const channel of ["shopify", "woocommerce"] as const) {
+      const ref = it.channels[channel];
+      if (ref) ops.push({ op: "put", collection: "channelTombstones", doc: { id: newId("tomb"), channel, sku: it.sku, itemId: it.id, ref, deletedAt: nowIso(), deletedBy: actor.id } });
+    }
+  }
   ops.push(activityOp(actor, "item.deleted", `${actor.name} deleted ${names.length === 1 ? names[0] : `${names.length} items`}`, { meta: { count: names.length } }));
   await store.batch(ops);
 }

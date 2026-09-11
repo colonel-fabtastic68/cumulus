@@ -1,7 +1,7 @@
 import { getFirestore } from "firebase-admin/firestore";
 import type { Integration } from "@/lib/types";
 import { CARRIERS, isCarrier } from "@/lib/integrations/carriers";
-import { isChannel, syncChannel } from "@/lib/integrations/channelSync";
+import { isChannel, runChannelSync } from "@/lib/integrations/channelSync";
 import { readSecrets, requireServiceAccount, systemContext } from "@/lib/integrations/server";
 import { applyTracking } from "@/lib/integrations/tracking";
 import { adminApp } from "@/lib/mcp/adminStore";
@@ -36,9 +36,7 @@ export async function GET(req: Request) {
       if (!secrets) continue;
       try {
         if (isChannel(integration.id)) {
-          const what = { products: integration.settings?.syncProducts !== false, orders: integration.settings?.syncOrders !== false };
-          if (!what.products && !what.orders) continue;
-          const result = await syncChannel(ctx, integration, secrets, what);
+          const result = await runChannelSync(ctx, integration, secrets, {});
           report.push({ workspace: wsRef.id, integration: integration.id, outcome: result.summary });
         } else if (isCarrier(integration.id) && secrets.token) {
           const outcome = await refreshTracking(ctx, integration.id, secrets.token);

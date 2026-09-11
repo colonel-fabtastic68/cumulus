@@ -35,6 +35,7 @@ export default function ExportsPage() {
     transfers: useCollection("transfers"),
     shipments: useCollection("shipments"),
     quotes: useCollection("quotes"),
+    channelTombstones: useCollection("channelTombstones"),
   };
   const [selected, setSelected] = useState<Set<DatasetId>>(() => new Set<DatasetId>(["items"]));
   const [format, setFormat] = useState<ExportFormat>("csv");
