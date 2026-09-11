@@ -189,10 +189,14 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
 
   const push = () =>
     run("push", async () => {
-      const res = await api<{ results: Record<string, { pushed: number; skipped: number; errors: string[] }> }>("/api/integrations/push-stock", {});
+      const res = await api<{ results: Record<string, { pushed: number; skipped: number; created?: number; linked?: number; errors: string[] }> }>("/api/integrations/push-stock", {});
       const r = res.results[def.id];
-      if (!r) return "Stock push is off for this connection; turn on “Push stock levels out” and save.";
-      return `Pushed ${r.pushed} stock levels${r.skipped ? `, ${r.skipped} skipped` : ""}${r.errors.length ? ` · ${r.errors.slice(0, 2).join("; ")}` : ""}`;
+      if (!r) return "Pushing is off for this connection; turn on “Push stock levels out” or “Push new items” and save.";
+      const parts = [`${r.pushed} stock level${r.pushed === 1 ? "" : "s"} pushed`];
+      if (r.created) parts.push(`${r.created} new draft product${r.created === 1 ? "" : "s"} created`);
+      if (r.linked) parts.push(`${r.linked} linked by SKU`);
+      if (r.skipped) parts.push(`${r.skipped} skipped`);
+      return `${parts.join(", ")}${r.errors.length ? ` · ${r.errors.slice(0, 2).join("; ")}` : ""}`;
     });
 
   // Re-verifies with the stored credentials and registers the webhooks again (settings changes need this too).
@@ -240,7 +244,7 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
             Sync now
           </Button>
           <Button icon={<ArrowRight />} onClick={() => void push()} loading={busy === "push"} disabled={busy !== null}>
-            Push stock levels
+            Push to store
           </Button>
         </div>
       )}

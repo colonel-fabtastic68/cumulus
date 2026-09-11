@@ -1,4 +1,4 @@
-import { isChannel, pushStockToChannel } from "@/lib/integrations/channelSync";
+import { isChannel, pushProductsToChannel, pushStockToChannel } from "@/lib/integrations/channelSync";
 import { authenticate, jsonError, readJson, readSecrets } from "@/lib/integrations/server";
 
 export const maxDuration = 60;
@@ -9,13 +9,15 @@ export async function POST(req: Request) {
     const ctx = await authenticate(req, { write: true });
     const body = await readJson<{ itemIds?: string[] }>(req);
     const itemIds = Array.isArray(body.itemIds) ? body.itemIds.filter((x): x is string => typeof x === "string").slice(0, 500) : undefined;
-    const integrations = (await ctx.store.list("integrations")).filter((i) => isChannel(i.id) && i.status === "connected" && i.settings?.pushStock);
-    const results: Record<string, { pushed: number; skipped: number; errors: string[] }> = {};
+    const integrations = (await ctx.store.list("integrations")).filter((i) => isChannel(i.id) && i.status === "connected" && (i.settings?.pushStock || i.settings?.pushProducts));
+    const results: Record<string, { pushed: number; skipped: number; created?: number; linked?: number; errors: string[] }> = {};
     for (const integration of integrations) {
       const secrets = await readSecrets(ctx, integration.id);
       if (!secrets) continue;
       try {
-        results[integration.id] = await pushStockToChannel(ctx, integration, secrets, itemIds);
+        const created = integration.settings?.pushProducts ? await pushProductsToChannel(ctx, integration, secrets, itemIds) : undefined;
+        const stock = integration.settings?.pushStock ? await pushStockToChannel(ctx, integration, secrets, itemIds) : { pushed: 0, skipped: 0, errors: [] as string[] };
+        results[integration.id] = { ...stock, created: created?.created, linked: created?.linked, errors: [...(created?.errors ?? []), ...stock.errors] };
         if (results[integration.id]!.errors.length) await ctx.store.patch("integrations", integration.id, { lastError: `Stock push: ${results[integration.id]!.errors.slice(0, 3).join("; ")}` });
       } catch (e) {
         results[integration.id] = { pushed: 0, skipped: 0, errors: [e instanceof Error ? e.message : String(e)] };

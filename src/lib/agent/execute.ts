@@ -208,7 +208,7 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
 
   switch (name) {
     case "getWorkspaceSummary": {
-      const [items, suppliers, orders, rmas, settings, movements] = await Promise.all([store.list("items"), store.list("suppliers"), store.list("orders"), store.list("rmas"), store.list("settings"), store.list("movements")]);
+      const [items, suppliers, orders, rmas, settings, movements, integrations] = await Promise.all([store.list("items"), store.list("suppliers"), store.list("orders"), store.list("rmas"), store.list("settings"), store.list("movements"), store.list("integrations")]);
       const cats: Record<string, { items: number; value: number }> = {};
       for (const i of items) {
         const c = i.category ?? "Uncategorised";
@@ -230,6 +230,9 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
         openRmas: rmas.filter((r) => r.status === "open" || r.status === "inspecting").map((r) => ({ number: r.number, customer: r.customer, reason: r.reason })),
         categories: cats,
         suppliers: suppliers.map((s) => ({ name: s.name, leadTimeDays: s.leadTimeDays, items: items.filter((i) => i.supplierId === s.id).length })),
+        connections: integrations
+          .filter((c) => c.status === "connected" || c.status === "error")
+          .map((c) => ({ platform: c.id, status: c.status, where: c.config?.shop ?? c.config?.siteUrl ?? c.config?.account, lastSyncAt: c.lastSyncAt?.slice(0, 16), lastSync: c.lastSyncSummary, syncs: c.settings, linkedItems: items.filter((i) => !!i.channels?.[c.id as "shopify" | "woocommerce"]).length, lastError: c.lastError })),
       };
     }
 

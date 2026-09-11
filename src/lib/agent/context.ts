@@ -2,7 +2,7 @@ import type { WorkspaceSnapshot } from "@/lib/types";
 import { inventoryValue, isLowStock, reorderQty } from "@/lib/inventory";
 
 /** Compact text snapshot of the workspace for Nimbus's system prompt. */
-export function buildAgentContext(ws: Pick<WorkspaceSnapshot, "items" | "suppliers" | "orders" | "rmas" | "settings" | "members">, extra: { page?: string; selectedSkus?: string[] } = {}): string {
+export function buildAgentContext(ws: Pick<WorkspaceSnapshot, "items" | "suppliers" | "orders" | "rmas" | "settings" | "members"> & Partial<Pick<WorkspaceSnapshot, "integrations">>, extra: { page?: string; selectedSkus?: string[] } = {}): string {
   const settings = ws.settings[0];
   const active = ws.items.filter((i) => i.status === "active");
   const low = ws.items.filter(isLowStock).sort((a, b) => a.onHand / (a.minQty || 1) - b.onHand / (b.minQty || 1));
@@ -17,6 +17,20 @@ export function buildAgentContext(ws: Pick<WorkspaceSnapshot, "items" | "supplie
   lines.push(`Suppliers: ${ws.suppliers.map((s) => `${s.name}${s.leadTimeDays ? ` [${s.leadTimeDays}d]` : ""}`).join(", ") || "none"}`);
   lines.push(`Open orders: ${openOrders.length}${openOrders.length ? ` (${openOrders.slice(0, 5).map((o) => `${o.number} ${o.customer}`).join("; ")})` : ""} · Open RMAs: ${openRmas.length}${openRmas.length ? ` (${openRmas.map((r) => r.number).join(", ")})` : ""}`);
   lines.push(`Team: ${ws.members.map((m) => `${m.name} (${m.role})`).join(", ")}`);
+  const NAMES: Record<string, string> = { shopify: "Shopify", woocommerce: "WooCommerce", shippo: "Shippo", easypost: "EasyPost", quickbooks: "QuickBooks", square: "Square" };
+  const connected = (ws.integrations ?? []).filter((c) => c.status === "connected" || c.status === "error");
+  lines.push(
+    connected.length
+      ? `Connections: ${connected
+          .map((c) => {
+            const where = c.config?.shop ?? c.config?.siteUrl ?? c.config?.account;
+            const linked = ws.items.filter((i) => !!i.channels?.[c.id as "shopify" | "woocommerce"]).length;
+            const flags = [c.settings?.syncProducts && "products in", c.settings?.syncOrders && "orders in", c.settings?.pushStock && "stock out", c.settings?.pushProducts && "new items out"].filter(Boolean).join(", ");
+            return `${NAMES[c.id] ?? c.id} ${c.status === "error" ? "connected with an error" : "connected"}${where ? ` (${where})` : ""}${c.lastSyncAt ? `, last sync ${c.lastSyncAt.slice(0, 16).replace("T", " ")}` : ""}${flags ? ` [${flags}]` : ""}${linked ? `, ${linked} linked items` : ""}${c.lastError ? `, last error: ${c.lastError.slice(0, 120)}` : ""}`;
+          })
+          .join("; ")}`
+      : "Connections: none connected (Shopify, WooCommerce, Shippo and EasyPost connect under Integrations)",
+  );
   if (low.length) {
     lines.push(`Below minimum (top ${Math.min(12, low.length)}): ${low.slice(0, 12).map((i) => `${i.sku} ${i.onHand}/${i.minQty} reorder ${reorderQty(i)}`).join("; ")}`);
   }

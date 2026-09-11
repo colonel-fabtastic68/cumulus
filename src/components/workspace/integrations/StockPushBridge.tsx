@@ -20,7 +20,7 @@ export function StockPushBridge() {
   const previous = useRef<Map<string, number> | null>(null);
   const pending = useRef(new Set<string>());
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const active = mode === "firestore" && integrations.some((i) => (i.id === "shopify" || i.id === "woocommerce") && i.status === "connected" && i.settings?.pushStock === true);
+  const active = mode === "firestore" && integrations.some((i) => (i.id === "shopify" || i.id === "woocommerce") && i.status === "connected" && (i.settings?.pushStock === true || i.settings?.pushProducts === true));
 
   useEffect(() => {
     const snapshot = new Map(items.map((i) => [i.id, i.onHand]));
@@ -29,7 +29,8 @@ export function StockPushBridge() {
     if (!active || !before) return;
     for (const item of items) {
       const was = before.get(item.id);
-      if (was !== undefined && was !== item.onHand && item.channels) pending.current.add(item.id);
+      // A changed count on a linked item, or an item that did not exist a moment ago (a new part to create in the store).
+      if ((was !== undefined && was !== item.onHand && item.channels) || (was === undefined && !item.channels && item.status === "active")) pending.current.add(item.id);
     }
     if (pending.current.size === 0) return;
     if (timer.current) clearTimeout(timer.current);

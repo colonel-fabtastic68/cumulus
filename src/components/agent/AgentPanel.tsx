@@ -89,6 +89,7 @@ function AgentChat({ onClose, pending, consumePending, pendingSession, consumePe
   const orders = useCollection("orders");
   const rmas = useCollection("rmas");
   const members = useCollection("members");
+  const integrations = useCollection("integrations");
   const sessions = useCollection("agentSessions");
   const autoApprove = settings.agentAutoApprove && canWrite(user);
   const suggestions = useMemo(() => buildSuggestions(items, items.filter(isLowStock).length, settings.inactivityDays), [items, settings.inactivityDays]);
@@ -102,7 +103,7 @@ function AgentChat({ onClose, pending, consumePending, pendingSession, consumePe
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Latest context for the request body.
-  const context = useMemo(() => buildAgentContext({ items, suppliers, orders, rmas, settings: [settings], members }, pageContext), [items, suppliers, orders, rmas, settings, members, pageContext]);
+  const context = useMemo(() => buildAgentContext({ items, suppliers, orders, rmas, settings: [settings], members, integrations }, pageContext), [items, suppliers, orders, rmas, settings, members, integrations, pageContext]);
   useEffect(() => {
     latestBody.context = context;
     latestBody.userName = user.name;

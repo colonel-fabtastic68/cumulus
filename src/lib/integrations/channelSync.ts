@@ -338,6 +338,69 @@ export async function pushStockToChannel(ctx: ServerContext, integration: Integr
   return out;
 }
 
+/**
+ * Creates active items that the channel does not have yet as draft products
+ * there, links them, and sets their stock. Items already linked are left to
+ * the stock push; a product that exists in the store but was never linked is
+ * matched by SKU first so nothing is duplicated.
+ */
+export async function pushProductsToChannel(ctx: ServerContext, integration: Integration, secrets: Secrets, itemIds?: string[]): Promise<{ created: number; linked: number; skipped: number; errors: string[] }> {
+  const id = integration.id as ChannelId;
+  const items = (await ctx.store.list("items")).filter((i) => (!itemIds || itemIds.includes(i.id)) && i.status === "active" && !i.channels?.[id] && i.sku.trim());
+  const out = { created: 0, linked: 0, skipped: 0, errors: [] as string[] };
+  if (items.length === 0) return out;
+  const locations = await ctx.store.list("locations");
+  const homeId = defaultLocation(locations).location.id;
+  const locationId = integration.settings?.locationId;
+  const qtyFor = (item: Item) => Math.max(0, locationId ? qtyAt(item, locationId, homeId) : item.onHand);
+  const ops: WriteOp[] = [];
+
+  if (id === "shopify") {
+    const creds = shopifyCreds(integration, secrets);
+    // Existing store products that simply were never linked: match by SKU rather than creating twins.
+    const existing = new Map<string, NonNullable<Item["channels"]>["shopify"]>();
+    for (const p of await shopify.listProducts(creds)) for (const v of p.variants) if (v.sku?.trim()) existing.set(v.sku.trim().toUpperCase(), { productId: String(p.id), variantId: String(v.id), inventoryItemId: String(v.inventory_item_id) });
+    for (const item of items) {
+      try {
+        let ref = existing.get(item.sku.toUpperCase());
+        if (ref) out.linked++;
+        else {
+          ref = await shopify.createProduct(creds, { title: item.name, sku: item.sku, price: item.price, description: item.description, vendor: item.brand, productType: item.category, tags: item.tags, barcode: item.barcode, weight: item.weight, weightUnit: item.weightUnit });
+          out.created++;
+          const channelLocationId = integration.settings?.channelLocationId;
+          if (ref.inventoryItemId && channelLocationId && qtyFor(item) > 0) await shopify.setInventoryLevel(creds, ref.inventoryItemId, channelLocationId, qtyFor(item));
+        }
+        ops.push({ op: "patch", collection: "items", id: item.id, patch: { channels: { ...(item.channels ?? {}), shopify: ref } } });
+      } catch (e) {
+        out.errors.push(`${item.sku}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+  } else {
+    const creds = await wooCreds(ctx, integration, secrets);
+    const existing = new Map<string, NonNullable<Item["channels"]>["woocommerce"]>();
+    for (const { product, variation } of await woo.listProducts(creds)) {
+      const sku = (variation ?? product).sku?.trim();
+      if (sku) existing.set(sku.toUpperCase(), { productId: String(product.id), variationId: variation ? String(variation.id) : undefined });
+    }
+    for (const item of items) {
+      try {
+        let ref = existing.get(item.sku.toUpperCase());
+        if (ref) out.linked++;
+        else {
+          const created = await woo.createProduct(creds, { name: item.name, sku: item.sku, price: item.price, description: item.description, stockQuantity: qtyFor(item), weight: item.weight, dimensions: item.dimensions, barcode: item.barcode });
+          ref = { productId: created.id };
+          out.created++;
+        }
+        ops.push({ op: "patch", collection: "items", id: item.id, patch: { channels: { ...(item.channels ?? {}), woocommerce: ref } } });
+      } catch (e) {
+        out.errors.push(`${item.sku}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+  }
+  if (ops.length) await ctx.store.batch(ops);
+  return out;
+}
+
 /** Applies one webhook delivery. Returns a one-line description for logs. */
 export async function handleChannelWebhook(ctx: ServerContext, integration: Integration, secrets: Secrets, topic: string, payload: unknown): Promise<string> {
   const id = integration.id as ChannelId;

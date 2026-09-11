@@ -259,6 +259,37 @@ export async function getOrder(creds: WooCreds, id: string): Promise<WooOrder> {
   return data;
 }
 
+export interface NewWooProduct {
+  name: string;
+  sku: string;
+  price?: number;
+  description?: string;
+  stockQuantity?: number;
+  weight?: number;
+  dimensions?: { length?: number; width?: number; height?: number };
+  barcode?: string;
+}
+
+/** Creates a simple product as a draft, so nothing goes live on the storefront until someone publishes it. */
+export async function createProduct(creds: WooCreds, p: NewWooProduct): Promise<{ id: string }> {
+  const body: Record<string, unknown> = {
+    name: p.name,
+    sku: p.sku,
+    type: "simple",
+    status: "draft",
+    manage_stock: true,
+    stock_quantity: Math.max(0, Math.round(p.stockQuantity ?? 0)),
+  };
+  if (p.price !== undefined && p.price > 0) body.regular_price = String(p.price);
+  if (p.description) body.description = p.description;
+  if (p.weight) body.weight = String(p.weight);
+  if (p.dimensions && (p.dimensions.length || p.dimensions.width || p.dimensions.height)) body.dimensions = { length: String(p.dimensions.length ?? ""), width: String(p.dimensions.width ?? ""), height: String(p.dimensions.height ?? "") };
+  if (p.barcode) body.global_unique_id = p.barcode;
+  const { data } = await request<{ id?: number }>(creds, "products", { method: "POST", body });
+  if (!data || typeof data.id !== "number") throw new HttpError(502, `${new URL(creds.siteUrl).host} did not confirm the new product ${p.sku}.`);
+  return { id: String(data.id) };
+}
+
 export async function updateStock(creds: WooCreds, productId: string, variationId: string | undefined, qty: number): Promise<void> {
   const path = variationId ? `products/${productId}/variations/${variationId}` : `products/${productId}`;
   await request(creds, path, { method: "PUT", body: { manage_stock: true, stock_quantity: Math.max(0, Math.round(qty)) } });

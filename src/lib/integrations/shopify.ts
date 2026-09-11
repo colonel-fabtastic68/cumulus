@@ -124,6 +124,40 @@ export async function getOrder(creds: ShopifyCreds, id: string): Promise<Shopify
   return data.order;
 }
 
+export interface NewShopifyProduct {
+  title: string;
+  sku: string;
+  price?: number;
+  description?: string;
+  vendor?: string;
+  productType?: string;
+  tags?: string[];
+  barcode?: string;
+  weight?: number;
+  weightUnit?: string;
+}
+
+/** Creates a single-variant product as a draft; stock is set afterwards through inventory levels. */
+export async function createProduct(creds: ShopifyCreds, p: NewShopifyProduct): Promise<{ productId: string; variantId: string; inventoryItemId?: string }> {
+  const variant: Record<string, unknown> = { sku: p.sku, inventory_management: "shopify", inventory_policy: "deny" };
+  if (p.price !== undefined && p.price > 0) variant.price = p.price.toFixed(2);
+  if (p.barcode) variant.barcode = p.barcode;
+  if (p.weight) {
+    variant.weight = p.weight;
+    if (p.weightUnit && ["g", "kg", "oz", "lb"].includes(p.weightUnit)) variant.weight_unit = p.weightUnit;
+  }
+  const product: Record<string, unknown> = { title: p.title, status: "draft", variants: [variant] };
+  if (p.description) product.body_html = p.description;
+  if (p.vendor) product.vendor = p.vendor;
+  if (p.productType) product.product_type = p.productType;
+  if (p.tags?.length) product.tags = p.tags.join(", ");
+  const { data } = await request<{ product?: { id?: number; variants?: Array<{ id?: number; inventory_item_id?: number }> } }>(creds, "products.json", { method: "POST", body: { product } });
+  const created = data?.product;
+  const v = created?.variants?.[0];
+  if (typeof created?.id !== "number" || typeof v?.id !== "number") throw new HttpError(502, `${creds.shop} did not confirm the new product ${p.sku}.`);
+  return { productId: String(created.id), variantId: String(v.id), inventoryItemId: v.inventory_item_id ? String(v.inventory_item_id) : undefined };
+}
+
 export async function setInventoryLevel(creds: ShopifyCreds, inventoryItemId: string, locationId: string, available: number): Promise<void> {
   await request(creds, "inventory_levels/set.json", { method: "POST", body: { location_id: Number(locationId), inventory_item_id: Number(inventoryItemId), available: Math.max(0, Math.round(available)) } });
 }
