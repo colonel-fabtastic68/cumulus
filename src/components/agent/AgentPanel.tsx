@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls, type InferUITools, type UIDataTypes, type UIMessage } from "ai";
-import { ArrowUp, Check, ChevronDown, ChevronRight, Eye, History, Loader2, Plus, Sparkles, Square, X } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, ChevronRight, Eye, History, Loader2, Plus, RefreshCw, Sparkles, Square, X } from "lucide-react";
 import { Badge, Banner, Button, IconButton, Markdown, Menu, useToast } from "@/components/ui";
 import { agentTools, isWriteTool, TOOL_LABELS, type AgentToolName } from "@/lib/agent/tools";
 import { describeProposal, executeTool, previewPatches, PREVIEWABLE_TOOLS } from "@/lib/agent/execute";
@@ -148,7 +148,7 @@ export function AgentChat({ onClose, pending, consumePending, pendingSession, co
     [sessions, sessionId, store, user.id, user.name],
   );
 
-  const { messages, sendMessage, status, stop, error, addToolOutput, clearError } = useChat<AgentUIMessage>({
+  const { messages, sendMessage, regenerate, status, stop, error, addToolOutput, clearError } = useChat<AgentUIMessage>({
     id: sessionId,
     messages: initialMessages,
     transport,
@@ -201,6 +201,19 @@ export function AgentChat({ onClose, pending, consumePending, pendingSession, co
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, status]);
+
+  /**
+   * Resends the conversation as it stands. When the last message is the
+   * assistant's (its tool calls already ran), the request simply continues from
+   * there; regenerating would rerun those tools, so it is only used when the
+   * last message is the person's.
+   */
+  const retry = () => {
+    clearError();
+    const last = messages[messages.length - 1];
+    if (last?.role === "assistant") void sendMessage();
+    else void regenerate();
+  };
 
   const submit = () => {
     const text = input.trim();
@@ -357,7 +370,15 @@ export function AgentChat({ onClose, pending, consumePending, pendingSession, co
               </div>
             )}
             {error && !needsKey && (
-              <Banner tone="critical" title="Something went wrong">
+              <Banner
+                tone="critical"
+                title="Nimbus could not finish"
+                action={
+                  <Button size="sm" variant="primary" icon={<RefreshCw />} onClick={() => void retry()}>
+                    Try again
+                  </Button>
+                }
+              >
                 {error.message}
               </Banner>
             )}

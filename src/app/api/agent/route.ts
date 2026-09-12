@@ -1,108 +1,31 @@
 import { createGoogle } from "@ai-sdk/google";
-import { APICallError, convertToModelMessages, createUIMessageStreamResponse, isStepCount, streamText, toUIMessageStream, wrapLanguageModel, type LanguageModelMiddleware, type UIMessage } from "ai";
+import { convertToModelMessages, createUIMessageStreamResponse, isStepCount, streamText, toUIMessageStream, wrapLanguageModel, type UIMessage } from "ai";
 import { agentTools } from "@/lib/agent/tools";
+import { explainChainError, fallbackMiddleware } from "@/lib/agent/fallback";
+import { compactHistory } from "@/lib/agent/history";
 
-export const maxDuration = 60;
+/** A long edit can take many model steps; give the whole exchange room to finish. */
+export const maxDuration = 300;
 
 const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.8-flash";
-/** Tried in order when the primary model is overloaded (503), rate-limited (429), retired for this key, or slow to answer. */
+/** Tried in order when the primary model is over quota, overloaded, retired for this key, or slow to answer. */
 const FALLBACK_MODELS = (process.env.GEMINI_FALLBACK_MODELS ?? "gemini-3.7-flash,gemini-3.5-flash,gemini-3.5-flash-lite,gemini-3.6-flash")
   .split(",")
   .map((s) => s.trim())
   .filter((s) => s && s !== MODEL);
-
-/** How long a model may take to start responding before the next one is tried. */
-const CONNECT_TIMEOUT_MS = Number(process.env.GEMINI_CONNECT_TIMEOUT_MS ?? 15_000);
-
-class ModelTimeoutError extends Error {
-  constructor(id: string) {
-    super(`${id} did not start responding within ${CONNECT_TIMEOUT_MS / 1000}s`);
-    this.name = "ModelTimeoutError";
-  }
-}
-
-/** Errors worth trying the next model for: capacity problems, slow starts, and models this key can no longer use. */
-function shouldFallback(e: unknown): boolean {
-  if (e instanceof ModelTimeoutError) return true;
-  const msg = e instanceof Error ? e.message : String(e);
-  if (/no longer available|not available to new users|not found for API version|is not supported|has been deprecated|does not exist/i.test(msg)) return true;
-  if (APICallError.isInstance(e)) return e.statusCode === 503 || e.statusCode === 429 || e.statusCode === 404 || e.isRetryable;
-  return /high demand|overloaded|503|429|UNAVAILABLE|RESOURCE_EXHAUSTED/i.test(msg);
-}
+const MODELS = [MODEL, ...FALLBACK_MODELS];
 
 /**
- * Run `attempt` with an abort signal that fires if the model has not started
- * responding within CONNECT_TIMEOUT_MS. Once the response has started the
- * stream itself is not time-limited.
- */
-async function withConnectTimeout<T>(id: string, upstream: AbortSignal | undefined, attempt: (signal: AbortSignal) => PromiseLike<T>): Promise<T> {
-  const controller = new AbortController();
-  const onUpstreamAbort = () => controller.abort();
-  upstream?.addEventListener("abort", onUpstreamAbort);
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      controller.abort();
-      reject(new ModelTimeoutError(id));
-    }, CONNECT_TIMEOUT_MS);
-  });
-  try {
-    return await Promise.race([Promise.resolve(attempt(controller.signal)), timeout]);
-  } finally {
-    if (timer) clearTimeout(timer);
-    upstream?.removeEventListener("abort", onUpstreamAbort);
-  }
-}
-
-/**
- * Primary Gemini model with automatic fallback: if a model is overloaded,
- * retired, or slow to start, the same request is retried on the next model.
+ * Primary Gemini model with automatic fallback and a quota-aware second pass;
+ * see lib/agent/fallback.ts. Attempts are logged as one line per call.
  */
 function modelWithFallback(google: ReturnType<typeof createGoogle>) {
-  const candidates = [MODEL, ...FALLBACK_MODELS];
-  const middleware: LanguageModelMiddleware = {
-    wrapStream: async ({ params, model }) => {
-      let last: unknown;
-      for (const [i, id] of candidates.entries()) {
-        const candidate = i === 0 ? model : google(id);
-        try {
-          return await withConnectTimeout(id, params.abortSignal, (signal) => candidate.doStream({ ...params, abortSignal: signal }));
-        } catch (e) {
-          if (params.abortSignal?.aborted) throw e; // the client went away
-          if (!shouldFallback(e)) throw e;
-          last = e;
-          const next = candidates[i + 1];
-          if (next) console.warn(`[agent] ${id} unavailable (${e instanceof Error ? e.message.slice(0, 90) : String(e)}); trying ${next}`);
-        }
-      }
-      throw last;
-    },
-    wrapGenerate: async ({ params, model }) => {
-      let last: unknown;
-      for (const [i, id] of candidates.entries()) {
-        const candidate = i === 0 ? model : google(id);
-        try {
-          return await withConnectTimeout(id, params.abortSignal, (signal) => candidate.doGenerate({ ...params, abortSignal: signal }));
-        } catch (e) {
-          if (params.abortSignal?.aborted) throw e;
-          if (!shouldFallback(e)) throw e;
-          last = e;
-        }
-      }
-      throw last;
-    },
-  };
-  return wrapLanguageModel({ model: google(MODEL), middleware });
+  return wrapLanguageModel({ model: google(MODEL), middleware: fallbackMiddleware({ models: MODELS, resolve: (id) => google(id), budgetMs: 220_000, log: (line) => console.warn(line) }) });
 }
 
 /** Turn provider errors into something the person in the chat can act on. */
 function friendlyError(error: unknown): string {
-  const msg = error instanceof Error ? error.message : String(error);
-  if (/did not start responding|high demand|overloaded|503|UNAVAILABLE/i.test(msg)) return `Gemini is overloaded right now (tried ${[MODEL, ...FALLBACK_MODELS].join(", ")}). Wait a moment and send the message again.`;
-  if (/429|RESOURCE_EXHAUSTED|quota/i.test(msg)) return "Gemini rate limit or quota reached for this API key. Wait a minute or raise the quota in Google AI Studio.";
-  if (/API key|401|403|PERMISSION_DENIED/i.test(msg)) return "Gemini rejected the API key. Check GOOGLE_GENERATIVE_AI_API_KEY in .env.local and restart the dev server.";
-  if (/no longer available|not available to new users|not found|404/i.test(msg)) return `Gemini reported that the models we tried (${[MODEL, ...FALLBACK_MODELS].join(", ")}) are not available to this key. Set GEMINI_MODEL / GEMINI_FALLBACK_MODELS in the environment to models listed for your key (for example gemini-3.6-flash).`;
-  return msg;
+  return explainChainError(error, MODELS);
 }
 
 function systemPrompt(context: string, userName: string, autoApprove: boolean) {
@@ -115,6 +38,7 @@ You are talking with ${userName}. Today is ${new Date().toISOString().slice(0, 1
 - Read before you write: call getWorkspaceSummary / searchItems / getItem / getReport to ground yourself. Never guess quantities, costs or SKUs.
 - For bulk changes, use previewBulkUpdate first when the scope is large or ambiguous, then bulkUpdateItems with a clear reason. Both take the same arguments: target with skus, a filter, or all: true; use set for a shared value, adjustPricePct / adjustCostPct for percentage changes, and lines for per-item values.
 - Keep tool calls to a minimum. Look up several SKUs with ONE searchItems call (skus list) or one filter; never one call per SKU. Make ONE bulkUpdateItems / adjustStock / receiveStock call carrying every item or line, never one call per item; different values per item go in bulkUpdateItems.lines. The user approves each write call, so a dozen small calls means a dozen approvals.
+- Mass edits (hundreds of items): when every target gets the same value, use filter or all: true with set, never lines. When each item needs its own value, put at most 120 lines in one bulkUpdateItems / adjustStock call and issue the calls back to back in the same turn; the user approves them together. Do not re-read items you already have; searchItems results from this conversation are enough.
 - ${autoApprove ? "Write tools apply immediately." : "Write tools are shown to the user for approval before they run. If a tool result says it was rejected, do not retry it; ask what to change."}
 - Every quantity change goes through the stock ledger. Use adjustStock for counts and write-offs, receiveStock for goods in, buildAssembly for production, fulfillOrders for goods out.
 - Bad data in = bad data out. When the user's request would create inconsistent data (duplicate SKUs, negative stock, BOM loops), say so and propose the correct approach.
@@ -145,14 +69,15 @@ export async function POST(req: Request) {
   const body = (await req.json()) as { messages: UIMessage[]; context?: string; userName?: string; autoApprove?: boolean };
   const google = createGoogle({ apiKey });
 
+  const messages = compactHistory(body.messages);
   const result = streamText({
     model: modelWithFallback(google),
     instructions: systemPrompt(body.context ?? "(no snapshot provided)", body.userName ?? "a teammate", body.autoApprove ?? false),
-    messages: await convertToModelMessages(body.messages),
+    messages: await convertToModelMessages(messages),
     tools: agentTools,
-    stopWhen: isStepCount(12),
-    // Fallback models run inside each attempt, so one retry is plenty.
-    maxRetries: 1,
+    stopWhen: isStepCount(16),
+    // Retries, fallbacks and quota waits all happen inside the chain.
+    maxRetries: 0,
     onError: ({ error }) => {
       console.error("[agent]", error instanceof Error ? error.message : error);
     },
