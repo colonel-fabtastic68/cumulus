@@ -75,7 +75,6 @@ function ReportsView() {
     <Page
       title="Reports"
       subtitle={`Reorder, valuation, ageing and usage across ${settings.companyName}. Every report exports to CSV and can be handed to Nimbus.`}
-      wide
       secondaryActions={
         <Button icon={<Sparkles />} onClick={() => openAgent()}>
           Ask Nimbus
@@ -98,7 +97,7 @@ function ReportsView() {
 
 function ReportsFallback() {
   return (
-    <Page title="Reports" wide>
+    <Page title="Reports">
       <Skeleton className="h-9 w-full max-w-2xl" />
       <Skeleton className="mt-5 h-72 w-full" />
     </Page>

@@ -15,9 +15,14 @@ export interface Column<T> {
   align?: "left" | "right" | "center";
   width?: string;
   className?: string;
-  /** Hide on narrow screens. */
+  /** Hide on narrow screens (viewport breakpoints). */
   hideBelow?: "sm" | "md" | "lg";
+  /** Show only once the content area (`main`, a container) is at least this wide. */
+  showFrom?: ContainerWidth;
 }
+
+/** Widths of the `main` content area in px at which a column appears; the table itself is 64px narrower on desktop. */
+export type ContainerWidth = 672 | 768 | 896 | 1024 | 1152 | 1280 | 1376 | 1472;
 
 export interface TableProps<T> {
   rows: T[];
@@ -45,11 +50,25 @@ export interface TableProps<T> {
   stickyHeader?: boolean;
   /** Keep the column header visible while the page scrolls. The card stops clipping, so use it on full-width list pages. */
   lockHeader?: boolean;
+  /** Fit the columns to the card: fixed layout, single-line headers and cells that truncate instead of widening the table. Give every column but one a `width`. */
+  fit?: boolean;
+  /** Faint vertical hairlines between columns, for tables with many numeric columns. */
+  columnDividers?: boolean;
 }
 
 const hideCls = { sm: "hidden sm:table-cell", md: "hidden md:table-cell", lg: "hidden lg:table-cell" };
+const showFromCls: Record<ContainerWidth, string> = {
+  672: "hidden @2xl:table-cell",
+  768: "hidden @3xl:table-cell",
+  896: "hidden @4xl:table-cell",
+  1024: "hidden @5xl:table-cell",
+  1152: "hidden @6xl:table-cell",
+  1280: "hidden @7xl:table-cell",
+  1376: "hidden @min-[1376px]:table-cell",
+  1472: "hidden @min-[1472px]:table-cell",
+};
 
-export function Table<T>({ rows, columns, rowKey, rowLabel, rowClassName, onRowClick, selectable, selected, onSelectedChange, emptyState, pageSize = 50, defaultSort, toolbar, bulkActions, footer, dense, className, stickyHeader = false, lockHeader = false }: TableProps<T>) {
+export function Table<T>({ rows, columns, rowKey, rowLabel, rowClassName, onRowClick, selectable, selected, onSelectedChange, emptyState, pageSize = 50, defaultSort, toolbar, bulkActions, footer, dense, className, stickyHeader = false, lockHeader = false, fit = false, columnDividers = false }: TableProps<T>) {
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(defaultSort ?? null);
   const [page, setPage] = useState(0);
 
@@ -90,7 +109,9 @@ export function Table<T>({ rows, columns, rowKey, rowLabel, rowClassName, onRowC
     onSelectedChange?.(next);
   };
 
-  const cellPad = dense ? "px-3 py-1.5" : "px-3 py-2 max-sm:py-2.5";
+  const cellPad = dense ? "px-3 py-1.5" : fit ? "px-3.5 py-2 max-sm:py-2.5" : "px-3 py-2 max-sm:py-2.5";
+  const colLine = (i: number) => columnDividers && i > 0 && "border-l border-[color:var(--divider-soft)]";
+  const visibility = (c: Column<T>) => cn(c.hideBelow && hideCls[c.hideBelow], c.showFrom && showFromCls[c.showFrom]);
 
   return (
     <div className={cn("card", lockHeader ? "overflow-visible" : "overflow-hidden", className)}>
@@ -110,22 +131,22 @@ export function Table<T>({ rows, columns, rowKey, rowLabel, rowClassName, onRowC
         </div>
       )}
       <div className={cn(lockHeader ? "overflow-x-auto md:overflow-visible" : "overflow-x-auto", stickyHeader && "max-h-[70vh] overflow-y-auto")}>
-        <table className="w-full min-w-[640px] border-collapse text-[13px] max-sm:text-[14px]">
+        <table className={cn("w-full min-w-[640px] border-collapse text-[13px] max-sm:text-[14px]", fit && "table-fixed")}>
           <thead className={cn("bg-surface-subdued text-[12px] font-[550] text-text-secondary max-sm:text-[12.5px]", (stickyHeader || lockHeader) && "sticky top-0 z-[2]", lockHeader && "shadow-[0_1px_0_var(--divider)]")}>
             <tr>
               {selectable && (
-                <th className={cn("w-9 border-b border-[color:var(--divider)]", cellPad)}>
+                <th className={cn(fit ? "w-11" : "w-9", "border-b border-[color:var(--divider)]", cellPad)}>
                   <Checkbox checked={allVisibleSelected} indeterminate={!allVisibleSelected && someSelected} onChange={toggleAll} aria-label="Select all rows on this page" />
                 </th>
               )}
-              {columns.map((c) => {
+              {columns.map((c, i) => {
                 const active = sort?.key === c.key;
                 return (
                   <th
                     key={c.key}
                     style={{ width: c.width }}
                     aria-sort={c.sortValue ? (active ? (sort!.dir === "asc" ? "ascending" : "descending") : "none") : undefined}
-                    className={cn("border-b border-[color:var(--divider)] font-medium", cellPad, c.align === "right" && "text-right", c.align === "center" && "text-center", !c.align && "text-left", c.hideBelow && hideCls[c.hideBelow], c.className)}
+                    className={cn("border-b border-[color:var(--divider)] font-medium", cellPad, fit && "whitespace-nowrap", colLine(i), c.align === "right" && "text-right", c.align === "center" && "text-center", !c.align && "text-left", visibility(c), c.className)}
                   >
                     {c.sortValue ? (
                       <button
@@ -179,8 +200,8 @@ export function Table<T>({ rows, columns, rowKey, rowLabel, rowClassName, onRowC
                         <Checkbox checked={isSel} onChange={() => toggle(id)} aria-label={`Select ${label}`} />
                       </td>
                     )}
-                    {columns.map((c) => (
-                      <td key={c.key} className={cn(cellPad, "align-middle", c.align === "right" && "text-right tabular", c.align === "center" && "text-center", c.hideBelow && hideCls[c.hideBelow], c.className)}>
+                    {columns.map((c, i) => (
+                      <td key={c.key} className={cn(cellPad, "align-middle", fit && "overflow-hidden whitespace-nowrap", colLine(i), c.align === "right" && "text-right tabular", c.align === "center" && "text-center", visibility(c), c.className)}>
                         {c.render(row)}
                       </td>
                     ))}

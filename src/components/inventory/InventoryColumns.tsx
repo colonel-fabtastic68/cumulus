@@ -64,10 +64,9 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
       {
         key: "sku",
         header: "SKU",
-        width: "24%",
         sortValue: (i) => i.sku,
         render: (i) => (
-          <div className="min-w-0 max-w-[280px]">
+          <div className="min-w-0">
             <Link href={"/inventory/" + i.id} onClick={(e) => e.stopPropagation()} className="font-mono text-[12px] font-medium text-text hover:text-accent">
               {i.sku}
             </Link>
@@ -80,18 +79,30 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
       {
         key: "category",
         header: "Category",
+        width: "104px",
+        showFrom: 1280,
         sortValue: (i) => i.category ?? "",
-        render: (i) => (i.category ? <span>{i.category}</span> : <span className="text-text-tertiary">—</span>),
+        render: (i) =>
+          i.category ? (
+            <span className="block truncate" title={i.category}>
+              {i.category}
+            </span>
+          ) : (
+            <span className="text-text-tertiary">—</span>
+          ),
       },
       {
         key: "type",
         header: "Type",
+        width: "104px",
+        showFrom: 896,
         sortValue: (i) => i.type,
         render: (i) => <Badge tone={i.type === "assembly" ? "info" : "default"}>{i.type === "assembly" ? "Assembly" : "Part"}</Badge>,
       },
       {
         key: "onHand",
         header: location ? `At ${location.name}` : "On hand",
+        width: location ? "140px" : "124px",
         align: "right",
         sortValue: (i) => (location ? qtyAt(i, location.id, location.homeId) : i.onHand),
         render: (i) => (location ? <AtLocationCell item={i} location={location} /> : <StockLevelCell item={i} />),
@@ -99,6 +110,8 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
       {
         key: "minMax",
         header: "Min / Max",
+        width: "92px",
+        showFrom: 1152,
         align: "right",
         sortValue: (i) => i.minQty ?? null,
         render: (i) => (
@@ -110,6 +123,7 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
       {
         key: "unitCost",
         header: "Unit cost",
+        width: "88px",
         align: "right",
         sortValue: (i) => i.unitCost,
         render: (i) => formatMoney(i.unitCost, currency),
@@ -117,6 +131,8 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
       {
         key: "price",
         header: "Price",
+        width: "84px",
+        showFrom: 768,
         align: "right",
         sortValue: (i) => i.price,
         render: (i) => formatMoney(i.price, currency),
@@ -124,6 +140,7 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
       {
         key: "value",
         header: "Value",
+        width: "88px",
         align: "right",
         sortValue: (i) => i.onHand * i.unitCost,
         render: (i) => <span className="font-medium">{formatMoney(i.onHand * i.unitCost, currency)}</span>,
@@ -131,14 +148,15 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
       {
         key: "supplier",
         header: "Supplier",
-        hideBelow: "lg",
+        width: "128px",
+        showFrom: 1024,
         sortValue: (i) => supplierName(i.supplierId) ?? "",
         render: (i) => {
           const name = supplierName(i.supplierId);
           const more = (i.suppliers ?? []).filter((s) => s.supplierId !== i.supplierId).length;
           if (!name) return <span className="text-text-tertiary">—</span>;
           return (
-            <span className="block max-w-[180px] truncate" title={more ? `${name} and ${more} more` : name}>
+            <span className="block truncate" title={more ? `${name} and ${more} more` : name}>
               {name}
               {more > 0 && <span className="ml-1 rounded-full bg-surface-hover px-1.5 text-[11px] text-text-secondary">+{more}</span>}
             </span>
@@ -148,21 +166,24 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
       {
         key: "leadTime",
         header: "Lead time",
+        width: "88px",
+        showFrom: 1376,
         align: "right",
-        hideBelow: "lg",
         sortValue: (i) => i.leadTimeDays ?? null,
         render: (i) => (i.leadTimeDays === undefined ? <span className="text-text-tertiary">—</span> : `${formatNumber(i.leadTimeDays)}d`),
       },
       {
         key: "status",
         header: "Status",
+        width: "116px",
         sortValue: (i) => i.status,
         render: (i) => <StatusBadge status={i.status} />,
       },
       {
         key: "updated",
         header: "Updated",
-        hideBelow: "md",
+        width: "88px",
+        showFrom: 1472,
         sortValue: (i) => i.updatedAt,
         render: (i) => <span className="whitespace-nowrap text-text-secondary">{formatRelative(i.updatedAt)}</span>,
       },

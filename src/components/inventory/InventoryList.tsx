@@ -233,7 +233,7 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
     <Page
       title="Inventory"
       subtitle={subtitle}
-      wide
+      fullWidth
       primaryAction={
         writable ? (
           <Button variant="primary" icon={<Plus />} onClick={() => setDialog("new")}>
@@ -275,6 +275,8 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
           onSelectedChange={setSelected}
           pageSize={50}
           lockHeader
+          fit
+          columnDividers
           defaultSort={{ key: "sku", dir: "asc" }}
           toolbar={toolbar}
           bulkActions={bulkActions}

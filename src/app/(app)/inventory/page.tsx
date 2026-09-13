@@ -28,7 +28,7 @@ function InventoryFromQuery() {
 
 function InventoryFallback() {
   return (
-    <Page title="Inventory" wide>
+    <Page title="Inventory" fullWidth>
       <Skeleton className="h-9 w-full max-w-md" />
       <Skeleton className="mt-4 h-72 w-full" />
     </Page>

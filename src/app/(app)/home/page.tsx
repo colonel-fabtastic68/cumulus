@@ -37,7 +37,6 @@ export default function HomePage() {
     <Page
       title={greetingFor(user.name)}
       subtitle={`${data.settings.companyName} · ${todayLabel()}`}
-      wide
       primaryAction={
         <Button variant="primary" icon={<Sparkles />} onClick={() => openAgent()}>
           Ask Nimbus
