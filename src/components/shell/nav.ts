@@ -13,7 +13,7 @@ export const NAV: NavItem[] = [
   { href: "/inventory", label: "Inventory", icon: Boxes },
   { href: "/receiving", label: "Receiving", icon: PackageCheck },
   { href: "/transfers", label: "Transfers", icon: ArrowLeftRight },
-  { href: "/builds", label: "Builds", icon: Hammer },
+  { href: "/builds", label: "BOM", icon: Hammer },
   { href: "/orders", label: "Orders", icon: ShoppingCart },
   { href: "/rmas", label: "Returns", icon: RotateCcw },
   { href: "/suppliers", label: "Suppliers", icon: Truck },

@@ -173,7 +173,7 @@ export default function ItemDetailPage() {
         </>
       }
     >
-      <PageLayout aside={<ItemAside item={item} items={items} supplier={supplier} membersById={membersById} activity={activity} />}>
+      <PageLayout aside={<ItemAside item={item} items={items} suppliers={suppliers} currency={settings.currency} canEdit={writable} membersById={membersById} activity={activity} />}>
         <StockSummaryCard item={item} movements={itemMovements} lots={itemLots} settings={settings} />
         <Card padded={false}>
           <Suspense fallback={null}>

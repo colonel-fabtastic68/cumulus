@@ -8,6 +8,7 @@ import { buildableQty, isLowStock } from "@/lib/inventory";
 import { formatNumber, formatQty } from "@/lib/format";
 import { cn, matches } from "@/lib/utils";
 import { Badge, Button, EmptyState, SearchField, Table, type Column } from "@/components/ui";
+import { ExportBomMenu } from "./ExportBomMenu";
 
 interface AssembliesTableProps {
   /** Every item in the workspace; needed to explode BOMs. */
@@ -101,21 +102,25 @@ export function AssembliesTable({ items, assemblies, canWrite, onBuild }: Assemb
         key: "actions",
         header: "",
         align: "right",
-        width: "90px",
-        render: (a) =>
-          canWrite ? (
-            <Button
-              size="sm"
-              icon={<Hammer />}
-              onClick={() => onBuild(a)}
-              title={(buildable.get(a.id) ?? 0) === 0 ? "Short on components from stock. The build dialog can explode sub-assemblies into base parts." : undefined}
-            >
-              Build
-            </Button>
-          ) : null,
+        width: "210px",
+        render: (a) => (
+          <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+            <ExportBomMenu assembly={a} items={items} label="Export" />
+            {canWrite && (
+              <Button
+                size="sm"
+                icon={<Hammer />}
+                onClick={() => onBuild(a)}
+                title={(buildable.get(a.id) ?? 0) === 0 ? "Short on components from stock. The build dialog can explode sub-assemblies into base parts." : undefined}
+              >
+                Build
+              </Button>
+            )}
+          </div>
+        ),
       },
     ],
-    [buildable, canWrite, onBuild],
+    [buildable, canWrite, onBuild, items],
   );
 
   const lowCount = assemblies.filter(isLowStock).length;

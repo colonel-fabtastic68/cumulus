@@ -59,7 +59,7 @@ export function DataHealthCard() {
         key: "supplier",
         label: "Parts without a supplier",
         hint: "Reorder plans cannot group them",
-        items: active.filter((i) => i.type === "part" && !i.supplierId),
+        items: active.filter((i) => i.type === "part" && !i.supplierId && !(i.suppliers?.length)),
         instruction: "Assign a supplier to parts that have none. Suggest the most likely supplier from receipts, supplier SKU patterns and similar parts in the same category, and update each item.",
       },
       {

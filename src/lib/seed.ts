@@ -569,6 +569,7 @@ function generate(overrides: Map<string, { min: number; max: number }>, behind: 
     shipments: [],
     quotes: [],
     channelTombstones: [],
+    quoteTemplates: [],
   };
 }
 
@@ -648,6 +649,7 @@ export function freshWorkspace(opts: { members?: Member[]; companyName?: string;
     shipments: [],
     quotes: [],
     channelTombstones: [],
+    quoteTemplates: [],
   };
 }
 

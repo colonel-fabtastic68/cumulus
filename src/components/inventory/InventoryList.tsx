@@ -6,6 +6,7 @@ import { Archive, ArrowLeftRight, Boxes, Download, FileDown, FilterX, Hammer, Mo
 import type { Item } from "@/lib/types";
 import { deactivateItems, deleteItems, inventoryValue, isLowStock, qtyAt } from "@/lib/inventory";
 import { useDefaultLocation, useLocations } from "@/lib/locations";
+import { itemHasSupplier } from "@/lib/suppliers";
 import { TransferDrawer } from "@/components/transfers";
 import { useCollection, useItems, useItemsById, usePreview, useSettings, useStore } from "@/lib/store/provider";
 import { canWrite, useCurrentUser } from "@/lib/auth";
@@ -75,7 +76,7 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
   const base = useMemo(
     () =>
       items.filter((i) => {
-        if (!matchesSearch(i, q) || (category && i.category !== category) || (supplierId && i.supplierId !== supplierId)) return false;
+        if (!matchesSearch(i, q) || (category && i.category !== category) || (supplierId && !itemHasSupplier(i, supplierId))) return false;
         if (!location) return true;
         const entry = i.stock?.[location.id];
         return qtyAt(i, location.id, location.homeId) !== 0 || !!entry?.bin;
@@ -273,6 +274,7 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
           selected={selectedIds}
           onSelectedChange={setSelected}
           pageSize={50}
+          lockHeader
           defaultSort={{ key: "sku", dir: "asc" }}
           toolbar={toolbar}
           bulkActions={bulkActions}

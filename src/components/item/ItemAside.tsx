@@ -2,70 +2,20 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { Mail, Sparkles } from "lucide-react";
 import type { ActivityEvent, Item, Member, Supplier } from "@/lib/types";
-import { isLowStock, reorderQty } from "@/lib/inventory";
-import { formatDate, formatDateTime, formatRelative, pluralize } from "@/lib/format";
-import { Avatar, Button, Card, CardHeader, DescriptionList, StatusBadge } from "@/components/ui";
-import { useAgent } from "@/components/agent/AgentProvider";
-import { itemHref, supplierHref } from "./utils";
+import { formatDate, formatDateTime, formatRelative } from "@/lib/format";
+import { Avatar, Card, CardHeader, DescriptionList, StatusBadge } from "@/components/ui";
+import { itemHref } from "./utils";
+import { SuppliersCard } from "./SuppliersCard";
 
-export function ItemAside({ item, items, supplier, membersById, activity }: { item: Item; items: Item[]; supplier?: Supplier; membersById: Map<string, Member>; activity: ActivityEvent[] }) {
-  const { open } = useAgent();
+export function ItemAside({ item, items, suppliers, currency, canEdit, membersById, activity }: { item: Item; items: Item[]; suppliers: Supplier[]; currency: string; canEdit: boolean; membersById: Map<string, Member>; activity: ActivityEvent[] }) {
   const supersededBy = item.supersededBy ? items.find((i) => i.id === item.supersededBy) : undefined;
   const supersedes = useMemo(() => items.filter((i) => i.supersededBy === item.id), [items, item.id]);
   const recent = useMemo(() => activity.filter((a) => a.entityId === item.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5), [activity, item.id]);
-  const low = isLowStock(item);
 
   return (
     <>
-      <Card>
-        <CardHeader title="Supplier" />
-        {supplier ? (
-          <div className="flex flex-col gap-3">
-            <DescriptionList
-              rows={[
-                {
-                  label: "Name",
-                  value: (
-                    <Link href={supplierHref(supplier.id)} className="text-accent hover:underline">
-                      {supplier.name}
-                    </Link>
-                  ),
-                },
-                { label: "Lead time", value: item.leadTimeDays !== undefined ? pluralize(item.leadTimeDays, "day") : supplier.leadTimeDays !== undefined ? `${pluralize(supplier.leadTimeDays, "day")} (supplier default)` : "—" },
-                { label: "Terms", value: supplier.terms ?? "—" },
-                { label: "Supplier SKU", value: item.supplierSku ? <span className="font-mono text-[12.5px]">{item.supplierSku}</span> : "—" },
-                {
-                  label: "Email",
-                  value: supplier.email ? (
-                    <a href={`mailto:${supplier.email}`} className="inline-flex items-center gap-1 text-accent hover:underline">
-                      <Mail className="h-3 w-3" /> {supplier.email}
-                    </a>
-                  ) : (
-                    "—"
-                  ),
-                },
-              ]}
-            />
-            <Button
-              size="sm"
-              icon={<Sparkles />}
-              onClick={() =>
-                open(
-                  `Draft a short reorder email to ${supplier.name} for ${item.sku} (${item.name}). We have ${item.onHand} on hand${item.minQty !== undefined ? `, minimum ${item.minQty}` : ""}${item.maxQty !== undefined ? `, maximum ${item.maxQty}` : ""}. Suggest ordering ${reorderQty(item) || "an appropriate quantity"}${item.supplierSku ? ` (their part number ${item.supplierSku})` : ""}, and ask for current lead time and pricing.`,
-                  { send: true },
-                )
-              }
-            >
-              Draft reorder email
-            </Button>
-            {low && <p className="text-[12px] text-warning">Below minimum — reorder {reorderQty(item)} to reach {item.maxQty !== undefined ? "max" : "2× min"}.</p>}
-          </div>
-        ) : (
-          <p className="text-[13px] text-text-tertiary">No supplier assigned. Set one from Edit to track lead times and reorder by vendor.</p>
-        )}
-      </Card>
+      <SuppliersCard item={item} suppliers={suppliers} currency={currency} canEdit={canEdit} />
 
       {(supersededBy || supersedes.length > 0) && (
         <Card>
@@ -103,7 +53,7 @@ export function ItemAside({ item, items, supplier, membersById, activity }: { it
         <DescriptionList
           rows={[
             { label: "ID", value: <span className="font-mono text-[12px] text-text-secondary">{item.id}</span> },
-            { label: "Type", value: item.type === "assembly" ? "Assembly" : "Part" },
+            { label: "Type", value: item.type === "assembly" ? "BOM (assembly)" : "Part" },
             { label: "Status", value: <StatusBadge status={item.status} /> },
             { label: "Created", value: <span title={formatDateTime(item.createdAt)}>{formatDate(item.createdAt)}</span> },
             {

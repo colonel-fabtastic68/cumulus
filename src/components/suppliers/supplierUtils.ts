@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import type { Item, Member, Supplier, WorkspaceSettings } from "@/lib/types";
 import { inventoryValue, isLowStock, reorderQty } from "@/lib/inventory";
 import { formatMoney, formatQty } from "@/lib/format";
+import { itemSupplierLinks, supplierItems } from "@/lib/suppliers";
 
 /** String-only form state so inputs stay controlled; converted on save. */
 export interface SupplierDraft {
@@ -87,9 +88,7 @@ export interface SupplierStats {
 }
 
 export function supplierStats(items: Item[], supplierId: string): SupplierStats {
-  const supplied = items
-    .filter((i) => i.supplierId === supplierId)
-    .sort((a, b) => Number(isLowStock(b)) - Number(isLowStock(a)) || a.sku.localeCompare(b.sku));
+  const supplied = supplierItems(items, supplierId).sort((a, b) => Number(isLowStock(b)) - Number(isLowStock(a)) || a.sku.localeCompare(b.sku));
   return { items: supplied, lowItems: supplied.filter(isLowStock), value: inventoryValue(supplied) };
 }
 
@@ -98,7 +97,7 @@ const EMPTY_STATS: SupplierStats = { items: [], lowItems: [], value: 0 };
 /** Stats for every supplier in one pass, keyed by supplier id. */
 export function useSupplierStats(items: Item[]): Map<string, SupplierStats> {
   return useMemo(() => {
-    const ids = new Set(items.map((i) => i.supplierId).filter((id): id is string => !!id));
+    const ids = new Set(items.flatMap((i) => itemSupplierLinks(i).map((l) => l.supplierId)));
     return new Map(Array.from(ids).map((id) => [id, supplierStats(items, id)]));
   }, [items]);
 }
@@ -110,7 +109,8 @@ export function statsFor(map: Map<string, SupplierStats>, supplierId: string): S
 /** Prompt handed to Nimbus by "Draft reorder email". */
 export function reorderEmailPrompt(supplier: Supplier, stats: SupplierStats, settings: WorkspaceSettings, actor: Pick<Member, "name">): string {
   const describe = (i: Item) => {
-    const parts = [`on hand ${formatQty(i.onHand, i.unit)}`, i.minQty !== undefined ? `min ${formatQty(i.minQty, i.unit)}` : null, `reorder ${formatQty(reorderQty(i), i.unit)}`, `last cost ${formatMoney(i.unitCost, settings.currency)}`, i.supplierSku ? `supplier part ${i.supplierSku}` : null];
+    const link = itemSupplierLinks(i).find((l) => l.supplierId === supplier.id);
+    const parts = [`on hand ${formatQty(i.onHand, i.unit)}`, i.minQty !== undefined ? `min ${formatQty(i.minQty, i.unit)}` : null, `reorder ${formatQty(reorderQty(i), i.unit)}`, `last cost ${formatMoney(link?.unitCost ?? i.unitCost, settings.currency)}`, link?.supplierSku ? `supplier part ${link.supplierSku}` : null];
     return `- ${i.sku} (${i.name}): ${parts.filter(Boolean).join(", ")}`;
   };
   const to = `${supplier.name}${supplier.email ? ` <${supplier.email}>` : ""}`;

@@ -47,7 +47,7 @@ Set `CUMULUS_MCP_TOKEN` to require a bearer token. To serve the **live workspace
 | Factor (from the brief) | Where |
 | --- | --- |
 | 3 · Bad data in = bad data out | Every quantity change is a ledger movement with a running balance (`Item → Stock history`). On-hand is never edited directly. |
-| 2 / 19 / 20 · Shelf, sub-assemblies, relieving correctly | BOMs within BOMs. Builds relieve sub-assemblies from stock or explode them to parts. Settings → relieve on build vs on fulfilment. Optional in-use tracking flag. |
+| 2 / 19 / 20 · Shelf, sub-assemblies, relieving correctly | BOMs within BOMs (the BOM page). Builds relieve sub-assemblies from stock or explode them to parts. Settings → relieve on build vs on fulfilment. Optional in-use tracking flag. Any BOM exports on its own: components grouped by category, every part at every level, as CSV, Excel, PDF or Markdown. |
 | 4 / 18 · Consumption at every layer | Reports → Consumption: sold vs consumed in builds vs written off vs returned, per item. Orders record who bought what. |
 | 5 / 17 · Projections & seasonality | Reports → Seasonality (monthly sales/consumption). The agent can project from it. |
 | 6 · Price & cost changes | Receiving updates standard cost. Agent bulk price/cost changes by % with margin preview. Sale price + quantity breaks per item. |

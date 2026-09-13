@@ -1,4 +1,4 @@
-import type { Item, Quote, QuoteLine, QuoteStatus, QuotingSettings, SalesOrder, WorkspaceSettings } from "@/lib/types";
+import type { Item, Quote, QuoteLine, QuoteStatus, QuoteTemplate, QuotingSettings, SalesOrder, WorkspaceSettings } from "@/lib/types";
 import type { Store, WriteOp } from "@/lib/store/types";
 import { activityOp, createOrder, nextNumber, priceForQty, type Actor } from "@/lib/inventory";
 import { newId, nowIso, round, sum } from "@/lib/utils";
@@ -173,6 +173,57 @@ export async function orderFromQuote(store: Store, actor: Actor, quote: Quote): 
   const extras = quote.lines.filter((l) => l.kind !== "item").map((l) => `${l.description}: ${l.qty}${l.unit ? ` ${l.unit}` : ""} × ${l.unitPrice}`);
   const note = [`From quote ${quote.number}`, ...(extras.length ? [`Also quoted: ${extras.join("; ")}`] : []), ...(quote.notes ? [quote.notes] : [])].join("\n");
   return createOrder(store, actor, { customer: quote.customer, customerEmail: quote.customerEmail, note, lines, source: "manual" });
+}
+
+// ---- templates ----------------------------------------------------------------
+
+export interface TemplateInput {
+  name: string;
+  description?: string;
+  lines: QuoteLine[];
+  discountPct?: number;
+  taxPct?: number;
+  notes?: string;
+  terms?: string;
+}
+
+/** Saves the lines (and the quote-level settings) under a name, for reuse with other quantities. */
+export async function saveQuoteTemplate(store: Store, actor: Actor, input: TemplateInput, existingId?: string): Promise<QuoteTemplate> {
+  const now = nowIso();
+  const existing = existingId ? await store.get("quoteTemplates", existingId) : null;
+  const template: QuoteTemplate = {
+    id: existing?.id ?? newId("qtpl"),
+    name: input.name.trim() || "Template",
+    description: input.description?.trim() || undefined,
+    lines: input.lines.map((l) => ({ ...l })),
+    discountPct: input.discountPct || undefined,
+    taxPct: input.taxPct || undefined,
+    notes: input.notes?.trim() || undefined,
+    terms: input.terms?.trim() || undefined,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+    createdBy: existing?.createdBy ?? actor.id,
+  };
+  await store.put("quoteTemplates", template);
+  return template;
+}
+
+export async function deleteQuoteTemplate(store: Store, id: string): Promise<void> {
+  await store.remove("quoteTemplates", id);
+}
+
+/** Fresh lines from a template. Item lines pick up today's cost (and price, when asked) so margins are current; quantities are the template's until changed. */
+export function linesFromTemplate(template: QuoteTemplate, items: Item[], quoting: QuotingSettings, opts: { refreshPrices?: boolean } = {}): QuoteLine[] {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  return template.lines.map((l) => {
+    const item = l.itemId ? byId.get(l.itemId) : undefined;
+    if (l.kind === "item" && item) {
+      const fresh = itemLine(item, l.qty, quoting);
+      return { ...l, id: newId("ql"), description: fresh.description, unit: fresh.unit, unitCost: item.unitCost, unitPrice: opts.refreshPrices ? fresh.unitPrice : l.unitPrice };
+    }
+    if (l.kind === "labor") return { ...l, id: newId("ql"), unitCost: quoting.laborCost ?? l.unitCost, unitPrice: opts.refreshPrices ? quoting.laborRate : l.unitPrice };
+    return { ...l, id: newId("ql") };
+  });
 }
 
 export async function deleteQuote(store: Store, actor: Actor, id: string): Promise<void> {

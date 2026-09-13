@@ -59,6 +59,8 @@ export interface Item {
 
   supplierId?: ID;
   supplierSku?: string;
+  /** Further suppliers for the same part; supplierId / supplierSku above is the primary one. */
+  suppliers?: ItemSupplier[];
   /** Bin / shelf location. */
   location?: string;
   barcode?: string;
@@ -154,6 +156,16 @@ export interface Lot {
 // ---------------------------------------------------------------------------
 // Documents
 // ---------------------------------------------------------------------------
+
+/** One more place a part can be bought from. */
+export interface ItemSupplier {
+  supplierId: ID;
+  supplierSku?: string;
+  /** Last known price from this supplier. */
+  unitCost?: number;
+  leadTimeDays?: number;
+  note?: string;
+}
 
 export interface Supplier {
   id: ID;
@@ -667,6 +679,21 @@ export interface Quote {
   createdBy: string;
 }
 
+/** A saved set of quote lines to start new quotes from. */
+export interface QuoteTemplate {
+  id: ID;
+  name: string;
+  description?: string;
+  lines: QuoteLine[];
+  discountPct?: number;
+  taxPct?: number;
+  notes?: string;
+  terms?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+}
+
 export interface QuotingSettings {
   /** What an hour of labour is charged at. */
   laborRate: number;
@@ -715,6 +742,7 @@ export interface CollectionMap {
   shipments: Shipment;
   quotes: Quote;
   channelTombstones: ChannelTombstone;
+  quoteTemplates: QuoteTemplate;
 }
 
 export type CollectionName = keyof CollectionMap;
@@ -738,6 +766,7 @@ export const COLLECTIONS: CollectionName[] = [
   "shipments",
   "quotes",
   "channelTombstones",
+  "quoteTemplates",
 ];
 
 /** A full snapshot of a workspace. Used for seed data, export and import. */

@@ -2,6 +2,7 @@
 
 import { Trash2 } from "lucide-react";
 import type { Item, Supplier } from "@/lib/types";
+import { supplierLinkFor } from "@/lib/suppliers";
 import { formatMoney, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { IconButton, TextField } from "@/components/ui";
@@ -87,11 +88,12 @@ function lineHint(line: LineDraft, supplierId: string | undefined, suppliersById
   if (!item) return null;
   const parts: string[] = [];
   let tone: "default" | "warning" = "default";
-  if (supplierId && item.supplierId && item.supplierId !== supplierId) {
-    parts.push(`Usually from ${suppliersById.get(item.supplierId)?.name ?? "another supplier"}`);
+  const link = supplierId ? supplierLinkFor(item, supplierId) : undefined;
+  if (supplierId && item.supplierId && !link) {
+    parts.push(`Usually from ${suppliersById.get(item.supplierId)?.name ?? "another supplier"} · will be added as a supplier`);
     tone = "warning";
-  } else if (supplierId && item.supplierId === supplierId && item.supplierSku) {
-    parts.push(`Supplier SKU ${item.supplierSku}`);
+  } else if (link?.supplierSku) {
+    parts.push(`Supplier SKU ${link.supplierSku}`);
   }
   const cost = Number(line.unitCost);
   if (line.unitCost.trim() !== "" && Number.isFinite(cost) && item.unitCost > 0 && Math.abs(cost - item.unitCost) > 0.0001) {

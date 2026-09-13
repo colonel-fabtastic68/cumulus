@@ -1,15 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, FileDown, Plus, Printer, Send, ShoppingCart, Sparkles, Trash2, XCircle } from "lucide-react";
-import type { Item, Quote, QuoteLine, QuoteLineKind } from "@/lib/types";
-import { createQuote, defaultValidUntil, deleteQuote, isQuoteExpired, itemLine, laborLine, lineTotal, linesFromDraft, newQuoteLine, quoteHtml, quoteShortages, quoteTotals, quotingSettings, setQuoteStatus, updateQuote, type QuoteDraft } from "@/lib/quotes";
+import { BookmarkPlus, Check, FileDown, Plus, Printer, Send, ShoppingCart, Sparkles, Trash2, XCircle } from "lucide-react";
+import type { Item, Quote, QuoteLine, QuoteLineKind, QuoteTemplate } from "@/lib/types";
+import { createQuote, defaultValidUntil, deleteQuote, isQuoteExpired, itemLine, laborLine, lineTotal, linesFromDraft, linesFromTemplate, newQuoteLine, quoteHtml, quoteShortages, quoteTotals, quotingSettings, saveQuoteTemplate, setQuoteStatus, updateQuote, type QuoteDraft } from "@/lib/quotes";
 import { useItems, useItemsById, useSettings, useStore } from "@/lib/store/provider";
 import { canWrite, useCurrentUser } from "@/lib/auth";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { formatMoney, formatQty, pluralize } from "@/lib/format";
 import { cn, round } from "@/lib/utils";
-import { Badge, Banner, Button, ConfirmDialog, Drawer, FormGrid, IconButton, Select, TextArea, TextField, useToast } from "@/components/ui";
+import { Badge, Banner, Button, ConfirmDialog, Drawer, FormGrid, IconButton, Modal, Select, TextArea, TextField, useToast } from "@/components/ui";
 import { ItemPicker } from "@/components/inventory";
 import { downloadCsv } from "@/components/reports/csv";
 import { QuoteStatusBadge } from "./QuotesTable";
@@ -23,17 +23,19 @@ const KIND_OPTIONS: Array<{ value: QuoteLineKind; label: string }> = [
 interface QuoteEditorProps {
   open: boolean;
   quote: Quote | null;
+  /** Start a new quote from this template's lines. */
+  template?: QuoteTemplate | null;
   onClose: () => void;
   onSaved?: (q: Quote) => void;
 }
 
 /** New or existing quote in a drawer; mounts fresh per quote so state never leaks between them. */
-export function QuoteEditor({ open, quote, onClose, onSaved }: QuoteEditorProps) {
+export function QuoteEditor({ open, quote, template, onClose, onSaved }: QuoteEditorProps) {
   if (!open) return null;
-  return <Editor key={quote?.id ?? "new"} quote={quote} onClose={onClose} onSaved={onSaved} />;
+  return <Editor key={quote?.id ?? (template ? `tpl-${template.id}` : "new")} quote={quote} template={template} onClose={onClose} onSaved={onSaved} />;
 }
 
-function Editor({ quote, onClose, onSaved }: Omit<QuoteEditorProps, "open">) {
+function Editor({ quote, template, onClose, onSaved }: Omit<QuoteEditorProps, "open">) {
   const store = useStore();
   const user = useCurrentUser();
   const writable = canWrite(user);
@@ -48,11 +50,15 @@ function Editor({ quote, onClose, onSaved }: Omit<QuoteEditorProps, "open">) {
   const [customer, setCustomer] = useState(quote?.customer ?? "");
   const [email, setEmail] = useState(quote?.customerEmail ?? "");
   const [validUntil, setValidUntil] = useState(quote?.validUntil ?? defaultValidUntil(quoting));
-  const [discountPct, setDiscountPct] = useState(String(quote?.discountPct ?? ""));
-  const [taxPct, setTaxPct] = useState(String(quote?.taxPct ?? quoting.taxPct ?? ""));
-  const [notes, setNotes] = useState(quote?.notes ?? "");
-  const [terms, setTerms] = useState(quote?.terms ?? quoting.terms ?? "");
-  const [lines, setLines] = useState<QuoteLine[]>(quote?.lines ?? []);
+  const [discountPct, setDiscountPct] = useState(String(quote?.discountPct ?? template?.discountPct ?? ""));
+  const [taxPct, setTaxPct] = useState(String(quote?.taxPct ?? template?.taxPct ?? quoting.taxPct ?? ""));
+  const [notes, setNotes] = useState(quote?.notes ?? template?.notes ?? "");
+  const [terms, setTerms] = useState(quote?.terms ?? template?.terms ?? quoting.terms ?? "");
+  const [lines, setLines] = useState<QuoteLine[]>(() => quote?.lines ?? (template ? linesFromTemplate(template, items, quoting) : []));
+  const [templateModal, setTemplateModal] = useState(false);
+  const [templateName, setTemplateName] = useState(template?.name ?? "");
+  const [templateNote, setTemplateNote] = useState(template?.description ?? "");
+  const [savingTemplate, setSavingTemplate] = useState(false);
   const [prompt, setPrompt] = useState(quote?.sourcePrompt ?? "");
   const [drafting, setDrafting] = useState(false);
   const [draftNote, setDraftNote] = useState<{ tone: "info" | "critical"; text: string } | null>(null);
@@ -187,6 +193,20 @@ function Editor({ quote, onClose, onSaved }: Omit<QuoteEditorProps, "open">) {
     downloadCsv(`${quote?.number ?? "quote"}.csv`, ["Kind", "Description", "Qty", "Unit", "Unit price", "Discount %", "Line total", "Unit cost"], lines.map((l) => [l.kind, l.description, l.qty, l.unit ?? "", l.unitPrice, l.discountPct ?? "", lineTotal(l), l.unitCost ?? ""]));
   };
 
+  const saveTemplate = async () => {
+    if (!templateName.trim() || lines.length === 0) return;
+    setSavingTemplate(true);
+    try {
+      const t = await saveQuoteTemplate(store, user, { name: templateName, description: templateNote, lines: lines.filter((l) => l.description.trim() || l.itemId), discountPct: Number(discountPct) || undefined, taxPct: Number(taxPct) || undefined, notes: notes.trim() || undefined, terms: terms.trim() || undefined });
+      toast(`Saved template “${t.name}”`, "success");
+      setTemplateModal(false);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not save the template", "critical");
+    } finally {
+      setSavingTemplate(false);
+    }
+  };
+
   const askNimbus = () => {
     openAgent(`I'm working on quote ${quote?.number ?? "(new)"} for ${customer || "a customer"}: ${lines.map((l) => `${l.description} × ${l.qty} @ ${l.unitPrice}`).join("; ") || "no lines yet"}. Total ${formatMoney(totals.total, currency)}, margin ${totals.marginPct ?? "—"}%. `, { send: false });
   };
@@ -203,9 +223,10 @@ function Editor({ quote, onClose, onSaved }: Omit<QuoteEditorProps, "open">) {
           {quote?.orderId && <Badge tone="success">Order raised</Badge>}
         </span>
       }
-      subtitle={quote ? `${quote.customer} · created ${quote.createdAt.slice(0, 10)}` : "Describe the job for Nimbus, or add lines by hand. Prices come from your items and labour rate."}
+      subtitle={quote ? `${quote.customer} · created ${quote.createdAt.slice(0, 10)}` : template ? `From template “${template.name}”. Change quantities, add a customer, and create.` : "Describe the job for Nimbus, or add lines by hand. Prices come from your items and labour rate."}
       headerActions={
         <div className="flex items-center gap-1">
+          <IconButton size="sm" variant="plain" aria-label="Save these lines as a template" icon={<BookmarkPlus />} onClick={() => setTemplateModal(true)} disabled={lines.length === 0} />
           <IconButton size="sm" variant="plain" aria-label="Print or save as PDF" icon={<Printer />} onClick={() => void print()} />
           <IconButton size="sm" variant="plain" aria-label="Export lines as CSV" icon={<FileDown />} onClick={exportCsv} disabled={lines.length === 0} />
           <IconButton size="sm" variant="plain" aria-label="Ask Nimbus about this quote" icon={<Sparkles />} onClick={askNimbus} />
@@ -374,6 +395,27 @@ function Editor({ quote, onClose, onSaved }: Omit<QuoteEditorProps, "open">) {
         )}
       </div>
       <ConfirmDialog open={confirm === "delete"} onClose={() => setConfirm(null)} destructive title={`Delete ${quote?.number}?`} confirmLabel="Delete" onConfirm={async () => { if (!quote) return; await deleteQuote(store, user, quote.id); toast(`Deleted ${quote.number}`, "success"); setConfirm(null); onClose(); }} message={<>The quote is removed. Any order already raised from it stays.</>} />
+      <Modal
+        open={templateModal}
+        onClose={() => setTemplateModal(false)}
+        size="sm"
+        title="Save as template"
+        subtitle="The lines, discount, tax, notes and terms are kept. New quotes from it start with these quantities and today's costs."
+        footer={
+          <>
+            <Button onClick={() => setTemplateModal(false)}>Cancel</Button>
+            <Button variant="primary" icon={<BookmarkPlus />} onClick={() => void saveTemplate()} loading={savingTemplate} disabled={!templateName.trim()}>
+              Save template
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-3">
+          <TextField label="Template name" value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder="Standard pedal build, Installation day rate…" autoFocus />
+          <TextField label="Description" hint="(optional)" value={templateNote} onChange={(e) => setTemplateNote(e.target.value)} />
+          <p className="text-[12px] text-text-tertiary">{pluralize(lines.length, "line")} will be saved.</p>
+        </div>
+      </Modal>
       <ConfirmDialog open={confirm === "accept"} onClose={() => setConfirm(null)} title={`Mark ${quote?.number ?? "this quote"} accepted?`} confirmLabel="Accept and create order" onConfirm={() => void transition("accepted", true)} loading={busy === "accepted"} message={<>A sales order is created for the {lines.filter((l) => l.kind === "item").length} item line{lines.filter((l) => l.kind === "item").length === 1 ? "" : "s"} at the quoted prices ({formatMoney(round(lines.filter((l) => l.kind === "item").reduce((a, l) => a + lineTotal(l), 0)), currency)}). Labour and extras are noted on the order.</>} />
     </Drawer>
   );

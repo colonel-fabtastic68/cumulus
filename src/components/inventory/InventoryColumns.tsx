@@ -135,7 +135,14 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
         sortValue: (i) => supplierName(i.supplierId) ?? "",
         render: (i) => {
           const name = supplierName(i.supplierId);
-          return name ? <span className="block max-w-[160px] truncate">{name}</span> : <span className="text-text-tertiary">—</span>;
+          const more = (i.suppliers ?? []).filter((s) => s.supplierId !== i.supplierId).length;
+          if (!name) return <span className="text-text-tertiary">—</span>;
+          return (
+            <span className="block max-w-[180px] truncate" title={more ? `${name} and ${more} more` : name}>
+              {name}
+              {more > 0 && <span className="ml-1 rounded-full bg-surface-hover px-1.5 text-[11px] text-text-secondary">+{more}</span>}
+            </span>
+          );
         },
       },
       {

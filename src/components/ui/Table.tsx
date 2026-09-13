@@ -41,12 +41,15 @@ export interface TableProps<T> {
   footer?: ReactNode;
   dense?: boolean;
   className?: string;
+  /** Scroll inside the card with the header pinned (for tables inside dialogs). */
   stickyHeader?: boolean;
+  /** Keep the column header visible while the page scrolls. The card stops clipping, so use it on full-width list pages. */
+  lockHeader?: boolean;
 }
 
 const hideCls = { sm: "hidden sm:table-cell", md: "hidden md:table-cell", lg: "hidden lg:table-cell" };
 
-export function Table<T>({ rows, columns, rowKey, rowLabel, rowClassName, onRowClick, selectable, selected, onSelectedChange, emptyState, pageSize = 50, defaultSort, toolbar, bulkActions, footer, dense, className, stickyHeader = false }: TableProps<T>) {
+export function Table<T>({ rows, columns, rowKey, rowLabel, rowClassName, onRowClick, selectable, selected, onSelectedChange, emptyState, pageSize = 50, defaultSort, toolbar, bulkActions, footer, dense, className, stickyHeader = false, lockHeader = false }: TableProps<T>) {
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(defaultSort ?? null);
   const [page, setPage] = useState(0);
 
@@ -87,10 +90,10 @@ export function Table<T>({ rows, columns, rowKey, rowLabel, rowClassName, onRowC
     onSelectedChange?.(next);
   };
 
-  const cellPad = dense ? "px-3 py-1.5" : "px-3 py-2";
+  const cellPad = dense ? "px-3 py-1.5" : "px-3 py-2 max-sm:py-2.5";
 
   return (
-    <div className={cn("card overflow-hidden", className)}>
+    <div className={cn("card", lockHeader ? "overflow-visible" : "overflow-hidden", className)}>
       {(toolbar || (bulkActions && sel.size > 0)) && (
         <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2.5">
           {bulkActions && sel.size > 0 ? (
@@ -106,12 +109,12 @@ export function Table<T>({ rows, columns, rowKey, rowLabel, rowClassName, onRowC
           )}
         </div>
       )}
-      <div className={cn("overflow-x-auto", stickyHeader && "max-h-[70vh] overflow-y-auto")}>
-        <table className="w-full min-w-[640px] border-collapse text-[13px]">
-          <thead className={cn("bg-surface-subdued text-[12px] font-[550] text-text-secondary", stickyHeader && "sticky top-0 z-[1]")}>
+      <div className={cn(lockHeader ? "overflow-x-auto md:overflow-visible" : "overflow-x-auto", stickyHeader && "max-h-[70vh] overflow-y-auto")}>
+        <table className="w-full min-w-[640px] border-collapse text-[13px] max-sm:text-[14px]">
+          <thead className={cn("bg-surface-subdued text-[12px] font-[550] text-text-secondary max-sm:text-[12.5px]", (stickyHeader || lockHeader) && "sticky top-0 z-[2]", lockHeader && "shadow-[0_1px_0_var(--divider)]")}>
             <tr>
               {selectable && (
-                <th className={cn("w-9 border-b border-border", cellPad)}>
+                <th className={cn("w-9 border-b border-[color:var(--divider)]", cellPad)}>
                   <Checkbox checked={allVisibleSelected} indeterminate={!allVisibleSelected && someSelected} onChange={toggleAll} aria-label="Select all rows on this page" />
                 </th>
               )}
@@ -122,7 +125,7 @@ export function Table<T>({ rows, columns, rowKey, rowLabel, rowClassName, onRowC
                     key={c.key}
                     style={{ width: c.width }}
                     aria-sort={c.sortValue ? (active ? (sort!.dir === "asc" ? "ascending" : "descending") : "none") : undefined}
-                    className={cn("border-b border-border font-medium", cellPad, c.align === "right" && "text-right", c.align === "center" && "text-center", !c.align && "text-left", c.hideBelow && hideCls[c.hideBelow], c.className)}
+                    className={cn("border-b border-[color:var(--divider)] font-medium", cellPad, c.align === "right" && "text-right", c.align === "center" && "text-center", !c.align && "text-left", c.hideBelow && hideCls[c.hideBelow], c.className)}
                   >
                     {c.sortValue ? (
                       <button
@@ -169,7 +172,7 @@ export function Table<T>({ rows, columns, rowKey, rowLabel, rowClassName, onRowC
                           }
                         : undefined
                     }
-                    className={cn("border-b border-border last:border-b-0 focus-visible:bg-surface-hover focus-visible:outline-none", onRowClick && "cursor-pointer", isSel ? "bg-surface-selected" : "hover:bg-surface-hover/70", rowClassName?.(row))}
+                    className={cn("border-b border-[color:var(--divider)] last:border-b-0 focus-visible:bg-surface-hover focus-visible:outline-none", onRowClick && "cursor-pointer", isSel ? "bg-surface-selected" : "hover:bg-surface-hover/70", rowClassName?.(row))}
                   >
                     {selectable && (
                       <td className={cn(cellPad)} onClick={(e) => e.stopPropagation()}>

@@ -31,7 +31,7 @@ export default function BuildsPage() {
   }, [selected, buildTarget, itemsById]);
 
   useEffect(() => {
-    setPageContext({ page: "Builds", selectedSkus });
+    setPageContext({ page: "BOM", selectedSkus });
   }, [setPageContext, selectedSkus]);
 
 
@@ -50,7 +50,7 @@ export default function BuildsPage() {
   ) : undefined;
 
   return (
-    <Page title="Builds" subtitle="Turn components into assemblies and finished goods" primaryAction={buildButton}>
+    <Page title="BOM" subtitle="Bills of materials: what each assembly is made of, what you can build now, and what has been built" primaryAction={buildButton}>
       <Suspense fallback={null}>
         <QueryParamEffect param="highlight" onValue={setSelectedId} />
       </Suspense>

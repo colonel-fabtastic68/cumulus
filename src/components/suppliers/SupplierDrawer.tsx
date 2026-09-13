@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ExternalLink, Trash2 } from "lucide-react";
 import type { Supplier } from "@/lib/types";
+import { patchesUnlinkingSupplier } from "@/lib/suppliers";
 import { bulkPatchItems, upsertSupplier } from "@/lib/inventory";
 import { useDoc, useItems, useSettings, useStore } from "@/lib/store/provider";
 import { canWrite, useCurrentUser } from "@/lib/auth";
@@ -63,12 +64,7 @@ function SupplierDrawerInner({ supplier, onClose }: { supplier: Supplier; onClos
     setBusy(true);
     try {
       if (stats.items.length > 0) {
-        await bulkPatchItems(
-          store,
-          user,
-          stats.items.map((i) => ({ id: i.id, patch: { supplierId: undefined } })),
-          `${supplier.name} deleted`,
-        );
+        await bulkPatchItems(store, user, patchesUnlinkingSupplier(stats.items, supplier.id), `${supplier.name} deleted`);
       }
       await store.remove("suppliers", supplier.id);
       toast(`Deleted ${supplier.name}${stats.items.length ? ` · ${pluralize(stats.items.length, "item")} unassigned` : ""}`, "success");

@@ -678,9 +678,14 @@ export async function receiveStock(store: Store, actor: Actor, input: ReceiveInp
     ops.push({ op: "put", collection: "lots", doc: lot });
     receipt.lines.push({ itemId: item.id, qty: line.qty, unitCost, lotId: lot.id });
     movementInputs.push({ itemId: item.id, type: "receipt", qty: line.qty, unitCost, lotId: lot.id, refType: "receipt", refId: receipt.id, occurredAt: receivedAt, locationId: line.locationId });
-    if (input.updateStandardCost !== false && unitCost !== item.unitCost) {
-      ops.push({ op: "patch", collection: "items", id: item.id, patch: { unitCost } });
+    const patch: Partial<Item> = {};
+    if (input.updateStandardCost !== false && unitCost !== item.unitCost) patch.unitCost = unitCost;
+    // A delivery from a supplier the part did not list yet links them, so the next reorder knows.
+    if (input.supplierId && item.supplierId !== input.supplierId && !(item.suppliers ?? []).some((s) => s.supplierId === input.supplierId)) {
+      if (!item.supplierId) patch.supplierId = input.supplierId;
+      else patch.suppliers = [...(item.suppliers ?? []), { supplierId: input.supplierId, unitCost }];
     }
+    if (Object.keys(patch).length) ops.push({ op: "patch", collection: "items", id: item.id, patch });
   }
   const mv = await movementOps(store, actor, movementInputs);
   // Put-away: remember the bin each line landed in.

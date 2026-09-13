@@ -37,6 +37,7 @@ import {
 } from "@/lib/inventory";
 import { matches, round } from "@/lib/utils";
 import { crossRefText } from "@/lib/scan";
+import { itemSupplierLinks, supplierItems } from "@/lib/suppliers";
 import { kpiReport } from "@/lib/kpis";
 import type { AgentToolName } from "./tools";
 
@@ -70,7 +71,7 @@ function applyFilter(items: Item[], filter: Filter | undefined, suppliers: Suppl
   if (filter.status) out = out.filter((i) => i.status === filter.status);
   if (filter.supplier) {
     const ids = new Set(suppliers.filter((s) => matches(filter.supplier!, s.name)).map((s) => s.id));
-    out = out.filter((i) => i.supplierId && ids.has(i.supplierId));
+    out = out.filter((i) => itemSupplierLinks(i).some((l) => ids.has(l.supplierId)));
   }
   if (filter.belowMin) out = out.filter(isLowStock);
   if (filter.tags?.length) out = out.filter((i) => filter.tags!.some((t) => i.tags.map((x) => x.toLowerCase()).includes(t.toLowerCase())));
@@ -99,6 +100,7 @@ function brief(i: Item, suppliers: Supplier[]) {
     salePrice: i.salePrice,
     leadTimeDays: i.leadTimeDays,
     supplier: suppliers.find((s) => s.id === i.supplierId)?.name,
+    otherSuppliers: i.suppliers?.length ? i.suppliers.filter((s) => s.supplierId !== i.supplierId).map((s) => suppliers.find((x) => x.id === s.supplierId)?.name ?? s.supplierId) : undefined,
     location: i.location,
     tags: i.tags.length ? i.tags : undefined,
     belowMin: isLowStock(i) || undefined,
@@ -233,7 +235,7 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
         openOrders: orders.filter((o) => o.status === "open").map((o) => ({ number: o.number, customer: o.customer, lines: o.lines.length })),
         openRmas: rmas.filter((r) => r.status === "open" || r.status === "inspecting").map((r) => ({ number: r.number, customer: r.customer, reason: r.reason })),
         categories: cats,
-        suppliers: suppliers.map((s) => ({ name: s.name, leadTimeDays: s.leadTimeDays, items: items.filter((i) => i.supplierId === s.id).length })),
+        suppliers: suppliers.map((s) => ({ name: s.name, leadTimeDays: s.leadTimeDays, items: supplierItems(items, s.id).length })),
         connections: integrations
           .filter((c) => c.status === "connected" || c.status === "error")
           .map((c) => ({ platform: c.id, status: c.status, where: c.config?.shop ?? c.config?.siteUrl ?? c.config?.account, lastSyncAt: c.lastSyncAt?.slice(0, 16), lastSync: c.lastSyncSummary, syncs: c.settings, linkedItems: items.filter((i) => !!i.channels?.[c.id as "shopify" | "woocommerce"]).length, lastError: c.lastError })),
@@ -401,7 +403,7 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
         case "recentActivity":
           return [...activity].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit).map((a) => ({ at: a.createdAt, message: a.message }));
         case "suppliers":
-          return suppliers.map((s) => ({ name: s.name, email: s.email, leadTimeDays: s.leadTimeDays, terms: s.terms, items: items.filter((i) => i.supplierId === s.id).length }));
+          return suppliers.map((s) => ({ name: s.name, email: s.email, leadTimeDays: s.leadTimeDays, terms: s.terms, items: supplierItems(items, s.id).length }));
         case "recentReceipts":
           return [...receipts].sort((a, b) => b.receivedAt.localeCompare(a.receivedAt)).slice(0, limit).map((r) => ({ number: r.number, supplier: suppliers.find((s) => s.id === r.supplierId)?.name, reference: r.reference, receivedAt: r.receivedAt.slice(0, 10), lines: r.lines.map((l) => ({ sku: byId.get(l.itemId)?.sku, qty: l.qty, unitCost: l.unitCost })) }));
         case "recentBuilds":

@@ -11,6 +11,7 @@ import { formatMoney, formatQty } from "@/lib/format";
 import { cn, round } from "@/lib/utils";
 import { Badge, Button, EmptyState, IconButton, SimpleTable, TextField, Toggle, useToast } from "@/components/ui";
 import { ItemPicker } from "@/components/inventory";
+import { ExportBomMenu } from "@/components/builds/ExportBomMenu";
 import { Tile } from "./Tile";
 import { errorMessage, itemHref } from "./utils";
 
@@ -52,7 +53,16 @@ export function BomTab({ item, items, currency, canEdit }: { item: Item; items: 
   }
 
   // Remount the editor whenever the saved BOM changes (e.g. a teammate edited it).
-  return <BomEditor key={JSON.stringify(item.bom)} item={item} items={items} currency={currency} canEdit={canEdit} />;
+  return (
+    <div className="flex flex-col gap-3">
+      {item.bom.length > 0 && (
+        <div className="flex justify-end">
+          <ExportBomMenu assembly={item} items={items} />
+        </div>
+      )}
+      <BomEditor key={JSON.stringify(item.bom)} item={item} items={items} currency={currency} canEdit={canEdit} />
+    </div>
+  );
 }
 
 interface DraftLine {
