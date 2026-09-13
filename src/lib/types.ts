@@ -580,6 +580,19 @@ export interface AgentAutomation {
   enabled: boolean;
 }
 
+export type PlanId = "founding";
+export type BillingStatus = "trialing" | "active" | "past_due" | "canceled";
+
+/** Written by the billing webhook once Stripe is connected; absent while the workspace is on pilot access. */
+export interface WorkspaceBilling {
+  plan: PlanId;
+  status: BillingStatus;
+  customerId?: string;
+  subscriptionId?: string;
+  currentPeriodEnd?: string;
+  updatedAt: string;
+}
+
 export interface WorkspaceSettings {
   id: "default";
   companyName: string;
@@ -607,6 +620,7 @@ export interface WorkspaceSettings {
   shipping?: ShippingSettings;
   scanning?: ScanningSettings;
   quoting?: QuotingSettings;
+  billing?: WorkspaceBilling;
   updatedAt: string;
 }
 

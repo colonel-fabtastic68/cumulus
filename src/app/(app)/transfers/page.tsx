@@ -23,7 +23,8 @@ export default function TransfersPage() {
     setPageContext({ page: "Transfers" });
   }, [setPageContext]);
 
-  // "?sku=ENC-125B" opens the drawer with that item on the first line (item pages and scan results link here).
+  // "?sku=ENC-125B" opens the drawer with that item on the first line (item pages and scan results link here);
+  // "?highlight=<transferId>" opens that transfer (search results link here).
   const onSkuParam = useCallback(
     (sku: string) => {
       const item = items.find((i) => i.sku.toUpperCase() === sku.toUpperCase());
@@ -50,6 +51,7 @@ export default function TransfersPage() {
     >
       <Suspense fallback={null}>
         <QueryParamEffect param="sku" onValue={onSkuParam} />
+        <QueryParamEffect param="highlight" onValue={setSelectedId} />
       </Suspense>
       <div className="flex flex-col gap-4">
         <div className="grid grid-cols-2 gap-3 @xl:grid-cols-3">

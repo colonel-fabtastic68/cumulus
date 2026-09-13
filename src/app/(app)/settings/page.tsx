@@ -5,11 +5,30 @@ import { useSettings } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { Banner, Page, Section } from "@/components/ui";
-import { AboutSection, AgentSection, CompanySection, DataSection, InventoryPolicySection, LocationsSection, QuotingSection, ShippingSection } from "@/components/workspace/settings";
+import {
+  AboutSection,
+  AgentSection,
+  BillingSection,
+  CompanySection,
+  DataSection,
+  InventoryPolicySection,
+  LocationsSection,
+  QuotingSection,
+  ShippingSection,
+  settingsSection,
+} from "@/components/workspace/settings";
 import { canManageTeam } from "@/components/workspace/team";
 
-function Row({ children }: { children: ReactNode }) {
-  return <div className="border-t border-border py-6 first:border-t-0 first:pt-0 last:pb-0">{children}</div>;
+/** One settings block. The id is the anchor search results and links point at (/settings#locations). */
+function Row({ id, children }: { id: string; children: ReactNode }) {
+  const def = settingsSection(id);
+  return (
+    <div id={id} className="scroll-mt-4 border-t border-border py-6 first:border-t-0 first:pt-0 last:pb-0">
+      <Section title={def.title} description={def.description}>
+        {children}
+      </Section>
+    </div>
+  );
 }
 
 export default function SettingsPage() {
@@ -23,56 +42,56 @@ export default function SettingsPage() {
     setPageContext({ page: "Settings" });
   }, [setPageContext]);
 
+  // Links like /settings#locations (search results, help text) arrive before the sections exist,
+  // so the browser's own hash scroll finds nothing. Scroll once the page has rendered.
+  useEffect(() => {
+    const jump = () => {
+      const id = window.location.hash.slice(1);
+      if (id) document.getElementById(id)?.scrollIntoView({ block: "start" });
+    };
+    jump();
+    window.addEventListener("hashchange", jump);
+    return () => window.removeEventListener("hashchange", jump);
+  }, []);
+
   // Forms are keyed on updatedAt so they restart from the stored values after
   // every save (or when a teammate changes settings).
   const formKey = settings.updatedAt;
 
   return (
-    <Page narrow title="Settings" subtitle="Company details, inventory policy, Nimbus and where the data lives">
+    <Page narrow title="Settings" subtitle="Company details, inventory policy, Nimbus, your plan and where the data lives">
       {readOnly && (
         <Banner tone="info" title="Read-only" className="mb-5">
           Only owners and admins can change settings. You can still review everything here.
         </Banner>
       )}
       <div className="flex flex-col">
-        <Row>
-          <Section title="Company" description="Name, currency and timezone used across the workspace.">
-            <CompanySection key={formKey} settings={settings} readOnly={readOnly} />
-          </Section>
+        <Row id="company">
+          <CompanySection key={formKey} settings={settings} readOnly={readOnly} />
         </Row>
-        <Row>
-          <Section title="Inventory policy" description="How stock buckets and builds behave. Changes apply to future movements only.">
-            <InventoryPolicySection key={formKey} settings={settings} readOnly={readOnly} />
-          </Section>
+        <Row id="inventory-policy">
+          <InventoryPolicySection key={formKey} settings={settings} readOnly={readOnly} />
         </Row>
-        <Row>
-          <Section title="Locations" description="Warehouses, stores, trucks and trailers that hold stock. Transfers move stock between them.">
-            <LocationsSection readOnly={readOnly} />
-          </Section>
+        <Row id="locations">
+          <LocationsSection readOnly={readOnly} />
         </Row>
-        <Row>
-          <Section title="Shipping and scanning" description="Ship-from address and default parcel for carrier rates, and keyboard scanner behaviour.">
-            <ShippingSection key={formKey} settings={settings} readOnly={readOnly} />
-          </Section>
+        <Row id="shipping">
+          <ShippingSection key={formKey} settings={settings} readOnly={readOnly} />
         </Row>
-        <Row>
-          <Section title="Quoting" description="Labour rate, margins, tax and terms that every quote starts from.">
-            <QuotingSection key={formKey} settings={settings} readOnly={readOnly} />
-          </Section>
-
-          <Section title="Nimbus" description="Whether Nimbus may change data on its own, and whether the model is configured.">
-            <AgentSection key={formKey} settings={settings} readOnly={readOnly} />
-          </Section>
+        <Row id="quoting">
+          <QuotingSection key={formKey} settings={settings} readOnly={readOnly} />
         </Row>
-        <Row>
-          <Section title="Data and backend" description="Where the workspace is stored, backups, and starting over.">
-            <DataSection settings={settings} canManage={canManage} />
-          </Section>
+        <Row id="nimbus">
+          <AgentSection key={formKey} settings={settings} readOnly={readOnly} />
         </Row>
-        <Row>
-          <Section title="About" description="What this build is and where to read more.">
-            <AboutSection />
-          </Section>
+        <Row id="billing">
+          <BillingSection settings={settings} />
+        </Row>
+        <Row id="data">
+          <DataSection settings={settings} canManage={canManage} />
+        </Row>
+        <Row id="about">
+          <AboutSection />
         </Row>
       </div>
     </Page>

@@ -173,10 +173,12 @@ body {
   background: transparent;
 }
 
-/* Focus ring */
-:where(button, a, input, select, textarea, [tabindex]):focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+/* Focus ring. Layered so an `outline-none` utility (search dialog input, dialogs) can switch it off. */
+@layer base {
+  :where(button, a, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
 }
 
 input[type="number"]::-webkit-inner-spin-button,

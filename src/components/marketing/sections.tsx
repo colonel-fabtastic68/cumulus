@@ -1,5 +1,8 @@
-import { CalendarRange, FileSpreadsheet, GitFork, Layers, PackageCheck, Plug, RotateCcw, Scale, ShoppingBag, Store, Timer, Users } from "lucide-react";
+import { ArrowRight, CalendarRange, Check, FileSpreadsheet, GitFork, Layers, Lock, PackageCheck, Plug, RotateCcw, Scale, ShoppingBag, Store, Timer, Users } from "lucide-react";
 import type { RuntimeConfig } from "@/lib/firebase-config";
+import { Badge, Button } from "@/components/ui";
+import { FOUNDING_PLAN, planSavingsPct } from "@/lib/billing";
+import { formatMoney } from "@/lib/format";
 import { NimbusPreview } from "./NimbusPreview";
 import { ProductPreview } from "./ProductPreview";
 import { Reveal } from "./Reveal";
@@ -156,6 +159,73 @@ export function PilotSteps() {
             </Reveal>
           ))}
         </ol>
+      </div>
+    </section>
+  );
+}
+
+export function Pricing({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
+  const plan = FOUNDING_PLAN;
+  const price = (n: number) => formatMoney(n, plan.currency).replace(/\.00$/, "");
+  return (
+    <section id="pricing" className="scroll-mt-16 border-t border-border bg-surface">
+      <div className={`${container} grid gap-12 py-20 md:py-28 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16`}>
+        <Reveal>
+          <div className="text-[12px] font-[550] uppercase tracking-[0.08em] text-text-tertiary">Pricing</div>
+          <h2 className="mt-3 text-[30px] font-semibold leading-[1.1] tracking-[-0.02em] text-text md:text-[40px]">One plan. A founding price for early teams.</h2>
+          <p className="mt-4 text-[16px] leading-7 text-text-secondary md:text-[17px]">
+            Cumulus is {price(plan.listMonthly)} a month for the whole company. Teams that join now pay {price(plan.monthly)}, keep that price for as long as they stay subscribed, and get every version we ship.
+          </p>
+          <ul className="mt-8 flex flex-col gap-3 text-[14px] text-text-secondary">
+            <li className="flex gap-3">
+              <Check className="mt-1 h-4 w-4 shrink-0 text-success" />
+              No per-seat fees. Add the whole floor, the office and your accountant.
+            </li>
+            <li className="flex gap-3">
+              <Check className="mt-1 h-4 w-4 shrink-0 text-success" />
+              Billed monthly. Cancel any time from Settings.
+            </li>
+            <li className="flex gap-3">
+              <Check className="mt-1 h-4 w-4 shrink-0 text-success" />
+              Start free today and upgrade when you are ready.
+            </li>
+          </ul>
+        </Reveal>
+        <Reveal delay={100}>
+          <div className="rounded-[var(--radius-lg)] bg-bg p-6 shadow-[var(--shadow-bevel),var(--shadow-card)] md:p-8">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <Badge tone="accent" size="large">
+                {plan.name}
+              </Badge>
+              <Badge tone="success" size="large">
+                {planSavingsPct(plan)}% off
+              </Badge>
+            </div>
+            <div className="mt-6 flex flex-wrap items-end gap-x-3 gap-y-1">
+              <span className="text-[52px] font-semibold leading-none tracking-[-0.03em] text-text">{price(plan.monthly)}</span>
+              <span className="pb-1.5 text-[15px] text-text-secondary">per month</span>
+              <span className="pb-1.5 text-[19px] text-text-tertiary line-through decoration-[1.5px]">{price(plan.listMonthly)}</span>
+            </div>
+            <p className="mt-3 text-[15px] font-medium text-text">{plan.blurb}</p>
+            <ul className="mt-6 flex flex-col gap-2.5">
+              {plan.features.map((f) => (
+                <li key={f} className="flex gap-3 text-[14px] leading-6 text-text-secondary">
+                  <Check className="mt-1 h-4 w-4 shrink-0 text-success" />
+                  {f}
+                </li>
+              ))}
+            </ul>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <Button variant="primary" size="lg" href="/checkout" iconRight={<ArrowRight />}>
+                Become a founding member
+              </Button>
+              <SessionCta runtimeConfig={runtimeConfig} placement="pricing" />
+            </div>
+            <p className="mt-4 flex items-center gap-1.5 text-[12.5px] text-text-tertiary">
+              <Lock className="h-3.5 w-3.5" /> Billed monthly in {plan.currency}. Card details are handled by Stripe, never by Cumulus.
+            </p>
+          </div>
+        </Reveal>
       </div>
     </section>
   );

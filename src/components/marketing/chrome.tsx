@@ -7,6 +7,7 @@ const LINKS = [
   { href: "#product", label: "Product" },
   { href: "#nimbus", label: "Nimbus" },
   { href: "#pilot", label: "Pilot" },
+  { href: "#pricing", label: "Pricing" },
 ];
 
 export function Wordmark({ className }: { className?: string }) {

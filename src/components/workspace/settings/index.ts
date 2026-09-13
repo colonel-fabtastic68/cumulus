@@ -8,3 +8,5 @@ export * from "./AboutSection";
 export * from "./LocationsSection";
 export * from "./ShippingSection";
 export * from "./QuotingSection";
+export * from "./BillingSection";
+export * from "./sections";

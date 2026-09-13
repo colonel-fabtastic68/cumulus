@@ -14,7 +14,7 @@ type Session = "none" | "signed-out" | "signed-in";
  * a signed-in visitor gets a shortcut into the workspace, everyone else sees
  * sign in / start free.
  */
-export function SessionCta({ runtimeConfig, placement }: { runtimeConfig: RuntimeConfig; placement: "nav" | "hero" | "band" }) {
+export function SessionCta({ runtimeConfig, placement }: { runtimeConfig: RuntimeConfig; placement: "nav" | "hero" | "band" | "pricing" | "success" }) {
   setRuntimeConfig(runtimeConfig);
   const accounts = runtimeConfig.firebase !== null;
   const [session, setSession] = useState<Session>(accounts ? "signed-out" : "none");
@@ -38,6 +38,20 @@ export function SessionCta({ runtimeConfig, placement }: { runtimeConfig: Runtim
 
   if (session !== "signed-out") {
     const label = session === "signed-in" ? "Open your workspace" : "Open the workspace";
+    if (placement === "pricing") {
+      return (
+        <Button variant="tertiary" size="lg" href={APP_HOME}>
+          {label}
+        </Button>
+      );
+    }
+    if (placement === "success") {
+      return (
+        <Button variant="primary" size="lg" href={APP_HOME} iconRight={<ArrowRight />}>
+          {label}
+        </Button>
+      );
+    }
     return (
       <div className="flex flex-wrap items-center gap-3">
         <Button variant="primary" size={size} href={APP_HOME} iconRight={placement === "nav" ? undefined : <ArrowRight />}>
@@ -48,6 +62,27 @@ export function SessionCta({ runtimeConfig, placement }: { runtimeConfig: Runtim
             See how Nimbus works
           </Button>
         )}
+      </div>
+    );
+  }
+
+  if (placement === "pricing") {
+    return (
+      <Button variant="tertiary" size="lg" href="/sign-up">
+        Start free instead
+      </Button>
+    );
+  }
+
+  if (placement === "success") {
+    return (
+      <div className="flex flex-wrap items-center gap-3">
+        <Button variant="primary" size="lg" href="/sign-up" iconRight={<ArrowRight />}>
+          Create your workspace
+        </Button>
+        <Button size="lg" href="/sign-in">
+          Sign in
+        </Button>
       </div>
     );
   }
