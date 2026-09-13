@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "./Inputs";
@@ -17,12 +18,15 @@ export interface Column<T> {
   className?: string;
   /** Hide on narrow screens (viewport breakpoints). */
   hideBelow?: "sm" | "md" | "lg";
-  /** Show only once the content area (`main`, a container) is at least this wide. */
-  showFrom?: ContainerWidth;
+  /** Fit mode: the narrowest the column may get, in px (content plus about 18px of padding). */
+  minWidth?: number;
+  /** Fit mode: stop growing past this width; spare room goes to the flex column instead. */
+  maxWidth?: number;
+  /** Fit mode: this column absorbs whatever width is left (one per table). */
+  flex?: boolean;
+  /** Fit mode: when the card is too narrow for every column, lower priorities are hidden first. Leave unset to always show the column. */
+  priority?: number;
 }
-
-/** Widths of the `main` content area in px at which a column appears; the table itself is 64px narrower on desktop. */
-export type ContainerWidth = 672 | 768 | 896 | 1024 | 1152 | 1280 | 1376 | 1472;
 
 export interface TableProps<T> {
   rows: T[];
@@ -50,27 +54,78 @@ export interface TableProps<T> {
   stickyHeader?: boolean;
   /** Keep the column header visible while the page scrolls. The card stops clipping, so use it on full-width list pages. */
   lockHeader?: boolean;
-  /** Fit the columns to the card: fixed layout, single-line headers and cells that truncate instead of widening the table. Give every column but one a `width`. */
+  /**
+   * Fit the columns to the card: the table measures its own width, hides the lowest-priority columns only when the
+   * minimums no longer fit, grows the rest toward their maximums and gives the remainder to the flex column. Headers
+   * stay on one line, cells truncate, and gutters follow the content width.
+   */
   fit?: boolean;
   /** Faint vertical hairlines between columns, for tables with many numeric columns. */
   columnDividers?: boolean;
 }
 
 const hideCls = { sm: "hidden sm:table-cell", md: "hidden md:table-cell", lg: "hidden lg:table-cell" };
-const showFromCls: Record<ContainerWidth, string> = {
-  672: "hidden @2xl:table-cell",
-  768: "hidden @3xl:table-cell",
-  896: "hidden @4xl:table-cell",
-  1024: "hidden @5xl:table-cell",
-  1152: "hidden @6xl:table-cell",
-  1280: "hidden @7xl:table-cell",
-  1376: "hidden @min-[1376px]:table-cell",
-  1472: "hidden @min-[1472px]:table-cell",
-};
+const MIN_TABLE_WIDTH = 640;
+const CHECK_WIDTH = 36;
+
+/**
+ * Fit-mode layout: drop the lowest-priority columns until every minimum fits, grow the rest toward their maximums
+ * with half of the spare room, and hand the remainder to the flex column. `width` is the room for the data columns;
+ * null (not measured yet) lays everything out at its minimum.
+ */
+function fitColumns<T>(columns: Column<T>[], width: number | null): { cols: Column<T>[]; widths: Map<string, number> } {
+  const minOf = (c: Column<T>) => c.minWidth ?? 80;
+  const roomOf = (c: Column<T>) => Math.max(0, (c.maxWidth ?? minOf(c)) - minOf(c));
+  let cols = columns;
+  if (width !== null) {
+    for (;;) {
+      if (cols.reduce((s, c) => s + minOf(c), 0) <= width) break;
+      const droppable = cols.filter((c) => c.priority !== undefined);
+      if (droppable.length === 0) break;
+      const victim = droppable.reduce((a, b) => (b.priority! < a.priority! ? b : a));
+      cols = cols.filter((c) => c !== victim);
+    }
+  }
+  const need = cols.reduce((s, c) => s + minOf(c), 0);
+  const total = width ?? need;
+  const flex = cols.find((c) => c.flex) ?? cols[0];
+  const others = cols.filter((c) => c !== flex);
+  const capacity = others.reduce((s, c) => s + roomOf(c), 0);
+  const growth = Math.min(Math.max(0, total - need) / 2, capacity);
+  const widths = new Map<string, number>();
+  let used = 0;
+  for (const c of others) {
+    const w = minOf(c) + (capacity > 0 ? (growth * roomOf(c)) / capacity : 0);
+    widths.set(c.key, w);
+    used += w;
+  }
+  if (flex) widths.set(flex.key, Math.max(minOf(flex), total - used));
+  return { cols, widths };
+}
 
 export function Table<T>({ rows, columns, rowKey, rowLabel, rowClassName, onRowClick, selectable, selected, onSelectedChange, emptyState, pageSize = 50, defaultSort, toolbar, bulkActions, footer, dense, className, stickyHeader = false, lockHeader = false, fit = false, columnDividers = false }: TableProps<T>) {
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(defaultSort ?? null);
   const [page, setPage] = useState(0);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [fitWidth, setFitWidth] = useState<number | null>(null);
+
+  useLayoutEffect(() => {
+    const el = wrapRef.current;
+    if (!fit || !el) return;
+    const ro = new ResizeObserver(() => {
+      const next = el.clientWidth;
+      // Resize callbacks run before paint, so the first layout on screen is already the fitted one.
+      flushSync(() => setFitWidth((prev) => (prev === next ? prev : next)));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fit]);
+
+  const layout = useMemo(
+    () => (fit ? fitColumns(columns, fitWidth === null ? null : Math.max(fitWidth, MIN_TABLE_WIDTH) - (selectable ? CHECK_WIDTH : 0)) : null),
+    [fit, columns, fitWidth, selectable],
+  );
+  const shown = layout ? layout.cols : columns;
 
   const sorted = useMemo(() => {
     if (!sort) return rows;
@@ -109,9 +164,10 @@ export function Table<T>({ rows, columns, rowKey, rowLabel, rowClassName, onRowC
     onSelectedChange?.(next);
   };
 
-  const cellPad = dense ? "px-3 py-1.5" : fit ? "px-3.5 py-2 max-sm:py-2.5" : "px-3 py-2 max-sm:py-2.5";
+  const cellPad = dense ? "px-3 py-1.5" : fit ? "px-(--cell-x) py-2 max-sm:py-2.5" : "px-3 py-2 max-sm:py-2.5";
+  const checkPad = fit ? "w-9 px-2.5 py-2 max-sm:py-2.5" : cn("w-9", cellPad);
   const colLine = (i: number) => columnDividers && i > 0 && "border-l border-[color:var(--divider-soft)]";
-  const visibility = (c: Column<T>) => cn(c.hideBelow && hideCls[c.hideBelow], c.showFrom && showFromCls[c.showFrom]);
+  const visibility = (c: Column<T>) => c.hideBelow && hideCls[c.hideBelow];
 
   return (
     <div className={cn("card", lockHeader ? "overflow-visible" : "overflow-hidden", className)}>
@@ -130,21 +186,21 @@ export function Table<T>({ rows, columns, rowKey, rowLabel, rowClassName, onRowC
           )}
         </div>
       )}
-      <div className={cn(lockHeader ? "overflow-x-auto md:overflow-visible" : "overflow-x-auto", stickyHeader && "max-h-[70vh] overflow-y-auto")}>
-        <table className={cn("w-full min-w-[640px] border-collapse text-[13px] max-sm:text-[14px]", fit && "table-fixed")}>
+      <div ref={wrapRef} className={cn(lockHeader ? "overflow-x-auto md:overflow-visible" : "overflow-x-auto", stickyHeader && "max-h-[70vh] overflow-y-auto")}>
+        <table className={cn("w-full min-w-[640px] border-collapse text-[13px] max-sm:text-[14px]", fit && "table-fit table-fixed")}>
           <thead className={cn("bg-surface-subdued text-[12px] font-[550] text-text-secondary max-sm:text-[12.5px]", (stickyHeader || lockHeader) && "sticky top-0 z-[2]", lockHeader && "shadow-[0_1px_0_var(--divider)]")}>
             <tr>
               {selectable && (
-                <th className={cn(fit ? "w-11" : "w-9", "border-b border-[color:var(--divider)]", cellPad)}>
+                <th className={cn("border-b border-[color:var(--divider)]", checkPad)}>
                   <Checkbox checked={allVisibleSelected} indeterminate={!allVisibleSelected && someSelected} onChange={toggleAll} aria-label="Select all rows on this page" />
                 </th>
               )}
-              {columns.map((c, i) => {
+              {shown.map((c, i) => {
                 const active = sort?.key === c.key;
                 return (
                   <th
                     key={c.key}
-                    style={{ width: c.width }}
+                    style={{ width: layout ? layout.widths.get(c.key) : c.width }}
                     aria-sort={c.sortValue ? (active ? (sort!.dir === "asc" ? "ascending" : "descending") : "none") : undefined}
                     className={cn("border-b border-[color:var(--divider)] font-medium", cellPad, fit && "whitespace-nowrap", colLine(i), c.align === "right" && "text-right", c.align === "center" && "text-center", !c.align && "text-left", visibility(c), c.className)}
                   >
@@ -168,7 +224,7 @@ export function Table<T>({ rows, columns, rowKey, rowLabel, rowClassName, onRowC
           <tbody>
             {visible.length === 0 ? (
               <tr>
-                <td colSpan={columns.length + (selectable ? 1 : 0)} className="px-3 py-10 text-center text-text-tertiary">
+                <td colSpan={shown.length + (selectable ? 1 : 0)} className="px-3 py-10 text-center text-text-tertiary">
                   {emptyState ?? "Nothing here yet."}
                 </td>
               </tr>
@@ -196,12 +252,12 @@ export function Table<T>({ rows, columns, rowKey, rowLabel, rowClassName, onRowC
                     className={cn("border-b border-[color:var(--divider)] last:border-b-0 focus-visible:bg-surface-hover focus-visible:outline-none", onRowClick && "cursor-pointer", isSel ? "bg-surface-selected" : "hover:bg-surface-hover/70", rowClassName?.(row))}
                   >
                     {selectable && (
-                      <td className={cn(cellPad)} onClick={(e) => e.stopPropagation()}>
+                      <td className={checkPad} onClick={(e) => e.stopPropagation()}>
                         <Checkbox checked={isSel} onChange={() => toggle(id)} aria-label={`Select ${label}`} />
                       </td>
                     )}
-                    {columns.map((c, i) => (
-                      <td key={c.key} className={cn(cellPad, "align-middle", fit && "overflow-hidden whitespace-nowrap", colLine(i), c.align === "right" && "text-right tabular", c.align === "center" && "text-center", visibility(c), c.className)}>
+                    {shown.map((c, i) => (
+                      <td key={c.key} className={cn(cellPad, "align-middle", fit && "overflow-hidden text-ellipsis whitespace-nowrap", colLine(i), c.align === "right" && "text-right tabular", c.align === "center" && "text-center", visibility(c), c.className)}>
                         {c.render(row)}
                       </td>
                     ))}

@@ -64,6 +64,8 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
       {
         key: "sku",
         header: "SKU",
+        flex: true,
+        minWidth: 140,
         sortValue: (i) => i.sku,
         render: (i) => (
           <div className="min-w-0">
@@ -79,8 +81,9 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
       {
         key: "category",
         header: "Category",
-        width: "104px",
-        showFrom: 1280,
+        minWidth: 82,
+        maxWidth: 140,
+        priority: 3,
         sortValue: (i) => i.category ?? "",
         render: (i) =>
           i.category ? (
@@ -94,15 +97,17 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
       {
         key: "type",
         header: "Type",
-        width: "104px",
-        showFrom: 896,
+        minWidth: 92,
+        maxWidth: 104,
+        priority: 6,
         sortValue: (i) => i.type,
         render: (i) => <Badge tone={i.type === "assembly" ? "info" : "default"}>{i.type === "assembly" ? "Assembly" : "Part"}</Badge>,
       },
       {
         key: "onHand",
         header: location ? `At ${location.name}` : "On hand",
-        width: location ? "140px" : "124px",
+        minWidth: location ? 120 : 108,
+        maxWidth: location ? 150 : 132,
         align: "right",
         sortValue: (i) => (location ? qtyAt(i, location.id, location.homeId) : i.onHand),
         render: (i) => (location ? <AtLocationCell item={i} location={location} /> : <StockLevelCell item={i} />),
@@ -110,8 +115,9 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
       {
         key: "minMax",
         header: "Min / Max",
-        width: "92px",
-        showFrom: 1152,
+        minWidth: 86,
+        maxWidth: 104,
+        priority: 4,
         align: "right",
         sortValue: (i) => i.minQty ?? null,
         render: (i) => (
@@ -123,7 +129,8 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
       {
         key: "unitCost",
         header: "Unit cost",
-        width: "88px",
+        minWidth: 84,
+        maxWidth: 96,
         align: "right",
         sortValue: (i) => i.unitCost,
         render: (i) => formatMoney(i.unitCost, currency),
@@ -131,8 +138,9 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
       {
         key: "price",
         header: "Price",
-        width: "84px",
-        showFrom: 768,
+        minWidth: 78,
+        maxWidth: 92,
+        priority: 7,
         align: "right",
         sortValue: (i) => i.price,
         render: (i) => formatMoney(i.price, currency),
@@ -140,7 +148,8 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
       {
         key: "value",
         header: "Value",
-        width: "88px",
+        minWidth: 90,
+        maxWidth: 104,
         align: "right",
         sortValue: (i) => i.onHand * i.unitCost,
         render: (i) => <span className="font-medium">{formatMoney(i.onHand * i.unitCost, currency)}</span>,
@@ -148,8 +157,9 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
       {
         key: "supplier",
         header: "Supplier",
-        width: "128px",
-        showFrom: 1024,
+        minWidth: 94,
+        maxWidth: 170,
+        priority: 5,
         sortValue: (i) => supplierName(i.supplierId) ?? "",
         render: (i) => {
           const name = supplierName(i.supplierId);
@@ -166,8 +176,9 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
       {
         key: "leadTime",
         header: "Lead time",
-        width: "88px",
-        showFrom: 1376,
+        minWidth: 76,
+        maxWidth: 90,
+        priority: 2,
         align: "right",
         sortValue: (i) => i.leadTimeDays ?? null,
         render: (i) => (i.leadTimeDays === undefined ? <span className="text-text-tertiary">—</span> : `${formatNumber(i.leadTimeDays)}d`),
@@ -175,15 +186,17 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
       {
         key: "status",
         header: "Status",
-        width: "116px",
+        minWidth: 106,
+        maxWidth: 112,
         sortValue: (i) => i.status,
         render: (i) => <StatusBadge status={i.status} />,
       },
       {
         key: "updated",
         header: "Updated",
-        width: "88px",
-        showFrom: 1472,
+        minWidth: 78,
+        maxWidth: 96,
+        priority: 1,
         sortValue: (i) => i.updatedAt,
         render: (i) => <span className="whitespace-nowrap text-text-secondary">{formatRelative(i.updatedAt)}</span>,
       },

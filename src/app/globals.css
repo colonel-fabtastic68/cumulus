@@ -195,6 +195,13 @@ input[type="number"]::-webkit-outer-spin-button {
   box-shadow: inset 3px 0 0 var(--preview-strong);
 }
 
+/* Tables that fit the page: gutters follow the width of the content area (`main` is the container). */
+@layer components {
+  .table-fit {
+    --cell-x: clamp(7px, 0.7cqw, 12px);
+  }
+}
+
 /* Utility layers used across the app */
 .card {
   background: var(--surface);
