@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls, type InferUITools, type UIDataTypes, type UIMessage } from "ai";
 import { ArrowUp, Check, ChevronDown, ChevronRight, Eye, History, Loader2, Plus, RefreshCw, Sparkles, Square, X } from "lucide-react";
@@ -303,9 +303,9 @@ export function AgentChat({ onClose, pending, consumePending, pendingSession, co
         <Menu
           align="right"
           trigger={
-            <IconButton variant="plain" size="sm" aria-label="History" className="text-text-secondary">
-              <History className="h-4 w-4" />
-            </IconButton>
+            <HeaderButton label="History">
+              <History />
+            </HeaderButton>
           }
           items={
             recent.length
@@ -323,12 +323,12 @@ export function AgentChat({ onClose, pending, consumePending, pendingSession, co
               : [{ label: <span className="text-text-tertiary">No conversations yet</span>, disabled: true }]
           }
         />
-        <IconButton variant="plain" size="sm" aria-label="New conversation" className="text-text-secondary" onClick={newChat}>
-          <Plus className="h-4 w-4" />
-        </IconButton>
-        <IconButton variant="plain" size="sm" aria-label="Close" className="text-text-secondary" onClick={onClose}>
-          <X className="h-4 w-4" />
-        </IconButton>
+        <HeaderButton label="New conversation" tone="solid" onClick={newChat}>
+          <Plus />
+        </HeaderButton>
+        <HeaderButton label="Close" onClick={onClose}>
+          <X />
+        </HeaderButton>
       </div>
       )}
 
@@ -695,4 +695,22 @@ function fmt(v: unknown): string {
   if (Array.isArray(v)) return v.length ? v.join(", ") : "—";
   if (typeof v === "object") return JSON.stringify(v);
   return String(v);
+}
+
+/** The flyout header's buttons: 32px squares in Strato's blue, solid for the main action and tinted for the rest. */
+function HeaderButton({ label, tone = "soft", onClick, children }: { label: string; tone?: "soft" | "solid"; onClick?: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className={cn(
+        "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-sm)] transition-colors duration-100 [&_svg]:h-[18px] [&_svg]:w-[18px]",
+        tone === "solid" ? "bg-accent text-white shadow-[var(--shadow-button-primary)] hover:bg-accent-hover" : "bg-accent-soft text-accent hover:bg-accent/15 active:bg-accent/20",
+      )}
+    >
+      {children}
+    </button>
+  );
 }
