@@ -12,9 +12,9 @@ type Session = "none" | "signed-out" | "signed-in";
 /**
  * Calls to action that know about the visitor: local installs have no accounts,
  * a signed-in visitor gets a shortcut into the workspace, everyone else sees
- * sign in / start free.
+ * sign in / get started.
  */
-export function SessionCta({ runtimeConfig, placement }: { runtimeConfig: RuntimeConfig; placement: "nav" | "hero" | "band" | "pricing" | "success" }) {
+export function SessionCta({ runtimeConfig, placement }: { runtimeConfig: RuntimeConfig; placement: "nav" | "hero" | "band" | "pricing" }) {
   setRuntimeConfig(runtimeConfig);
   const accounts = runtimeConfig.firebase !== null;
   const [session, setSession] = useState<Session>(accounts ? "signed-out" : "none");
@@ -45,13 +45,6 @@ export function SessionCta({ runtimeConfig, placement }: { runtimeConfig: Runtim
         </Button>
       );
     }
-    if (placement === "success") {
-      return (
-        <Button variant="primary" size="lg" href={APP_HOME} iconRight={<ArrowRight />}>
-          {label}
-        </Button>
-      );
-    }
     return (
       <div className="flex flex-wrap items-center gap-3">
         <Button variant="primary" size={size} href={APP_HOME} iconRight={placement === "nav" ? undefined : <ArrowRight />}>
@@ -68,22 +61,9 @@ export function SessionCta({ runtimeConfig, placement }: { runtimeConfig: Runtim
 
   if (placement === "pricing") {
     return (
-      <Button variant="tertiary" size="lg" href="/sign-up">
-        Start free instead
+      <Button variant="tertiary" size="lg" href="/sign-in">
+        Sign in
       </Button>
-    );
-  }
-
-  if (placement === "success") {
-    return (
-      <div className="flex flex-wrap items-center gap-3">
-        <Button variant="primary" size="lg" href="/sign-up" iconRight={<ArrowRight />}>
-          Create your workspace
-        </Button>
-        <Button size="lg" href="/sign-in">
-          Sign in
-        </Button>
-      </div>
     );
   }
 
@@ -94,7 +74,7 @@ export function SessionCta({ runtimeConfig, placement }: { runtimeConfig: Runtim
           Sign in
         </Button>
         <Button size="md" variant="primary" href="/sign-up">
-          Start free
+          Get started
         </Button>
       </div>
     );
@@ -103,7 +83,7 @@ export function SessionCta({ runtimeConfig, placement }: { runtimeConfig: Runtim
   return (
     <div className="flex flex-wrap items-center gap-3">
       <Button variant="primary" size="lg" href="/sign-up" iconRight={<ArrowRight />}>
-        Start free
+        Get started
       </Button>
       <Button size="lg" href={placement === "hero" ? "#strato" : "/sign-in"}>
         {placement === "hero" ? "See how Strato works" : "Sign in"}

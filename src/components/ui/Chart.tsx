@@ -2,6 +2,7 @@
 
 import { useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { ChartChip, type ChartChipRow } from "./ChartChip";
 
 /**
  * Small SVG charts in the app's own tokens: one y-axis, thin marks, recessive
@@ -95,12 +96,20 @@ export function LineChart({ x, series, height = 240, format = (v) => String(Math
     return `M${pts[0]![0]},${base}` + pts.map(([px, py]) => `L${px.toFixed(1)},${py.toFixed(1)}`).join("") + `L${pts[pts.length - 1]![0]},${base}Z`;
   };
 
-  const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
+  const onPointer = (e: React.PointerEvent<SVGSVGElement>) => {
     const rect = ref.current?.getBoundingClientRect();
     if (!rect || n === 0) return;
     const px = ((e.clientX - rect.left) / rect.width) * width;
     const i = Math.round(((px - PAD.left) / plotW) * (n - 1));
     setHover(Math.max(0, Math.min(n - 1, i)));
+  };
+  const onKey = (e: React.KeyboardEvent<SVGSVGElement>) => {
+    if (n === 0) return;
+    if (e.key === "Escape") setHover(null);
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    e.preventDefault();
+    const step = e.key === "ArrowRight" ? 1 : -1;
+    setHover((h) => Math.max(0, Math.min(n - 1, (h ?? (step > 0 ? -1 : n)) + step)));
   };
 
   const xTicks = useMemo(() => {
@@ -111,9 +120,23 @@ export function LineChart({ x, series, height = 240, format = (v) => String(Math
     return Array.from(new Set(out));
   }, [n]);
 
+  let lineChip: { x: number; y: number; rows: ChartChipRow[] } | null = null;
+  if (hover !== null && hasData) {
+    const rows: ChartChipRow[] = [];
+    let top = PAD.top + plotH;
+    for (const s of series) {
+      const v = s.values[hover];
+      if (v === null || v === undefined) continue;
+      top = Math.min(top, sy(v));
+      rows.push({ key: s.key, color: s.color, dashed: s.reference, value: format(v), label: `${s.label}${(s.projectedFrom ?? n) <= hover ? " (projected)" : ""}` });
+    }
+    if (rows.length) lineChip = { x: (sx(hover) / width) * 100, y: (top / height) * 100, rows };
+  }
+
   return (
     <div className={cn("relative", className)}>
-      <svg ref={ref} viewBox={`0 0 ${width} ${height}`} className="block h-auto w-full select-none" role="img" aria-label={series.map((s) => s.label).join(", ")} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+      <div className="relative">
+      <svg ref={ref} viewBox={`0 0 ${width} ${height}`} className="block h-auto w-full select-none" role="img" aria-label={series.map((s) => s.label).join(", ")} tabIndex={hasData ? 0 : undefined} onPointerMove={onPointer} onPointerDown={onPointer} onPointerLeave={() => setHover(null)} onKeyDown={onKey} onFocus={() => setHover((h) => h ?? n - 1)} onBlur={() => setHover(null)}>
         <defs>
           <clipPath id={`${id}-clip`}>
             <rect x={PAD.left} y={PAD.top} width={plotW} height={plotH} />
@@ -169,22 +192,8 @@ export function LineChart({ x, series, height = 240, format = (v) => String(Math
           )}
         </g>
       </svg>
-      {hover !== null && hasData && (
-        <div className="pointer-events-none absolute top-2 rounded-[6px] border border-border bg-surface px-2.5 py-1.5 text-[11.5px] shadow-[var(--shadow-100)]" style={{ left: `calc(${((sx(hover) / width) * 100).toFixed(2)}% + 10px)`, transform: sx(hover) > width * 0.7 ? "translateX(calc(-100% - 20px))" : undefined }}>
-          <div className="mb-0.5 font-medium text-text">{formatX(x[hover]!)}</div>
-          {series.map((s) => {
-            const v = s.values[hover];
-            if (v === null || v === undefined) return null;
-            return (
-              <div key={s.key} className="flex items-center gap-1.5 text-text-secondary">
-                <span className="inline-block h-2 w-2 rounded-full" style={{ background: s.color }} />
-                {s.label}
-                {(s.projectedFrom ?? n) <= hover ? " (projected)" : ""}: <span className="tabular text-text">{format(v)}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {lineChip && <ChartChip x={lineChip.x} y={lineChip.y} title={formatX(x[hover!]!)} rows={lineChip.rows} />}
+      </div>
       <Legend series={series} />
     </div>
   );
@@ -235,9 +244,24 @@ export function BarChart({ x, series, height = 220, format = (v) => String(Math.
   const hasData = series.some((s) => s.values.some((v) => v !== null && v !== 0));
   const label = (i: number) => (n > 14 && i % Math.ceil(n / 12) !== 0 ? null : formatX(x[i]!));
 
+  let barChip: { x: number; y: number; rows: ChartChipRow[] } | null = null;
+  if (hover !== null && hasData) {
+    const rows: ChartChipRow[] = [];
+    let peak = 0;
+    for (const s of series) {
+      const v = s.values[hover];
+      if (v === null || v === undefined) continue;
+      peak = Math.max(peak, v);
+      rows.push({ key: s.key, color: s.color, value: format(v), label: `${s.label}${(s.projectedFrom ?? n) <= hover ? " (projected)" : ""}` });
+    }
+    if (rows.length) barChip = { x: ((PAD.left + hover * slot + slot / 2) / width) * 100, y: (sy(peak) / height) * 100, rows };
+  }
+  const groupLabel = (i: number) => `${formatX(x[i]!)}: ${series.map((s) => `${s.label} ${s.values[i] === null || s.values[i] === undefined ? "no data" : format(s.values[i]!)}`).join(", ")}`;
+
   return (
     <div className={cn("relative", className)}>
-      <svg viewBox={`0 0 ${width} ${height}`} className="block h-auto w-full select-none" role="img" aria-label={series.map((s) => s.label).join(", ")} onMouseLeave={() => setHover(null)}>
+      <div className="relative">
+      <svg viewBox={`0 0 ${width} ${height}`} className="block h-auto w-full select-none" role="img" aria-label={series.map((s) => s.label).join(", ")} onPointerLeave={() => setHover(null)}>
         {ticks.map((t) => (
           <g key={t}>
             <line x1={PAD.left} x2={width - PAD.right} y1={sy(t)} y2={sy(t)} stroke="var(--border)" strokeWidth={1} />
@@ -252,8 +276,8 @@ export function BarChart({ x, series, height = 220, format = (v) => String(Math.
           </text>
         )}
         {x.map((_, i) => (
-          <g key={i} onMouseEnter={() => setHover(i)}>
-            <rect x={PAD.left + i * slot} y={PAD.top} width={slot} height={plotH} fill={hover === i ? "var(--surface-hover)" : "transparent"} />
+          <g key={i} onPointerEnter={() => setHover(i)} onPointerDown={() => setHover(i)}>
+            <rect x={PAD.left + i * slot} y={PAD.top} width={slot} height={plotH} fill={hover === i ? "var(--surface-hover)" : "transparent"} tabIndex={hasData ? 0 : undefined} role="img" aria-label={groupLabel(i)} onFocus={() => setHover(i)} onBlur={() => setHover(null)} />
             {series.map((s, k) => {
               const v = s.values[i];
               if (v === null || v === undefined) return null;
@@ -261,7 +285,7 @@ export function BarChart({ x, series, height = 220, format = (v) => String(Math.
               const bx = PAD.left + i * slot + (slot - barW * series.length) / 2 + k * barW;
               const by = sy(Math.max(0, v));
               const h = Math.max(0, sy(0) - by);
-              return <rect key={s.key} x={bx + 1} y={by} width={Math.max(1, barW - 2)} height={h} rx={2} fill={projected ? "var(--surface)" : s.color} stroke={s.color} strokeWidth={projected ? 1.5 : 0} strokeDasharray={projected ? "3 2" : undefined} />;
+              return <rect key={s.key} x={bx + 1} y={by} width={Math.max(1, barW - 2)} height={h} rx={2} fill={projected ? "var(--surface)" : s.color} stroke={s.color} strokeWidth={projected ? 1.5 : 0} strokeDasharray={projected ? "3 2" : undefined} opacity={hover !== null && hover !== i ? 0.45 : 1} className="pointer-events-none" />;
             })}
             {label(i) && (
               <text x={PAD.left + i * slot + slot / 2} y={height - 8} textAnchor="middle" fontSize={10.5} fill="var(--text-tertiary)">
@@ -271,22 +295,8 @@ export function BarChart({ x, series, height = 220, format = (v) => String(Math.
           </g>
         ))}
       </svg>
-      {hover !== null && hasData && (
-        <div className="pointer-events-none absolute top-2 rounded-[6px] border border-border bg-surface px-2.5 py-1.5 text-[11.5px] shadow-[var(--shadow-100)]" style={{ left: `calc(${(((PAD.left + hover * slot + slot / 2) / width) * 100).toFixed(2)}% + 10px)`, transform: hover > n * 0.7 ? "translateX(calc(-100% - 20px))" : undefined }}>
-          <div className="mb-0.5 font-medium text-text">{formatX(x[hover]!)}</div>
-          {series.map((s) => {
-            const v = s.values[hover];
-            if (v === null || v === undefined) return null;
-            return (
-              <div key={s.key} className="flex items-center gap-1.5 text-text-secondary">
-                <span className="inline-block h-2 w-2 rounded-sm" style={{ background: s.color }} />
-                {s.label}
-                {(s.projectedFrom ?? n) <= hover ? " (projected)" : ""}: <span className="tabular text-text">{format(v)}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {barChip && <ChartChip x={barChip.x} y={barChip.y} title={formatX(x[hover!]!)} rows={barChip.rows} />}
+      </div>
       <Legend series={series} />
     </div>
   );

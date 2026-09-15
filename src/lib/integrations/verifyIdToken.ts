@@ -13,6 +13,10 @@ let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
 export interface VerifiedIdToken {
   uid: string;
   email?: string;
+  /** Firebase's email_verified claim: true after an emailed link or a one-time code. */
+  emailVerified: boolean;
+  /** firebase.sign_in_provider, e.g. "password", "emailLink" or "anonymous". */
+  signInProvider?: string;
 }
 
 export async function verifyFirebaseIdToken(token: string, projectId: string): Promise<VerifiedIdToken> {
@@ -26,5 +30,11 @@ export async function verifyFirebaseIdToken(token: string, projectId: string): P
   if (!uid) throw new Error("Token has no subject");
   const authTime = typeof payload.auth_time === "number" ? payload.auth_time : 0;
   if (authTime > Math.floor(Date.now() / 1000) + 300) throw new Error("Token auth_time is in the future");
-  return { uid, email: typeof payload.email === "string" ? payload.email : undefined };
+  const firebase = (payload.firebase ?? {}) as { sign_in_provider?: unknown };
+  return {
+    uid,
+    email: typeof payload.email === "string" ? payload.email : undefined,
+    emailVerified: payload.email_verified === true,
+    signInProvider: typeof firebase.sign_in_provider === "string" ? firebase.sign_in_provider : undefined,
+  };
 }

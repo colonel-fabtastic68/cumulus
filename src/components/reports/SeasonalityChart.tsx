@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { formatNumber } from "@/lib/format";
+import { ChartChip } from "@/components/ui";
 
 export interface SeasonalityPoint {
   /** YYYY-MM */
@@ -37,6 +39,7 @@ const PAD = { top: 12, right: 12, bottom: 30, left: 46 };
 
 /** Grouped bar chart drawn with inline SVG so it inherits theme colours from CSS variables. */
 export function SeasonalityChart({ data, label }: { data: SeasonalityPoint[]; label: string }) {
+  const [hover, setHover] = useState<number | null>(null);
   const plotW = W - PAD.left - PAD.right;
   const plotH = H - PAD.top - PAD.bottom;
   const max = Math.max(0, ...data.map((d) => Math.max(d.sold, d.consumed)));
@@ -49,8 +52,11 @@ export function SeasonalityChart({ data, label }: { data: SeasonalityPoint[]; la
   const gap = 3;
   const y = (v: number) => PAD.top + plotH - (top > 0 ? (v / top) * plotH : 0);
 
+  const hovered = hover !== null ? data[hover] : undefined;
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label} className="block h-auto w-full select-none text-[11px]">
+    <div className="relative">
+    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label} className="block h-auto w-full select-none text-[11px]" onPointerLeave={() => setHover(null)}>
       {ticks.map((t) => (
         <g key={t}>
           <line x1={PAD.left} x2={W - PAD.right} y1={y(t)} y2={y(t)} stroke={t === 0 ? "var(--border-strong)" : "var(--border)"} strokeWidth={1} />
@@ -66,15 +72,11 @@ export function SeasonalityChart({ data, label }: { data: SeasonalityPoint[]; la
         const consX = cx + gap / 2;
         const short = monthLabel(d.month, { short: true });
         const showYear = i === 0 || d.month.endsWith("-01");
-        const full = monthLabel(d.month);
         return (
-          <g key={d.month}>
-            <rect x={soldX} y={y(d.sold)} width={barW} height={Math.max(0, y(0) - y(d.sold))} rx={2} fill={SOLD_COLOR}>
-              <title>{`${full} · Sold ${formatNumber(d.sold, 2)}`}</title>
-            </rect>
-            <rect x={consX} y={y(d.consumed)} width={barW} height={Math.max(0, y(0) - y(d.consumed))} rx={2} fill={CONSUMED_COLOR}>
-              <title>{`${full} · Consumed in builds ${formatNumber(d.consumed, 2)}`}</title>
-            </rect>
+          <g key={d.month} onPointerEnter={() => setHover(i)} onPointerDown={() => setHover(i)}>
+            <rect x={PAD.left + groupW * i} y={PAD.top} width={groupW} height={plotH} fill={hover === i ? "var(--surface-hover)" : "transparent"} tabIndex={0} role="img" aria-label={`${monthLabel(d.month)}: sold ${formatNumber(d.sold, 2)}, consumed in builds ${formatNumber(d.consumed, 2)}`} onFocus={() => setHover(i)} onBlur={() => setHover(null)} />
+            <rect x={soldX} y={y(d.sold)} width={barW} height={Math.max(0, y(0) - y(d.sold))} rx={2} fill={SOLD_COLOR} opacity={hover !== null && hover !== i ? 0.45 : 1} className="pointer-events-none" />
+            <rect x={consX} y={y(d.consumed)} width={barW} height={Math.max(0, y(0) - y(d.consumed))} rx={2} fill={CONSUMED_COLOR} opacity={hover !== null && hover !== i ? 0.45 : 1} className="pointer-events-none" />
             <text x={cx} y={H - PAD.bottom + 14} textAnchor="middle" fill="var(--text-secondary)">
               {short}
             </text>
@@ -87,6 +89,18 @@ export function SeasonalityChart({ data, label }: { data: SeasonalityPoint[]; la
         );
       })}
     </svg>
+    {hovered && (
+      <ChartChip
+        x={((PAD.left + groupW * hover! + groupW / 2) / W) * 100}
+        y={(y(Math.max(hovered.sold, hovered.consumed)) / H) * 100}
+        title={monthLabel(hovered.month)}
+        rows={[
+          { key: "sold", color: SOLD_COLOR, value: formatNumber(hovered.sold, 2), label: "sold" },
+          { key: "consumed", color: CONSUMED_COLOR, value: formatNumber(hovered.consumed, 2), label: "consumed in builds" },
+        ]}
+      />
+    )}
+    </div>
   );
 }
 

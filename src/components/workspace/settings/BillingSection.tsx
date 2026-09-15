@@ -54,10 +54,8 @@ export function BillingSection({ settings }: { settings: WorkspaceSettings }) {
       {billing ? (
         <p className="text-[12.5px] text-text-tertiary">Invoices, receipts and card changes are handled through Stripe.</p>
       ) : (
-        <div className="flex flex-wrap gap-2">
-          <Button variant="primary" href="/checkout">
-            Become a founding member
-          </Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-[12.5px] text-text-tertiary">This workspace is on pilot access. New workspaces start with a subscription.</p>
           <Button href="/#pricing">See the plan</Button>
         </div>
       )}

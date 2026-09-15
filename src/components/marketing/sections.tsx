@@ -187,7 +187,7 @@ export function Pricing({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
             </li>
             <li className="flex gap-3">
               <Check className="mt-1 h-4 w-4 shrink-0 text-success" />
-              Start free today and upgrade when you are ready.
+              Create your account free, then subscribe when you set up your company&apos;s workspace.
             </li>
           </ul>
         </Reveal>
@@ -216,7 +216,7 @@ export function Pricing({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
               ))}
             </ul>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-              <Button variant="primary" size="lg" href="/checkout" iconRight={<ArrowRight />}>
+              <Button variant="primary" size="lg" href="/workspaces/new" iconRight={<ArrowRight />}>
                 Become a founding member
               </Button>
               <SessionCta runtimeConfig={runtimeConfig} placement="pricing" />

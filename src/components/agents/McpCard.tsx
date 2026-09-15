@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, Copy, KeyRound, Play, Plug } from "lucide-react";
 import { Badge, Button, Card, CardHeader, Segmented, Select, SimpleTable, TextField, useToast } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { copyText } from "@/lib/clipboard";
 
 interface McpStatus {
   server: { name: string; title: string; version: string };
@@ -85,11 +86,10 @@ export function McpCard() {
   };
 
   const copy = async (key: string, text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
+    if (await copyText(text)) {
       setCopied(key);
       setTimeout(() => setCopied((c) => (c === key ? null : c)), 1500);
-    } catch {
+    } else {
       toast("Copy failed. Select the text and copy it manually.", "critical");
     }
   };

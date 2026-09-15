@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Copy, Send, UserPlus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, Copy, Send, UserPlus } from "lucide-react";
 import type { Member, MemberRole, WorkspaceInvite } from "@/lib/types";
 import { Banner, Button, FormGrid, Modal, Select, TextField, useToast } from "@/components/ui";
 import { useCollection, useStore } from "@/lib/store/provider";
@@ -10,6 +10,7 @@ import { useSession } from "@/lib/session";
 import { describeWorkspaceError, inviteLink, sendInviteEmail } from "@/lib/workspaces";
 import { activityOp } from "@/lib/inventory";
 import { newId, nowIso } from "@/lib/utils";
+import { copyText } from "@/lib/clipboard";
 import { ROLE_DESCRIPTIONS, ROLE_OPTIONS, isValidEmail, pickMemberColor, roleLabel } from "./teamUtils";
 
 /**
@@ -36,6 +37,13 @@ function InviteForm({ onClose, onInvited }: { onClose: () => void; onInvited?: (
   const [saving, setSaving] = useState(false);
   const [created, setCreated] = useState<{ invite: WorkspaceInvite; mailed: boolean; mailError?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(t);
+  }, [copied]);
 
   const trimmedName = name.trim();
   const trimmedEmail = email.trim().toLowerCase();
@@ -46,11 +54,11 @@ function InviteForm({ onClose, onInvited }: { onClose: () => void; onInvited?: (
   const valid = !nameError && !emailError;
 
   const copyLink = async (inv: WorkspaceInvite) => {
-    try {
-      await navigator.clipboard.writeText(inviteLink(inv.id));
+    if (await copyText(inviteLink(inv.id))) {
+      setCopied(true);
       toast("Invite link copied", "success");
-    } catch {
-      toast("Copy the link from the field", "default");
+    } else {
+      toast("Your browser blocked copying. Select the link and copy it.", "critical");
     }
   };
 
@@ -136,18 +144,13 @@ function InviteForm({ onClose, onInvited }: { onClose: () => void; onInvited?: (
               {mailError}
             </Banner>
           )}
-          <TextField
-            label="Invite link"
-            value={link}
-            readOnly
-            onFocus={(e) => e.currentTarget.select()}
-            help="The same link the email carries. Anyone who opens it must sign in as the invited address."
-            suffix={
-              <button type="button" onClick={() => void copyLink(invite)} className="flex items-center gap-1 text-[12px] font-medium text-accent hover:underline">
-                <Copy className="h-3.5 w-3.5" /> Copy
-              </button>
-            }
-          />
+          <div className="flex items-end gap-2">
+            <TextField label="Invite link" value={link} readOnly onFocus={(e) => e.currentTarget.select()} containerClassName="min-w-0 flex-1" />
+            <Button icon={copied ? <Check /> : <Copy />} onClick={() => void copyLink(invite)} className="mb-[2px] shrink-0">
+              {copied ? "Copied" : "Copy"}
+            </Button>
+          </div>
+          <p className="-mt-1 text-[12px] text-text-tertiary">The same link the email carries. Anyone who opens it must sign in as the invited address.</p>
         </div>
       </Modal>
     );

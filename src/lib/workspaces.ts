@@ -8,12 +8,13 @@ import type { User } from "firebase/auth";
 import { collection, deleteField, doc, getDoc, getDocFromCache, onSnapshot, query, setDoc, updateDoc, where, writeBatch, type Firestore } from "firebase/firestore";
 import { getRuntimeConfig } from "@/lib/firebase-config";
 import { sendMagicLink } from "@/lib/auth-link";
-import { getDb } from "@/lib/store/firestore";
+import { getDb, getFirebaseAuth } from "@/lib/store/firestore";
 import { buildSeed, freshWorkspace, seedSettings } from "@/lib/seed";
-import { COLLECTIONS, type ActivityEvent, type Member, type MemberRole, type UserProfile, type WorkspaceDoc, type WorkspaceInvite, type WorkspaceMembership, type WorkspaceSettings, type WorkspaceSnapshot } from "@/lib/types";
+import { COLLECTIONS, type ActivityEvent, type Member, type MemberRole, type UserProfile, type WorkspaceInvite, type WorkspaceMembership, type WorkspaceSettings, type WorkspaceSnapshot } from "@/lib/types";
 import { newId, nowIso } from "@/lib/utils";
+import { avatarColor } from "@/lib/colors";
+import { AccountApiError, accountFetch } from "@/lib/account-fetch";
 
-const AVATAR_COLORS = ["#1f5f8b", "#7a3e9d", "#2e7d4f", "#b5541c", "#8b1f4f", "#3e6b9d", "#5c7a1f"];
 /** Firestore batches take 500 writes; leave headroom. */
 const BATCH_SIZE = 450;
 
@@ -28,11 +29,7 @@ function db(app: FirebaseApp): Firestore {
   return getDb(app);
 }
 
-export function avatarColor(seed: string): string {
-  let h = 0;
-  for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return AVATAR_COLORS[h % AVATAR_COLORS.length]!;
-}
+export { avatarColor };
 
 export function displayNameFor(user: User, preferred?: string | null): string {
   const fromForm = preferred?.trim();
@@ -192,6 +189,9 @@ export async function acceptInvite(app: FirebaseApp, profile: UserProfile, rawCo
     throw new WorkspaceError(profile.email ? `That invite was sent to ${invite.email}. Sign in with that address to use it.` : `That invite was sent to ${invite.email}. Create an account with that address to use it.`);
   }
   if (profile.workspaces[invite.workspaceId]) throw new WorkspaceError(`You're already a member of ${invite.workspaceName}.`);
+  if (invite.email && !getFirebaseAuth(app).currentUser?.emailVerified) {
+    throw new WorkspaceError(`Confirm ${invite.email} before joining: sign out, then sign in with "Email me a sign-in link".`);
+  }
 
   const now = nowIso();
   const member: Member = {
@@ -239,46 +239,30 @@ export interface CreateWorkspaceOptions {
 }
 
 /**
- * Create a workspace owned by the signed-in account. The workspace document,
- * its settings, the owner's member record and the profile entry go in the
- * first batch (the rules need them before anything else), then the data.
+ * Create a workspace owned by the signed-in account. The server creates the
+ * workspace, the owner's member record, settings and profile entry, and claims
+ * a paid subscription for it; then the starting data is written from here.
  */
 export async function createWorkspace(app: FirebaseApp, profile: UserProfile, opts: CreateWorkspaceOptions): Promise<WorkspaceMembership> {
   const name = opts.name.trim();
   if (!name) throw new WorkspaceError("Give the company a name.");
-  const id = newId("ws");
   const now = nowIso();
-
-  const owner: Member = {
-    id: profile.id,
-    name: profile.name,
-    email: profile.email,
-    role: "owner",
-    color: avatarColor(profile.id),
-    status: "active",
-    guest: profile.guest,
-    lastSeenAt: now,
-    createdAt: now,
-  };
   const snapshot: WorkspaceSnapshot = opts.sample ? buildSeed() : freshWorkspace({ companyName: name, currency: opts.currency });
   const settings: WorkspaceSettings = { ...(snapshot.settings[0] ?? seedSettings()), id: "default", companyName: name, currency: opts.currency };
-  snapshot.settings = [settings];
-  snapshot.members = [owner];
+
+  let membership: WorkspaceMembership;
+  try {
+    ({ membership } = await accountFetch<{ membership: WorkspaceMembership }>(app, "/api/workspaces", { name, currency: opts.currency, settings: clean(settings) }));
+  } catch (e) {
+    throw e instanceof AccountApiError ? new WorkspaceError(e.message) : e;
+  }
+
+  const id = membership.id;
   snapshot.activity = [
     ...snapshot.activity,
     { id: newId("act"), type: "settings.updated", message: `${profile.name} created ${name}`, actorId: profile.id, actorName: profile.name, createdAt: now },
   ];
-  const workspace: WorkspaceDoc = { id, name, ownerId: profile.id, createdAt: now };
-  const membership: WorkspaceMembership = { id, name, role: "owner", joinedAt: now };
-
   const firestore = db(app);
-  const first = writeBatch(firestore);
-  first.set(doc(firestore, "workspaces", id), clean(workspace));
-  first.set(doc(firestore, "workspaces", id, "members", owner.id), clean(owner));
-  first.set(doc(firestore, "workspaces", id, "settings", "default"), clean(settings));
-  first.update(doc(firestore, "users", profile.id), { [`workspaces.${id}`]: membership, lastWorkspaceId: id, updatedAt: now });
-  await first.commit();
-
   const rest: Array<{ collection: string; row: { id: string } }> = [];
   for (const col of COLLECTIONS) {
     if (col === "members" || col === "settings") continue;

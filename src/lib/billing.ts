@@ -15,14 +15,14 @@ export interface Plan {
 }
 
 /**
- * The plans cumulusOS sells. Prices are shown on the landing page, the checkout
+ * The plans cumulusOS sells. Prices are shown on the landing page, the new-workspace
  * page and the billing settings; Stripe holds the matching price objects.
  */
 export const PLANS: Record<PlanId, Plan> = {
   founding: {
     id: "founding",
     name: "Founding Members",
-    monthly: 199,
+    monthly: 99,
     listMonthly: 299,
     currency: "USD",
     blurb: "Unlimited team users. One price for the whole company.",

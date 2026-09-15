@@ -2,8 +2,10 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Check, KeyRound, LogOut, Mail, Sparkles } from "lucide-react";
-import { Avatar, Badge, Banner, Button, CloudMark, Select, TextField, Toggle, useToast } from "@/components/ui";
+import { Building2, Check, KeyRound, LogOut, Mail } from "lucide-react";
+import { Avatar, Badge, Banner, Button, CloudMark, useToast } from "@/components/ui";
+import { FOUNDING_PLAN } from "@/lib/billing";
+import { formatMoney } from "@/lib/format";
 import { describeAuthError, useAuth } from "@/lib/auth";
 import { setPassword } from "@/lib/auth-link";
 import { APP_HOME } from "@/lib/auth-routes";
@@ -12,8 +14,6 @@ import { describeWorkspaceError } from "@/lib/workspaces";
 import { roleLabel } from "@/components/workspace/team/teamUtils";
 import { passwordError } from "@/components/auth/fields";
 import { PasswordField } from "@/components/auth/fields";
-
-const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "NZD", "MXN"];
 
 /**
  * The Account page inside the app, and the page an account lands on with no
@@ -106,7 +106,7 @@ export function WorkspaceHub({ standalone = false, notice }: { standalone?: bool
 
       <div className="grid gap-4 lg:grid-cols-2">
         <InvitesCard busy={busy} onJoin={join} />
-        <CreateWorkspaceCard busy={busy} setBusy={setBusy} setError={setError} />
+        <CreateWorkspaceCard />
       </div>
     </div>
   );
@@ -199,47 +199,16 @@ function AccountCard() {
   );
 }
 
-function CreateWorkspaceCard({ busy, setBusy, setError }: { busy: string | null; setBusy: (b: string | null) => void; setError: (e: string | null) => void }) {
-  const session = useSession();
-  const router = useRouter();
-  const toast = useToast();
-  const [name, setName] = useState("");
-  const [currency, setCurrency] = useState("USD");
-  const [sample, setSample] = useState(false);
-  const [nameError, setNameError] = useState<string | undefined>();
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) {
-      setNameError("Give the company a name.");
-      return;
-    }
-    setNameError(undefined);
-    setBusy("create");
-    setError(null);
-    try {
-      const membership = await session.createWorkspace({ name, currency, sample });
-      toast(`${membership.name} is ready`, "success");
-      router.replace(APP_HOME);
-    } catch (err) {
-      setError(describeWorkspaceError(err));
-    } finally {
-      setBusy(null);
-    }
-  };
-
+function CreateWorkspaceCard() {
   return (
     <section id="create" className="card scroll-mt-4 p-5">
       <h2 className="text-[14px] font-semibold text-text">Create a workspace</h2>
-      <p className="mt-1 text-[12.5px] text-text-secondary">You become its owner and can invite the team from the Team page.</p>
-      <form onSubmit={submit} noValidate className="mt-4 flex flex-col gap-3">
-        <TextField label="Company name" value={name} onChange={(e) => setName(e.target.value)} error={nameError} placeholder="Halcyon Audio" autoComplete="organization" />
-        <Select label="Currency" value={currency} onChange={(e) => setCurrency(e.target.value)} options={CURRENCIES.map((c) => ({ value: c, label: c }))} />
-        <Toggle label="Start with sample data" help="Loads the Halcyon Audio demo with six months of history. Clear it later from Settings." checked={sample} onChange={setSample} size="sm" />
-        <Button type="submit" variant="primary" icon={sample ? <Sparkles /> : <Building2 />} loading={busy === "create"} disabled={busy !== null && busy !== "create"}>
-          Create workspace
-        </Button>
-      </form>
+      <p className="mt-1 text-[12.5px] leading-5 text-text-secondary">
+        Start a company with its own inventory. Each workspace is {formatMoney(FOUNDING_PLAN.monthly, FOUNDING_PLAN.currency).replace(/\.00$/, "")} a month on the {FOUNDING_PLAN.name} plan, with unlimited team users.
+      </p>
+      <Button variant="primary" icon={<Building2 />} href="/workspaces/new" className="mt-4">
+        Create a workspace
+      </Button>
     </section>
   );
 }

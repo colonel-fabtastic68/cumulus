@@ -102,13 +102,18 @@ export function JoinInvite({ id }: { id: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [app, pending, session.status]);
 
+  // A new password account confirms its email before it can use an invite addressed to it.
+  useEffect(() => {
+    if (session.needsEmailCode) router.replace(`/verify-email?next=${encodeURIComponent(joinPath(id))}`);
+  }, [session.needsEmailCode, id, router]);
+
   // Signed in as the invited address: join.
   useEffect(() => {
-    if (!pending || !session.profile || !matches || joinTried.current) return;
+    if (!pending || !session.profile || !matches || joinTried.current || session.needsEmailCode) return;
     joinTried.current = true;
     void join(pending);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pending, session.profile, matches]);
+  }, [pending, session.profile, matches, session.needsEmailCode]);
 
   if (invite === undefined || session.status === "loading" || phase === "signing-in" || phase === "joining") {
     return (

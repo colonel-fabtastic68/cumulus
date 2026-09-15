@@ -2,6 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { FirebaseApp } from "firebase/app";
+import type { User } from "firebase/auth";
+import { getRuntimeConfig } from "@/lib/firebase-config";
 import type { MemberRole, UserProfile, WorkspaceInvite, WorkspaceMembership } from "@/lib/types";
 import { debugLog } from "@/lib/debug";
 import { getFirebaseApp, getFirebaseAuth, readFirebaseConfig } from "@/lib/store/firestore";
@@ -14,6 +16,26 @@ export interface SessionUser {
   email: string;
   name: string;
   isAnonymous: boolean;
+  emailVerified: boolean;
+  /** When the Firebase account was created (ISO). */
+  createdAt: string;
+  /** Signs in with a password (as opposed to only emailed links). */
+  passwordAccount: boolean;
+}
+
+/** Password accounts created from this moment confirm their email with a one-time code. Older accounts are left alone. */
+export const EMAIL_CODES_FROM = "2026-09-15T00:00:00.000Z";
+
+function toSessionUser(user: User): SessionUser {
+  return {
+    uid: user.uid,
+    email: (user.email ?? "").toLowerCase(),
+    name: user.displayName ?? "",
+    isAnonymous: user.isAnonymous,
+    emailVerified: user.emailVerified,
+    createdAt: user.metadata.creationTime ? new Date(user.metadata.creationTime).toISOString() : "",
+    passwordAccount: user.providerData.some((p) => p.providerId === "password"),
+  };
 }
 
 export interface SessionValue {
@@ -49,6 +71,10 @@ export interface SessionValue {
    * (a transient failure), so the caller can retry instead.
    */
   forgetWorkspace: (id: string) => Promise<boolean>;
+  /** A new password account that still has to enter the emailed one-time code. */
+  needsEmailCode: boolean;
+  /** Reloads the Firebase account, e.g. after its email was verified. */
+  refreshAccount: () => Promise<void>;
 }
 
 const LOCAL_SESSION: SessionValue = {
@@ -72,6 +98,8 @@ const LOCAL_SESSION: SessionValue = {
   subscribeWorkspaceInvites: () => () => {},
   updateWorkspaceName: () => {},
   forgetWorkspace: () => Promise.resolve(false),
+  needsEmailCode: false,
+  refreshAccount: () => Promise.resolve(),
 };
 
 const SessionContext = createContext<SessionValue>(LOCAL_SESSION);
@@ -134,7 +162,7 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
           setChosen(null);
           return;
         }
-        setAccount({ uid: user.uid, email: (user.email ?? "").toLowerCase(), name: user.displayName ?? "", isAnonymous: user.isAnonymous });
+        setAccount(toSessionUser(user));
         try {
           const loaded = await loadOrCreateProfile(app, user, pendingSignUpName);
           debugLog(`profile: loaded (${Object.keys(loaded.workspaces).length} workspaces)`);
@@ -256,6 +284,16 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
 
   const clearNotice = useCallback(() => setNotice(null), []);
 
+  const refreshAccount = useCallback(async () => {
+    const user = getFirebaseAuth(app).currentUser;
+    if (!user) return;
+    await user.reload();
+    await user.getIdToken(true);
+    setAccount(toSessionUser(getFirebaseAuth(app).currentUser ?? user));
+  }, [app]);
+
+  const needsEmailCode = !!(getRuntimeConfig().emailCodes && account && !account.isAnonymous && account.passwordAccount && !account.emailVerified && account.createdAt >= EMAIL_CODES_FROM);
+
   const updateWorkspaceName = useCallback(
     (id: string, name: string) => {
       if (!profile?.workspaces[id] || !name.trim() || profile.workspaces[id].name === name) return;
@@ -300,8 +338,10 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
       subscribeWorkspaceInvites: subscribeInvites,
       updateWorkspaceName,
       forgetWorkspace,
+      needsEmailCode,
+      refreshAccount,
     }),
-    [app, status, account, profile, workspaces, workspaceId, pendingInvites, error, notice, clearNotice, switchWorkspace, createWorkspace, acceptInvite, createInvite, revokeInvite, subscribeInvites, updateWorkspaceName, forgetWorkspace],
+    [app, status, account, profile, workspaces, workspaceId, pendingInvites, error, notice, clearNotice, switchWorkspace, createWorkspace, acceptInvite, createInvite, revokeInvite, subscribeInvites, updateWorkspaceName, forgetWorkspace, needsEmailCode, refreshAccount],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

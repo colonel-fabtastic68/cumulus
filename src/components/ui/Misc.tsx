@@ -146,9 +146,9 @@ export function AvatarStack({ members, max = 4 }: { members: Array<Pick<Member, 
   return (
     <span className="inline-flex items-center">
       {shown.map((m, i) => (
-        <Avatar key={i} member={m} size={24} className={cn("ring-2 ring-surface", i > 0 && "-ml-1.5")} />
+        <Avatar key={i} member={m} size={24} className={cn("rounded-full ring-2 ring-nav-bg", i > 0 && "-ml-1.5")} />
       ))}
-      {rest > 0 && <span className="-ml-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-surface-hover text-[10px] font-medium text-text-secondary ring-2 ring-surface">+{rest}</span>}
+      {rest > 0 && <span className="-ml-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-surface-hover text-[10px] font-medium text-text-secondary ring-2 ring-nav-bg">+{rest}</span>}
     </span>
   );
 }

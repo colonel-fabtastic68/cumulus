@@ -11,3 +11,4 @@ export * from "./QueryParam";
 export * from "./Combobox";
 export * from "./CloudMark";
 export * from "./Chart";
+export * from "./ChartChip";

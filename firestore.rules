@@ -26,6 +26,10 @@ service cloud.firestore {
     function invite(id) {
       return get(/databases/$(database)/documents/invites/$(id)).data;
     }
+    // True after an emailed sign-in link or the one-time sign-up code.
+    function verifiedEmail() {
+      return request.auth.token.email_verified == true;
+    }
 
     // Each account reads and writes only its own profile (workspaces it belongs to).
     match /users/{userId} {
@@ -33,23 +37,22 @@ service cloud.firestore {
     }
 
     match /workspaces/{ws} {
-      // The workspace document: created by its owner, readable by members, renamed by managers.
+      // The workspace document: created by the server once a subscription pays for it, readable by members, renamed by managers.
       allow read: if isMember(ws);
-      allow create: if signedIn() && request.resource.data.ownerId == uid() && request.resource.data.id == ws;
+      allow create: if false;
       allow update: if canManage(ws);
       allow delete: if false;
 
       match /members/{memberId} {
         allow read: if isMember(ws);
-        // Your own record appears when you create the workspace or redeem a pending invite for it; managers add others.
+        // Your own record appears when you redeem a pending invite addressed to your verified email; the server writes the owner's; managers add others.
         allow create: if canManage(ws)
-          || (signedIn() && memberId == uid() && (
-               (existsAfter(/databases/$(database)/documents/workspaces/$(ws)) && getAfter(/databases/$(database)/documents/workspaces/$(ws)).data.ownerId == uid())
-               || (request.resource.data.inviteId is string
-                   && invite(request.resource.data.inviteId).workspaceId == ws
-                   && invite(request.resource.data.inviteId).status == 'pending'
-                   && invite(request.resource.data.inviteId).role == request.resource.data.role)
-             ));
+          || (signedIn() && memberId == uid()
+              && request.resource.data.inviteId is string
+              && invite(request.resource.data.inviteId).workspaceId == ws
+              && invite(request.resource.data.inviteId).status == 'pending'
+              && invite(request.resource.data.inviteId).role == request.resource.data.role
+              && (!('email' in invite(request.resource.data.inviteId)) || (invite(request.resource.data.inviteId).email == tokenEmail() && verifiedEmail())));
         // Presence and profile details on your own record; roles and removal are for managers.
         allow update: if canManage(ws)
           || (signedIn() && memberId == uid() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSeenAt', 'status', 'name', 'color', 'email']));
@@ -68,6 +71,14 @@ service cloud.firestore {
       }
     }
 
+    // One-time sign-up codes and subscription records are handled by the server only.
+    match /emailCodes/{userId} {
+      allow read, write: if false;
+    }
+    match /subscriptions/{subscriptionId} {
+      allow read, write: if false;
+    }
+
     match /invites/{code} {
       // Ids are unguessable: the join page shows who invited whom before sign-in.
       allow get: if true;
@@ -79,7 +90,7 @@ service cloud.firestore {
         || (resource.data.status == 'pending'
             && request.resource.data.status == 'accepted'
             && request.resource.data.acceptedById == uid()
-            && (!('email' in resource.data) || resource.data.email == tokenEmail())
+            && (!('email' in resource.data) || (resource.data.email == tokenEmail() && verifiedEmail()))
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'acceptedById', 'acceptedByName', 'acceptedAt']))
       );
       allow delete: if signedIn() && canManage(resource.data.workspaceId);

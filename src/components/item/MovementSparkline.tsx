@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { ChartChip } from "@/components/ui";
 import type { StockMovement } from "@/lib/types";
 import { formatQty } from "@/lib/format";
 import { round } from "@/lib/utils";
@@ -19,6 +20,7 @@ const MAX_BAR = MID - 10;
  */
 export function MovementSparkline({ movements, unit, weeks = 12 }: { movements: StockMovement[]; unit?: string; weeks?: number }) {
   const buckets = useMemo(() => weeklyBuckets(movements, weeks), [movements, weeks]);
+  const [hover, setHover] = useState<number | null>(null);
   const totals = useMemo(() => {
     const inQty = round(buckets.reduce((a, b) => a + b.inQty, 0), 3);
     const outQty = round(buckets.reduce((a, b) => a + b.outQty, 0), 3);
@@ -56,25 +58,34 @@ export function MovementSparkline({ movements, unit, weeks = 12 }: { movements: 
         </span>
       </div>
       <div className="relative">
-        <svg viewBox={`0 0 ${W} ${H}`} className="h-[120px] w-full" role="img" aria-label={`Weekly stock movement for the last ${weeks} weeks`}>
-          <line x1={PAD_X} x2={W - PAD_X} y1={MID} y2={MID} stroke="var(--border-strong)" strokeWidth={1} />
+        <svg viewBox={`0 0 ${W} ${H}`} className="h-[120px] w-full" preserveAspectRatio="none" onPointerLeave={() => setHover(null)} role="img" aria-label={`Weekly stock movement for the last ${weeks} weeks`}>
+          <line x1={PAD_X} x2={W - PAD_X} y1={MID} y2={MID} stroke="var(--border-strong)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
           {buckets.map((b, i) => {
             const x = PAD_X + i * slot + (slot - barW) / 2;
             const hIn = scale(b.inQty);
             const hOut = scale(b.outQty);
             return (
-              <g key={b.start}>
-                <title>
-                  {`Week of ${b.label}: +${formatQty(b.inQty, unit)} in, −${formatQty(b.outQty, unit)} out (net ${b.inQty - b.outQty >= 0 ? "+" : ""}${formatQty(round(b.inQty - b.outQty, 3), unit)})`}
-                </title>
+              <g key={b.start} onPointerEnter={() => setHover(i)} onPointerDown={() => setHover(i)} opacity={hover !== null && hover !== i ? 0.45 : 1}>
                 <rect x={x} y={MID - hIn} width={barW} height={hIn} rx={2} fill="var(--success)" opacity={0.75} />
                 <rect x={x} y={MID} width={barW} height={hOut} rx={2} fill="var(--info)" opacity={0.65} />
-                <rect x={PAD_X + i * slot} y={0} width={slot} height={H} fill="transparent" />
+                <rect x={PAD_X + i * slot} y={0} width={slot} height={H} fill="transparent" tabIndex={0} role="img" aria-label={`Week of ${b.label}: ${formatQty(b.inQty, unit)} in, ${formatQty(b.outQty, unit)} out`} onFocus={() => setHover(i)} onBlur={() => setHover(null)} />
               </g>
             );
           })}
-          {!empty && <path d={netPath} fill="none" stroke="var(--text)" strokeWidth={1.25} strokeLinejoin="round" strokeLinecap="round" opacity={0.6} />}
+          {!empty && <path d={netPath} fill="none" stroke="var(--text)" strokeWidth={1.25} strokeLinejoin="round" strokeLinecap="round" opacity={0.6} vectorEffect="non-scaling-stroke" className="pointer-events-none" />}
         </svg>
+        {hover !== null && !empty && buckets[hover] && (
+          <ChartChip
+            x={((PAD_X + hover * slot + slot / 2) / W) * 100}
+            y={((MID - scale(buckets[hover].inQty)) / H) * 100}
+            title={`Week of ${buckets[hover].label}`}
+            rows={[
+              { key: "in", color: "var(--success)", value: `+${formatQty(buckets[hover].inQty, unit)}`, label: "in" },
+              { key: "out", color: "var(--info)", value: `−${formatQty(buckets[hover].outQty, unit)}`, label: "out" },
+              { key: "net", color: "var(--text)", value: `${buckets[hover].inQty - buckets[hover].outQty >= 0 ? "+" : ""}${formatQty(round(buckets[hover].inQty - buckets[hover].outQty, 3), unit)}`, label: "net" },
+            ]}
+          />
+        )}
         {empty && <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-[12.5px] text-text-tertiary">No movement in the last {weeks} weeks</div>}
       </div>
       <div className="mt-1 flex justify-between text-[11px] text-text-tertiary">

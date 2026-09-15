@@ -96,6 +96,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (needsSignIn) router.replace(signInHref(pathname));
   }, [needsSignIn, pathname, router]);
 
+  // New password accounts confirm their email with the one-time code before anything else.
+  const needsCode = mode === "firestore" && session.needsEmailCode;
+  useEffect(() => {
+    if (needsCode) router.replace(`/verify-email?next=${encodeURIComponent(pathname)}`);
+  }, [needsCode, pathname, router]);
+
   // Flag a slow Firestore connection so the skeleton never looks frozen.
   useEffect(() => {
     if (mode !== "firestore" || ready || !signedIn) return;
@@ -106,6 +112,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (loading) return <LoadingSkeleton />;
 
   if (mode === "firestore" && !signedIn) return <LoadingSkeleton />;
+
+  if (needsCode) return <LoadingSkeleton />;
 
   // Signed in, but not in any workspace yet: create one or join one you were invited to.
   if (mode === "firestore" && session.status === "no-workspace") {

@@ -71,6 +71,30 @@ export async function authenticate(req: Request, opts: { write?: boolean; manage
   return { sa, db, workspaceId, member, store: new AdminFirestoreStore(sa, workspaceId), actor: { id: member.id, name: member.name } };
 }
 
+export interface AccountContext {
+  sa: ServiceAccount;
+  db: Firestore;
+  uid: string;
+  /** Lower-case address on the ID token; empty for guest sessions. */
+  email: string;
+  emailVerified: boolean;
+  signInProvider?: string;
+}
+
+/** Verifies the bearer ID token for calls made outside any workspace: email codes, billing, creating a workspace. */
+export async function authenticateAccount(req: Request): Promise<AccountContext> {
+  const sa = requireServiceAccount();
+  const header = req.headers.get("authorization") ?? "";
+  const token = header.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : "";
+  if (!token) throw new HttpError(401, "Sign in first.");
+  try {
+    const t = await verifyFirebaseIdToken(token, sa.project_id);
+    return { sa, db: getFirestore(adminApp(sa)), uid: t.uid, email: (t.email ?? "").toLowerCase(), emailVerified: t.emailVerified, signInProvider: t.signInProvider };
+  } catch {
+    throw new HttpError(401, "Your session has expired. Sign in again.");
+  }
+}
+
 // ---- secrets ----------------------------------------------------------------
 
 export type Secrets = Record<string, string>;

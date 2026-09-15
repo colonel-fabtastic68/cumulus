@@ -8,6 +8,7 @@ import { describeAuthError } from "@/lib/auth";
 import { formatRelative } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { inviteLink, sendInviteEmail } from "@/lib/workspaces";
+import { copyText } from "@/lib/clipboard";
 import { roleLabel } from "./teamUtils";
 
 /** Firestore mode: invites for this workspace that nobody has redeemed yet. */
@@ -20,12 +21,8 @@ export function PendingInvitesCard() {
   useEffect(() => subscribe(setInvites), [subscribe]);
 
   const copy = async (inv: WorkspaceInvite) => {
-    try {
-      await navigator.clipboard.writeText(inviteLink(inv.id));
-      toast("Invite link copied", "success");
-    } catch {
-      toast(inviteLink(inv.id), "default");
-    }
+    if (await copyText(inviteLink(inv.id))) toast("Invite link copied", "success");
+    else toast(inviteLink(inv.id), "default");
   };
 
   const resend = async (inv: WorkspaceInvite) => {

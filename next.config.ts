@@ -7,7 +7,11 @@ const nextConfig: NextConfig = {
   },
   // The agent was called Nimbus until September 2026. Old links and bookmarks keep working.
   async redirects() {
-    return [{ source: "/nimbus/:path*", destination: "/strato/:path*", permanent: false }];
+    return [
+      { source: "/nimbus/:path*", destination: "/strato/:path*", permanent: false },
+      // Subscribing now happens while creating a workspace.
+      { source: "/checkout/:path*", destination: "/workspaces/new", permanent: false },
+    ];
   },
 };
 
