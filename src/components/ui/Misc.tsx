@@ -194,7 +194,7 @@ export interface MenuItem {
   icon?: ReactNode;
 }
 
-export function Menu({ trigger, items, align = "right", className }: { trigger: ReactNode; items: Array<MenuItem | "divider">; align?: "left" | "right"; className?: string }) {
+export function Menu({ trigger, items, align = "right", className, menuClassName }: { trigger: ReactNode; items: Array<MenuItem | "divider">; align?: "left" | "right"; className?: string; /** Size the dropdown, e.g. a fixed width so long labels truncate inside a narrow panel. */ menuClassName?: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -221,7 +221,7 @@ export function Menu({ trigger, items, align = "right", className }: { trigger: 
     <div ref={ref} className={cn("relative inline-block", className)}>
       <div onClick={() => setOpen((o) => !o)}>{trigger}</div>
       {open && (
-        <div role="menu" className={cn("animate-in absolute z-[60] mt-1 min-w-[180px] rounded-[var(--radius)] bg-surface p-1 shadow-[var(--shadow-pop)]", align === "right" ? "right-0" : "left-0")}>
+        <div role="menu" className={cn("animate-in absolute z-[60] mt-1 min-w-[180px] rounded-[var(--radius)] bg-surface p-1 shadow-[var(--shadow-pop)]", align === "right" ? "right-0" : "left-0", menuClassName)}>
           {items.map((it, i) =>
             it === "divider" ? (
               <div key={i} className="my-1 border-t border-border" />
@@ -242,7 +242,7 @@ export function Menu({ trigger, items, align = "right", className }: { trigger: 
                 )}
               >
                 {it.icon && <span className="text-text-secondary [&>svg]:h-3.5 [&>svg]:w-3.5">{it.icon}</span>}
-                {it.label}
+                <span className="min-w-0 flex-1">{it.label}</span>
               </button>
             ),
           )}

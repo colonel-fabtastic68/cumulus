@@ -302,6 +302,7 @@ export function AgentChat({ onClose, pending, consumePending, pendingSession, co
         </div>
         <Menu
           align="right"
+          menuClassName="w-[min(20rem,calc(100vw-7.5rem))] max-h-[min(26rem,calc(100dvh-8rem))] overflow-y-auto"
           trigger={
             <HeaderButton label="History">
               <History />
