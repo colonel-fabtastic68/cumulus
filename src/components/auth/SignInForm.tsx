@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { MailCheck, Send, UserRound } from "lucide-react";
+import { MailCheck, Send, UserPlus } from "lucide-react";
 import { Banner, Button, TextField } from "@/components/ui";
 import { describeAuthError, useAuth } from "@/lib/auth";
 import { EMAIL_FOR_SIGN_IN_KEY, finishMagicLink, isMagicLink, scrubMagicLink, sendMagicLink } from "@/lib/auth-link";
@@ -13,14 +13,14 @@ import { AuthPage, useNextPath } from "./AuthPage";
 import { PasswordField, emailError } from "./fields";
 
 export function SignInForm() {
-  const { signIn, signInAsGuest, authError } = useAuth();
+  const { signIn, authError } = useAuth();
   const { app, status } = useSession();
   const next = useNextPath();
   const params = useSearchParams();
   const [email, setEmail] = useState(() => params.get("email") ?? "");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
-  const [busy, setBusy] = useState<"form" | "guest" | "link" | "finish" | null>(null);
+  const [busy, setBusy] = useState<"form" | "link" | "finish" | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [linkError, setLinkError] = useState<string | null>(null);
   /** An emailed link is in the address bar but this device does not know the address it was for. */
@@ -102,27 +102,10 @@ export function SignInForm() {
     }
   };
 
-  const guest = async () => {
-    setBusy("guest");
-    try {
-      await signInAsGuest();
-    } finally {
-      setBusy(null);
-    }
-  };
-
   return (
     <AuthPage
       title={needsEmail ? "Finish signing in" : "Sign in to cumulusOS"}
       subtitle={needsEmail ? "Confirm the address this sign-in link was sent to." : "Your team's inventory workspace, live in Firestore."}
-      footer={
-        <>
-          New to cumulusOS?{" "}
-          <Link href={signUpHref(next)} className="font-medium text-accent hover:underline">
-            Create your account
-          </Link>
-        </>
-      }
     >
       <form onSubmit={submit} noValidate className="flex flex-col gap-4">
         <TextField label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} placeholder="you@company.com" autoComplete="email" autoFocus />
@@ -161,10 +144,9 @@ export function SignInForm() {
             or
             <span className="h-px flex-1 bg-border" />
           </div>
-          <Button size="lg" fullWidth icon={<UserRound />} onClick={guest} loading={busy === "guest"} disabled={busy !== null}>
-            Continue as guest
+          <Button size="lg" fullWidth icon={<UserPlus />} href={signUpHref(next)}>
+            Create account
           </Button>
-          <p className="mt-2 text-center text-[12px] leading-4 text-text-tertiary">Guests get a temporary account on this browser. Create an account to keep your access across devices.</p>
         </>
       )}
     </AuthPage>

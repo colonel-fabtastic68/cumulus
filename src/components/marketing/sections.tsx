@@ -132,7 +132,7 @@ export function Integrations() {
 
 const STEPS = [
   { icon: FileSpreadsheet, title: "Import the sheet you already have", body: "Paste or upload. Columns map themselves, custom fields are one click, and the review shows what changes before it lands." },
-  { icon: Users, title: "Invite the team", body: "Email and password, or a guest session for someone on the floor. Everyone sees the same numbers live." },
+  { icon: Users, title: "Invite the team", body: "Send each teammate an email invite. They sign in with a password or an emailed link, and everyone sees the same numbers live." },
   { icon: GitFork, title: "Hand the bulk work to Strato", body: "Price updates, cycle counts, receiving, BOM edits. One request, one approval, and the ledger records who did what." },
 ];
 

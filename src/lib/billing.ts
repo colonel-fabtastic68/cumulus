@@ -27,7 +27,7 @@ export const PLANS: Record<PlanId, Plan> = {
     currency: "USD",
     blurb: "Unlimited team users. One price for the whole company.",
     features: [
-      "Unlimited team users: owners, admins, members, viewers and floor guests",
+      "Unlimited team users: owners, admins, members and viewers",
       "Unlimited items, BOMs, locations and stock movements",
       "Strato, the agent that drafts bulk changes for your approval",
       "Two-way Shopify and WooCommerce sync",
