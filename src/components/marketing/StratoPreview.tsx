@@ -9,8 +9,8 @@ const CHANGES = [
   { sku: "POT-A100K-16", from: "$1.80", to: "$1.98" },
 ];
 
-/** One Nimbus turn, rendered from the app's components. Decorative. */
-export function NimbusPreview() {
+/** One Strato turn, rendered from the app's components. Decorative. */
+export function StratoPreview() {
   return (
     <div className="card overflow-hidden text-[13px] leading-5" aria-hidden>
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
@@ -18,7 +18,7 @@ export function NimbusPreview() {
           <CloudMark />
         </span>
         <div className="leading-tight">
-          <div className="font-semibold">Nimbus</div>
+          <div className="font-semibold">Strato</div>
           <div className="text-[11.5px] text-text-tertiary">Asks before changing data</div>
         </div>
       </div>

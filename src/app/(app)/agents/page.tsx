@@ -18,11 +18,11 @@ export default function AgentsPage() {
   const { setPageContext } = useAgent();
 
   useEffect(() => {
-    setPageContext({ page: "Nimbus" });
+    setPageContext({ page: "Strato" });
   }, [setPageContext]);
 
   return (
-    <Page title="Nimbus" subtitle="Delegate bulk work. Nimbus reads everything, proposes changes, and applies them after you approve.">
+    <Page title="Strato" subtitle="Delegate bulk work. Strato reads everything, proposes changes, and applies them after you approve.">
       <div className="flex flex-col gap-4">
         <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-2">
           <DataHealthCard />
@@ -30,12 +30,12 @@ export default function AgentsPage() {
         </div>
 
         <section>
-          <SectionHeading title="Connect other agents" description="Let other AI agents and tools reach this workspace through the Model Context Protocol, with the same tools Nimbus has." />
+          <SectionHeading title="Connect other agents" description="Let other AI agents and tools reach this workspace through the Model Context Protocol, with the same tools Strato has." />
           <McpCard />
         </section>
 
         <section>
-          <SectionHeading title="Conversations" description="Everything Nimbus has been asked in this workspace. Open one to pick up where it left off." />
+          <SectionHeading title="Conversations" description="Everything Strato has been asked in this workspace. Open one to pick up where it left off." />
           <ConversationsTable />
         </section>
       </div>

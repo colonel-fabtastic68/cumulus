@@ -114,7 +114,7 @@ function InviteForm({ onClose, onInvited }: { onClose: () => void; onInvited?: (
         title={mailed ? "Invite sent" : "Invite created"}
         subtitle={
           mailed
-            ? `${invite.email} will get an email from Cumulus. Opening the link signs them in, creates their account if they are new, and lands them in the workspace as ${roleLabel(invite.role).toLowerCase()}.`
+            ? `${invite.email} will get an email from cumulusOS. Opening the link signs them in, creates their account if they are new, and lands them in the workspace as ${roleLabel(invite.role).toLowerCase()}.`
             : "The invite is saved. Share the link below, or fix the email setup and resend."
         }
         footer={

@@ -64,7 +64,7 @@ export function AutomationsCard() {
       <div className="px-4 pt-4">
         <CardHeader
           title="Automations"
-          subtitle={automations.length ? `${automations.filter((a) => a.enabled).length} of ${automations.length} enabled` : "Saved prompts Nimbus runs on a schedule."}
+          subtitle={automations.length ? `${automations.filter((a) => a.enabled).length} of ${automations.length} enabled` : "Saved prompts Strato runs on a schedule."}
           actions={
             <Button size="sm" icon={<Plus />} onClick={() => setEditing({ mode: "new" })} disabled={!writable}>
               New automation
@@ -111,7 +111,7 @@ export function AutomationsCard() {
       )}
       <div className="mt-auto flex items-start gap-2 border-t border-border px-4 py-2.5 text-[12px] text-text-tertiary">
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        <span>Schedules are saved with the workspace. In the pilot, run them on demand or when you open Cumulus.</span>
+        <span>Schedules are saved with the workspace. In the pilot, run them on demand or when you open cumulusOS.</span>
       </div>
 
       <AutomationModal

@@ -35,7 +35,7 @@ export interface ServerContext {
   member?: Member;
 }
 
-export const SYSTEM_ACTOR: Actor = { id: "system", name: "Cumulus sync" };
+export const SYSTEM_ACTOR: Actor = { id: "system", name: "cumulusOS sync" };
 
 export function requireServiceAccount(): ServiceAccount {
   const sa = readServiceAccount();
@@ -142,7 +142,7 @@ export function isIntegrationId(id: string): id is IntegrationId {
   return ["shopify", "woocommerce", "quickbooks", "square", "shippo", "easypost"].includes(id);
 }
 
-export const USER_AGENT = "Cumulus/0.1 (+https://github.com/colonel-fabtastic68/cumulus)";
+export const USER_AGENT = "cumulusOS/0.1 (+https://github.com/colonel-fabtastic68/cumulus)";
 
 /**
  * Bounded fetch that expects JSON back. Non-2xx answers and non-JSON bodies

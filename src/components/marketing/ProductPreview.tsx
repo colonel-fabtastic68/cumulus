@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 
 const TABS = [
   { id: "home", label: "Home", icon: Home, caption: "Home: what needs attention today, from the same ledger every table reads." },
-  { id: "inventory", label: "Inventory", icon: Boxes, caption: "Inventory: a price change proposed by Nimbus, previewed in the table before anyone approves it." },
+  { id: "inventory", label: "Inventory", icon: Boxes, caption: "Inventory: a price change proposed by Strato, previewed in the table before anyone approves it." },
   { id: "receiving", label: "Receiving", icon: PackageCheck, caption: "Receiving: book a delivery against its purchase order, back-dated to the day it arrived." },
   { id: "builds", label: "Builds", icon: Hammer, caption: "Builds: component requirements for an assembly, with what is short and who supplies it." },
   { id: "orders", label: "Orders", icon: ShoppingCart, caption: "Orders: open sales orders and what shipping them will take from stock." },
@@ -106,7 +106,7 @@ export function ProductPreview({ className }: { className?: string }) {
           </div>
           <div className="ml-auto hidden items-center gap-2 sm:flex">
             <Button variant="primary" size="md" icon={<Sparkles />}>
-              Nimbus <Kbd>⌘J</Kbd>
+              Strato <Kbd>⌘J</Kbd>
             </Button>
             <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#1f5f8b] text-[11px] font-semibold text-white">MO</span>
           </div>
@@ -159,7 +159,7 @@ export function ProductPreview({ className }: { className?: string }) {
             <div inert>
               <div className="mt-4 mb-1 px-2.5 text-[12px] font-[550] text-text-secondary">Workspace</div>
               <div className="flex h-8 items-center gap-2.5 px-2.5 font-[550] text-text">
-                <Sparkles className="h-4 w-4 text-icon" /> Nimbus
+                <Sparkles className="h-4 w-4 text-icon" /> Strato
               </div>
               <div className="flex h-8 items-center gap-2.5 px-2.5 font-[550] text-text">
                 <ClipboardList className="h-4 w-4 text-icon" /> Activity
@@ -171,8 +171,8 @@ export function ProductPreview({ className }: { className?: string }) {
             {VIEWS[active]}
           </div>
 
-          <aside key={`nimbus-${active}`} className="preview-swap hidden flex-col border-l border-border bg-surface lg:flex" inert>
-            <NimbusPane tab={active} />
+          <aside key={`strato-${active}`} className="preview-swap hidden flex-col border-l border-border bg-surface lg:flex" inert>
+            <StratoPane tab={active} />
           </aside>
         </div>
       </div>
@@ -220,7 +220,7 @@ const ROWS = [
 function HomeView() {
   return (
     <div className="bg-bg">
-      <PageHeader title="Good morning, Maya" meta="Halcyon Audio" action={<Button size="sm" variant="primary" icon={<Sparkles />}>Ask Nimbus</Button>} />
+      <PageHeader title="Good morning, Maya" meta="Halcyon Audio" action={<Button size="sm" variant="primary" icon={<Sparkles />}>Ask Strato</Button>} />
       <div className="grid grid-cols-2 gap-2 px-4 sm:grid-cols-4">
         <Stat label="Inventory value" value="$18,420" hint="At standard cost" />
         <Stat label="Active SKUs" value="46" hint="8 assemblies" />
@@ -572,7 +572,7 @@ const VIEWS: Record<TabId, ReactNode> = {
 };
 
 // ---------------------------------------------------------------------------
-// Nimbus, one exchange per page.
+// Strato, one exchange per page.
 // ---------------------------------------------------------------------------
 
 interface Exchange {
@@ -582,7 +582,7 @@ interface Exchange {
   proposal?: { title: string; lines: string[]; action: string };
 }
 
-const NIMBUS: Record<TabId, Exchange> = {
+const STRATO: Record<TabId, Exchange> = {
   home: { ask: "What needs attention today?", lookup: "Looked up 2 things · Workspace summary, Low stock report", reply: "One item is below minimum: JK-DC-2.1 at 92 of 200. Reordering 308 from Mouser covers four weeks at current use." },
   inventory: { ask: "Raise prices in Enclosures and Electronics by 10%", lookup: "Looked up 2 things · Workspace summary, Preview bulk update", proposal: { title: "Update 3 items", lines: ["Fields: price", "Price +10%", "Reason: 10% increase across two categories"], action: "Apply" } },
   receiving: { ask: "Book the Hammond delivery from PO-1042, it arrived yesterday", lookup: "Looked up 2 things · Supplier, Open purchase orders", proposal: { title: "Receive 2 lines from Hammond Manufacturing", lines: ["ENC-125B-RAW × 200 @ $4.85", "ENC-1590BB-RAW × 60 @ $6.90", "Back-dated to yesterday"], action: "Receive" } },
@@ -593,8 +593,8 @@ const NIMBUS: Record<TabId, Exchange> = {
   reports: { ask: "Show me dead stock over 120 days", lookup: "Looked up 1 thing · Dead stock report", reply: "Four items have not moved since May, $412 at cost. Want a write-off proposal, or a note to the next stock count?" },
 };
 
-function NimbusPane({ tab }: { tab: TabId }) {
-  const x = NIMBUS[tab];
+function StratoPane({ tab }: { tab: TabId }) {
+  const x = STRATO[tab];
   return (
     <>
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
@@ -602,7 +602,7 @@ function NimbusPane({ tab }: { tab: TabId }) {
           <CloudMark />
         </span>
         <div className="leading-tight">
-          <div className="font-semibold">Nimbus</div>
+          <div className="font-semibold">Strato</div>
           <div className="text-[11.5px] text-text-tertiary">Asks before changing data</div>
         </div>
       </div>

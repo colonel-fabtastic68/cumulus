@@ -39,7 +39,7 @@ export default function HomePage() {
       subtitle={`${data.settings.companyName} · ${todayLabel()}`}
       primaryAction={
         <Button variant="primary" icon={<Sparkles />} onClick={() => openAgent()}>
-          Ask Nimbus
+          Ask Strato
         </Button>
       }
       secondaryActions={

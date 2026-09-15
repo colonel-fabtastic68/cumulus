@@ -1,7 +1,7 @@
 import { listResources, listTools, PROTOCOL_VERSIONS, SERVER_INFO } from "@/lib/mcp/server";
 import { firestoreServerConfigured, getServerStore } from "@/lib/mcp/store";
 
-/** What the Nimbus page shows about the MCP endpoint. */
+/** What the Strato page shows about the MCP endpoint. */
 export async function GET() {
   const { mode, note, workspaceId } = await getServerStore();
   return Response.json({

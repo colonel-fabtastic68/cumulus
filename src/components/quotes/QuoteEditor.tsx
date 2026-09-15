@@ -88,7 +88,7 @@ function Editor({ quote, template, onClose, onSaved }: Omit<QuoteEditorProps, "o
     patch(id, { qty, ...(item && line && line.unitPrice === itemLine(item, line.qty, quoting).unitPrice ? { unitPrice: itemLine(item, qty, quoting).unitPrice } : {}) });
   };
 
-  const draftWithNimbus = async () => {
+  const draftWithStrato = async () => {
     if (!prompt.trim()) return;
     setDrafting(true);
     setDraftNote(null);
@@ -207,7 +207,7 @@ function Editor({ quote, template, onClose, onSaved }: Omit<QuoteEditorProps, "o
     }
   };
 
-  const askNimbus = () => {
+  const askStrato = () => {
     openAgent(`I'm working on quote ${quote?.number ?? "(new)"} for ${customer || "a customer"}: ${lines.map((l) => `${l.description} × ${l.qty} @ ${l.unitPrice}`).join("; ") || "no lines yet"}. Total ${formatMoney(totals.total, currency)}, margin ${totals.marginPct ?? "—"}%. `, { send: false });
   };
 
@@ -223,13 +223,13 @@ function Editor({ quote, template, onClose, onSaved }: Omit<QuoteEditorProps, "o
           {quote?.orderId && <Badge tone="success">Order raised</Badge>}
         </span>
       }
-      subtitle={quote ? `${quote.customer} · created ${quote.createdAt.slice(0, 10)}` : template ? `From template “${template.name}”. Change quantities, add a customer, and create.` : "Describe the job for Nimbus, or add lines by hand. Prices come from your items and labour rate."}
+      subtitle={quote ? `${quote.customer} · created ${quote.createdAt.slice(0, 10)}` : template ? `From template “${template.name}”. Change quantities, add a customer, and create.` : "Describe the job for Strato, or add lines by hand. Prices come from your items and labour rate."}
       headerActions={
         <div className="flex items-center gap-1">
           <IconButton size="sm" variant="plain" aria-label="Save these lines as a template" icon={<BookmarkPlus />} onClick={() => setTemplateModal(true)} disabled={lines.length === 0} />
           <IconButton size="sm" variant="plain" aria-label="Print or save as PDF" icon={<Printer />} onClick={() => void print()} />
           <IconButton size="sm" variant="plain" aria-label="Export lines as CSV" icon={<FileDown />} onClick={exportCsv} disabled={lines.length === 0} />
-          <IconButton size="sm" variant="plain" aria-label="Ask Nimbus about this quote" icon={<Sparkles />} onClick={askNimbus} />
+          <IconButton size="sm" variant="plain" aria-label="Ask Strato about this quote" icon={<Sparkles />} onClick={askStrato} />
         </div>
       }
       footer={
@@ -269,11 +269,11 @@ function Editor({ quote, template, onClose, onSaved }: Omit<QuoteEditorProps, "o
         {editable && (
           <div className="rounded-[var(--radius)] border border-accent/30 bg-accent-soft/40 p-3">
             <div className="mb-1.5 flex items-center gap-2 text-[12.5px] font-semibold text-text">
-              <Sparkles className="h-3.5 w-3.5 text-accent" /> Draft with Nimbus
+              <Sparkles className="h-3.5 w-3.5 text-accent" /> Draft with Strato
             </div>
             <TextArea rows={2} value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="e.g. 12 overdrive pedals for Sweetwater, assembled and tested, ship by the 20th. Include 2 hours of setup." />
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Button size="sm" variant="primary" icon={<Sparkles />} onClick={() => void draftWithNimbus()} loading={drafting} disabled={!prompt.trim()}>
+              <Button size="sm" variant="primary" icon={<Sparkles />} onClick={() => void draftWithStrato()} loading={drafting} disabled={!prompt.trim()}>
                 {lines.length ? "Add lines from this" : "Draft lines"}
               </Button>
               <span className="text-[11.5px] text-text-tertiary">Uses only your items and the labour rate from Settings ({formatMoney(quoting.laborRate, currency)}/h).</span>

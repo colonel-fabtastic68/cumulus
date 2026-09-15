@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { CloudMark } from "@/components/ui";
 
-/** Off-white page with the Cumulus mark top-left and the form card centred. */
+/** Off-white page with the cumulusOS mark top-left and the form card centred. */
 export function AuthFrame({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-[100dvh] flex-col bg-bg">
@@ -11,7 +11,7 @@ export function AuthFrame({ children }: { children: ReactNode }) {
           <span className="flex h-7 w-7 items-center justify-center rounded-[8px] bg-primary text-text-inverse">
             <CloudMark />
           </span>
-          Cumulus
+          cumulusOS
         </Link>
       </header>
       <main className="flex flex-1 items-start justify-center px-4 pb-16 pt-6 sm:pt-12">

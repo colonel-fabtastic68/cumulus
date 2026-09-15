@@ -339,7 +339,7 @@ export interface WooProductPatch {
   status?: "publish" | "draft";
 }
 
-/** Updates the fields Cumulus owns on a product or variation. */
+/** Updates the fields cumulusOS owns on a product or variation. */
 export async function updateProduct(creds: WooCreds, ref: WooRef, p: WooProductPatch): Promise<void> {
   const body: Record<string, unknown> = {};
   if (p.name !== undefined && !ref.variationId) body.name = p.name;
@@ -372,7 +372,7 @@ export async function updateStock(creds: WooCreds, productId: string, variationI
 }
 
 export async function createWebhook(creds: WooCreds, topic: string, deliveryUrl: string, secret: string): Promise<string> {
-  const { data } = await request<{ id?: number }>(creds, "webhooks", { method: "POST", body: { name: `Cumulus ${topic}`, topic, delivery_url: deliveryUrl, secret, status: "active" } });
+  const { data } = await request<{ id?: number }>(creds, "webhooks", { method: "POST", body: { name: `cumulusOS ${topic}`, topic, delivery_url: deliveryUrl, secret, status: "active" } });
   if (!data || typeof data.id !== "number") throw new HttpError(502, `${new URL(creds.siteUrl).host} did not confirm the ${topic} webhook.`);
   return String(data.id);
 }

@@ -22,13 +22,13 @@ export const NAV: NavItem[] = [
 
 export const NAV_SECONDARY: NavItem[] = [
   {
-    href: "/nimbus",
-    label: "Nimbus",
+    href: "/strato",
+    label: "Strato",
     icon: Sparkles,
     children: [
-      { href: "/nimbus", label: "Chat", icon: MessageSquare },
-      { href: "/nimbus/quotes", label: "Quotes", icon: FileText },
-      { href: "/nimbus/projections", label: "Projections", icon: TrendingUp },
+      { href: "/strato", label: "Chat", icon: MessageSquare },
+      { href: "/strato/quotes", label: "Quotes", icon: FileText },
+      { href: "/strato/projections", label: "Projections", icon: TrendingUp },
     ],
   },
   { href: "/import", label: "Import", icon: Download },
@@ -47,7 +47,7 @@ export function isNavActive(href: string, pathname: string): boolean {
   return pathname === href || pathname.startsWith(href + "/");
 }
 
-/** A child entry is active only for its own path, so "Chat" at /nimbus does not light up on /nimbus/quotes. */
+/** A child entry is active only for its own path, so "Chat" at /strato does not light up on /strato/quotes. */
 export function isChildNavActive(child: NavItem, siblings: NavItem[], pathname: string): boolean {
   if (!isNavActive(child.href, pathname)) return false;
   return !siblings.some((s) => s !== child && s.href.length > child.href.length && isNavActive(s.href, pathname));

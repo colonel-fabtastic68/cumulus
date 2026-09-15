@@ -90,7 +90,7 @@ export default function ProjectionsPage() {
     );
   };
 
-  const askNimbus = () => {
+  const askStrato = () => {
     const label = scope.kind === "sku" ? item?.sku : scope.kind === "category" ? category : "the whole company";
     openAgent(`Looking at the ${scenario.horizonDays}-day projection for ${label}: ${formatNumber(s.onHandNow)} units on hand now, ${s.dailyUsage} used per day${scenario.growthPct ? ` with ${scenario.growthPct}% growth` : ""}, ${s.daysOfCover ?? "∞"} days of cover, ${s.stockoutsWithinHorizon} stockout${s.stockoutsWithinHorizon === 1 ? "" : "s"} and ${s.reordersWithinHorizon} reorder${s.reordersWithinHorizon === 1 ? "" : "s"} within the horizon. `, { send: false });
   };
@@ -113,14 +113,14 @@ export default function ProjectionsPage() {
   return (
     <Page
       title="Projections"
-      subtitle="Where stock, demand, value and cost are heading, from the ledger's own history. Describe a scenario and Nimbus sets the dials."
+      subtitle="Where stock, demand, value and cost are heading, from the ledger's own history. Describe a scenario and Strato sets the dials."
       secondaryActions={
         <>
           <Button icon={<FileDown />} onClick={exportCsv} disabled={result.perItem.length === 0}>
             Export CSV
           </Button>
-          <Button icon={<Sparkles />} onClick={askNimbus}>
-            Ask Nimbus
+          <Button icon={<Sparkles />} onClick={askStrato}>
+            Ask Strato
           </Button>
         </>
       }

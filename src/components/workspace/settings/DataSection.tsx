@@ -77,7 +77,7 @@ export function DataSection({ settings, canManage }: { settings: WorkspaceSettin
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `cumulus-export-${toDateInput()}.json`;
+      a.download = `cumulusOS-export-${toDateInput()}.json`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -97,9 +97,9 @@ export function DataSection({ settings, canManage }: { settings: WorkspaceSettin
     try {
       const text = await file.text();
       const parsed: unknown = JSON.parse(text);
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("That file is not a Cumulus export (expected a JSON object).");
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("That file is not a cumulusOS export (expected a JSON object).");
       const raw = parsed as Record<string, unknown>;
-      if (!Array.isArray(raw.items)) throw new Error("That file is not a Cumulus export (no items array).");
+      if (!Array.isArray(raw.items)) throw new Error("That file is not a cumulusOS export (no items array).");
       let snapshot = normaliseSnapshot(raw);
       // Never import a workspace nobody can sign in to, and keep settings sane.
       snapshot = keepTeam(snapshot, snapshot.members.length === 0 ? members : []);
@@ -244,7 +244,7 @@ export function DataSection({ settings, canManage }: { settings: WorkspaceSettin
         onClose={() => (busy ? undefined : setPending(null))}
         onConfirm={() => void run()}
         title="Clear the whole workspace?"
-        message="All items, stock history, suppliers, orders, returns and Nimbus conversations are deleted. Your team and settings are kept. This cannot be undone unless you exported first."
+        message="All items, stock history, suppliers, orders, returns and Strato conversations are deleted. Your team and settings are kept. This cannot be undone unless you exported first."
         confirmLabel="Clear workspace"
         destructive
         loading={busy}

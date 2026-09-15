@@ -43,7 +43,7 @@ export interface InventoryFilters {
   supplierId: string;
 }
 
-/** Human-readable description of the active filters, for Nimbus prompt. */
+/** Human-readable description of the active filters, for Strato prompt. */
 export function describeFilters(f: InventoryFilters, supplierName?: string): string {
   const parts: string[] = [];
   if (f.view !== "all") parts.push(`view "${INVENTORY_VIEWS.find((v) => v.value === f.view)?.label ?? f.view}"`);

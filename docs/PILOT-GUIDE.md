@@ -1,6 +1,6 @@
-# Cumulus pilot guide
+# cumulusOS pilot guide
 
-Thanks for trying Cumulus. It's an early MVP: the goal of this pilot is to learn whether an agent-first inventory system feels faster and more trustworthy than line-by-line data entry. Nothing here touches your real systems; the demo workspace is a fictional pedal maker, Halcyon Audio, with six months of history.
+Thanks for trying cumulusOS. It's an early MVP: the goal of this pilot is to learn whether an agent-first inventory system feels faster and more trustworthy than line-by-line data entry. Nothing here touches your real systems; the demo workspace is a fictional pedal maker, Halcyon Audio, with six months of history.
 
 ## Setup (5 minutes)
 
@@ -38,7 +38,7 @@ Work through as many as you like. After each one, note: did it do what you expec
 4. One-time Firebase setup for the emails: enable *Email link (passwordless sign-in)* under Authentication → Sign-in method → Email/Password, and add the site's domain under Authentication → Settings → Authorized domains.
 5. Switch between workspaces from the company name at the top of the sidebar, or at `/account`, where accounts that arrived by link can also set a password.
 
-### 5. Let Nimbus do the bulk work (⌘J)
+### 5. Let Strato do the bulk work (⌘J)
 Try these, in your own words:
 - "Raise the price of all finished goods by 5%." Review the proposal card before applying. Reject it, then ask for 3% instead.
 - "Which parts haven't moved in 120 days and aren't in any active BOM? Deactivate them."
@@ -56,7 +56,7 @@ Try these, in your own words:
 - Inventory → filter by location to see one site's stock; select rows → Transfer to move them.
 
 ### 6c. Scan (⌘/ or the barcode button)
-- Point the phone camera at a barcode, or use a USB/Bluetooth scanner: it types into the page and Cumulus catches it, no field focus needed (turn that off under Settings → Shipping and scanning if it interferes).
+- Point the phone camera at a barcode, or use a USB/Bluetooth scanner: it types into the page and cumulusOS catches it, no field focus needed (turn that off under Settings → Shipping and scanning if it interferes).
 - A scan finds the item by barcode, SKU, a cross-reference (OEM / competitor / supplier number) or the channel id, then offers open, receive, transfer.
 - Item → Cross-references: add the other numbers a part is known by. Search finds them too.
 
@@ -69,10 +69,10 @@ Try these, in your own words:
 - It is two-way: edit, deactivate or delete an item here and the store follows a moment later (deleted items go to the store's trash or archive); edit or delete a product in the store and the item here is updated or unlinked. Each direction has its own toggle in the connection settings.
 - Nothing is demo data: a fresh workspace stays empty until you connect or import.
 
-### 6f. Quotes, projections and exports (Nimbus menu, Exports)
-- Nimbus → Chat is the full-page conversation; every chat is saved for the team in the rail on the left.
-- Nimbus → Quotes → New quote: type what the customer wants ("12 overdrive pedals assembled and tested, 2 hours setup") and press Draft lines. Nimbus only uses your items and the labour rate from Settings → Quoting. Adjust, print (Save as PDF), mark sent, and on acceptance raise the sales order in one step.
-- Nimbus → Projections: pick the company, a category or a SKU and a horizon. Type a scenario ("orders up 25% through the holidays", "costs up 8% next quarter") and the dials move. Check the per-item table for run-out and order-by dates.
+### 6f. Quotes, projections and exports (Strato menu, Exports)
+- Strato → Chat is the full-page conversation; every chat is saved for the team in the rail on the left.
+- Strato → Quotes → New quote: type what the customer wants ("12 overdrive pedals assembled and tested, 2 hours setup") and press Draft lines. Strato only uses your items and the labour rate from Settings → Quoting. Adjust, print (Save as PDF), mark sent, and on acceptance raise the sales order in one step.
+- Strato → Projections: pick the company, a category or a SKU and a horizon. Type a scenario ("orders up 25% through the holidays", "costs up 8% next quarter") and the dials move. Check the per-item table for run-out and order-by dates.
 - Exports: tick datasets, choose whole company / filter / specific SKUs (or select rows on Inventory → Export), pick CSV, Excel, JSON, JSON Lines, TSV, Markdown or PDF.
 
 ### 7. Reports

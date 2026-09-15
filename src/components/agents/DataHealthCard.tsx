@@ -13,7 +13,7 @@ interface HealthRow {
   label: string;
   hint: string;
   items: Item[];
-  /** Instruction sent to Nimbus, before the SKU list is appended. */
+  /** Instruction sent to Strato, before the SKU list is appended. */
   instruction: string;
 }
 
@@ -116,7 +116,7 @@ export function DataHealthCard() {
                 )}
               </span>
               <Button size="sm" variant="plain" icon={<Wand2 />} disabled={n === 0} onClick={() => open(buildPrompt(row), { send: true })} className="shrink-0">
-                Fix with Nimbus
+                Fix with Strato
               </Button>
             </li>
           );

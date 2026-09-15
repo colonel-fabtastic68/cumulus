@@ -106,7 +106,7 @@ export function humanize(s: string): string {
 
 /**
  * Everything the top-bar search covers: every sidebar page except Exports and
- * Nimbus, plus the records behind them. Results come back grouped in
+ * Strato, plus the records behind them. Results come back grouped in
  * SEARCH_KINDS order, best matches first within each group.
  */
 export function searchWorkspace(query: string, src: SearchSource, { perKind = 5, limit = 40 }: SearchOptions = {}): SearchHit[] {

@@ -90,7 +90,7 @@ export default function ExportsPage() {
     setBusy(true);
     try {
       const tables = buildTables(chosen, source, scope);
-      const res = exportTables(tables, format, `${settings.companyName.replace(/[^\w-]+/g, "-").toLowerCase() || "cumulus"}-export`);
+      const res = exportTables(tables, format, `${settings.companyName.replace(/[^\w-]+/g, "-").toLowerCase() || "cumulusos"}-export`);
       if (res.note === "blocked") toast("Allow pop-ups to open the print view", "critical");
       else if (res.note === "print") toast("Print view opened. Choose Save as PDF in the dialog.", "success");
       else toast(`Exported ${pluralize(totalRows, "row")} across ${pluralize(chosen.length, "dataset")}${res.note === "zipped" ? " as a zip" : ""}`, "success");
@@ -228,7 +228,7 @@ export default function ExportsPage() {
             <p className="mt-2 text-[11.5px] text-text-tertiary">Files are built in your browser from the live workspace. Nothing is uploaded anywhere.</p>
           </div>
           <Banner tone="info" title="Full backup">
-            The complete workspace as one JSON file, including settings, lives under Settings → Data and backend. It restores on any Cumulus install.
+            The complete workspace as one JSON file, including settings, lives under Settings → Data and backend. It restores on any cumulusOS install.
           </Banner>
         </div>
       </div>

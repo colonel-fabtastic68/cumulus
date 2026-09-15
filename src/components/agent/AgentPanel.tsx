@@ -41,7 +41,7 @@ const DOCK_WIDTH = "md:w-[484px]";
 const EASE = "ease-[cubic-bezier(0.2,0.8,0.2,1)]";
 
 /**
- * Nimbus lives in a column beside the page. Opening animates the column's
+ * Strato lives in a column beside the page. Opening animates the column's
  * width so the page content shifts left smoothly while the rounded card
  * slides in from the right; closing reverses it. Below the md breakpoint
  * there is no room to push, so the card floats over the page instead.
@@ -54,7 +54,7 @@ export function AgentPanel() {
       {everOpened && (
         <aside
           role="complementary"
-          aria-label="Nimbus"
+          aria-label="Strato"
           aria-hidden={!isOpen}
           inert={!isOpen}
           className={cn(
@@ -78,7 +78,7 @@ export interface AgentChatProps {
   pendingSession: { id: string; nonce: number } | null;
   consumePendingSession: () => void;
   pageContext: { page?: string; selectedSkus?: string[] };
-  /** "panel" is the docked column; "page" is the full-width chat on the Nimbus page. */
+  /** "panel" is the docked column; "page" is the full-width chat on the Strato page. */
   variant?: "panel" | "page";
   /** Bump to start a fresh conversation from outside. */
   newChatNonce?: number;
@@ -297,7 +297,7 @@ export function AgentChat({ onClose, pending, consumePending, pendingSession, co
           <Sparkles className="h-4 w-4" />
         </span>
         <div className="min-w-0 flex-1 leading-tight">
-          <div className="text-[13.5px] font-semibold">Nimbus</div>
+          <div className="text-[13.5px] font-semibold">Strato</div>
           <div className="truncate text-[11.5px] text-text-tertiary">{autoApprove ? "Auto-applies changes" : "Asks before changing data"}</div>
         </div>
         <Menu
@@ -335,7 +335,7 @@ export function AgentChat({ onClose, pending, consumePending, pendingSession, co
       <div ref={scrollRef} className={cn("min-h-0 flex-1 overflow-y-auto", page ? "px-6 py-6" : "px-4 py-4")}>
         <div className={cn(page && "mx-auto w-full max-w-[820px]")}>
         {needsKey && (
-          <Banner tone="warning" title="Add a Gemini API key to enable Nimbus" className="mb-3">
+          <Banner tone="warning" title="Add a Gemini API key to enable Strato" className="mb-3">
             Create a key at aistudio.google.com/apikey, put it in <code>.env.local</code> as <code>GOOGLE_GENERATIVE_AI_API_KEY</code>, then restart <code>npm run dev</code>.
           </Banner>
         )}
@@ -372,7 +372,7 @@ export function AgentChat({ onClose, pending, consumePending, pendingSession, co
             {error && !needsKey && (
               <Banner
                 tone="critical"
-                title="Nimbus could not finish"
+                title="Strato could not finish"
                 action={
                   <Button size="sm" variant="primary" icon={<RefreshCw />} onClick={() => void retry()}>
                     Try again
@@ -413,7 +413,7 @@ export function AgentChat({ onClose, pending, consumePending, pendingSession, co
             </IconButton>
           )}
         </div>
-        <div className={cn("mt-1.5 text-[11px] text-text-tertiary", page && "mx-auto w-full max-w-[820px]")}>Enter to send · Shift+Enter for a new line{page ? ` · ${autoApprove ? "Nimbus auto-applies changes" : "changes are shown to you before they apply"}` : ""}</div>
+        <div className={cn("mt-1.5 text-[11px] text-text-tertiary", page && "mx-auto w-full max-w-[820px]")}>Enter to send · Shift+Enter for a new line{page ? ` · ${autoApprove ? "Strato auto-applies changes" : "changes are shown to you before they apply"}` : ""}</div>
       </div>
     </>
   );

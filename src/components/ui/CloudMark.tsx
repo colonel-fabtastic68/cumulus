@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-/** The Cumulus cloud mark. Inherits `currentColor`. */
+/** The cumulusOS cloud mark. Inherits `currentColor`. */
 export function CloudMark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={cn("h-4 w-4", className)} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

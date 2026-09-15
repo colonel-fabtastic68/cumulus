@@ -58,8 +58,8 @@ export function SessionCta({ runtimeConfig, placement }: { runtimeConfig: Runtim
           {label}
         </Button>
         {placement === "hero" && (
-          <Button size={size} href="#nimbus">
-            See how Nimbus works
+          <Button size={size} href="#strato">
+            See how Strato works
           </Button>
         )}
       </div>
@@ -105,8 +105,8 @@ export function SessionCta({ runtimeConfig, placement }: { runtimeConfig: Runtim
       <Button variant="primary" size="lg" href="/sign-up" iconRight={<ArrowRight />}>
         Start free
       </Button>
-      <Button size="lg" href={placement === "hero" ? "#nimbus" : "/sign-in"}>
-        {placement === "hero" ? "See how Nimbus works" : "Sign in"}
+      <Button size="lg" href={placement === "hero" ? "#strato" : "/sign-in"}>
+        {placement === "hero" ? "See how Strato works" : "Sign in"}
       </Button>
     </div>
   );

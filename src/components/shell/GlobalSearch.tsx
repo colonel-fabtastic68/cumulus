@@ -12,8 +12,8 @@ import { INTEGRATIONS } from "@/components/workspace/integrations/catalog";
 import { SETTINGS_SECTIONS } from "@/components/workspace/settings/sections";
 import { NAV, NAV_SECONDARY } from "./nav";
 
-/** Sidebar entries the search leaves out: Exports and everything under Nimbus. */
-const EXCLUDED = ["/exports", "/nimbus"];
+/** Sidebar entries the search leaves out: Exports and everything under Strato. */
+const EXCLUDED = ["/exports", "/strato"];
 
 /** Words a page answers to besides its label. */
 const PAGE_KEYWORDS: Record<string, string> = {
@@ -46,9 +46,9 @@ const PAGES: SearchPage[] = [
 const INTEGRATION_KIND: Record<string, string> = { channel: "Sales channel", carrier: "Carrier", roadmap: "Roadmap" };
 
 /**
- * ⌘K search over every sidebar page except Exports and Nimbus, and the records
+ * ⌘K search over every sidebar page except Exports and Strato, and the records
  * behind them. Enter opens the highlighted result; with no results it hands
- * the query to Nimbus.
+ * the query to Strato.
  */
 export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter();
@@ -146,7 +146,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
                     onClose();
                   }}
                 >
-                  <Sparkles className="h-3.5 w-3.5" /> Ask Nimbus: “{q}”
+                  <Sparkles className="h-3.5 w-3.5" /> Ask Strato: “{q}”
                 </button>
               ) : (
                 "Search items, BOMs, orders, shipments, returns, receiving, transfers, suppliers, locations, team, integrations, reports, settings and pages."

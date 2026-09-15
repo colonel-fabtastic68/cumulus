@@ -384,7 +384,7 @@ async function upsertIncoming(ctx: ServerContext, integration: Integration, inco
     lines.push({ itemId: item.id, qty: l.qty, unitPrice: l.unitPrice });
   }
   if (lines.length === 0) return "skippedNoLines";
-  const note = [incoming.note, missing.length ? `Not in Cumulus, skipped: ${missing.join(", ")}` : ""].filter(Boolean).join("\n") || undefined;
+  const note = [incoming.note, missing.length ? `Not in cumulusOS, skipped: ${missing.join(", ")}` : ""].filter(Boolean).join("\n") || undefined;
   await createOrder(ctx.store, ctx.actor, { customer: incoming.customer, customerEmail: incoming.customerEmail, shipTo: incoming.shipTo, note, source: id, channel: id, externalId: incoming.externalId, externalRef: incoming.externalRef, lines });
   return "created";
 }

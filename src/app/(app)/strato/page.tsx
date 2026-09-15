@@ -27,8 +27,8 @@ function groupByAge(recent: AgentSession[]): Array<{ label: string; sessions: Ag
   return out.filter((g) => g.sessions.length);
 }
 
-/** Nimbus → Chat: the full-page conversation with a rail of saved chats. */
-export default function NimbusChatPage() {
+/** Strato → Chat: the full-page conversation with a rail of saved chats. */
+export default function StratoChatPage() {
   const sessions = useCollection("agentSessions");
   const store = useStore();
   const user = useCurrentUser();
@@ -41,7 +41,7 @@ export default function NimbusChatPage() {
   const [railOpen, setRailOpen] = useState(true);
 
   useEffect(() => {
-    setPageContext({ page: "Nimbus chat" });
+    setPageContext({ page: "Strato chat" });
   }, [setPageContext]);
 
   const recent = useMemo(() => [...sessions].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), [sessions]);
@@ -72,7 +72,7 @@ export default function NimbusChatPage() {
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
           {groups.length === 0 ? (
-            <p className="px-2 py-6 text-center text-[12px] text-text-tertiary">Conversations you have with Nimbus are saved here for the whole team.</p>
+            <p className="px-2 py-6 text-center text-[12px] text-text-tertiary">Conversations you have with Strato are saved here for the whole team.</p>
           ) : (
             groups.map((g) => (
               <div key={g.label} className="mb-3">
@@ -107,17 +107,17 @@ export default function NimbusChatPage() {
           <span className="flex h-6 w-6 items-center justify-center rounded-[7px] bg-accent-soft text-accent">
             <Sparkles className="h-3.5 w-3.5" />
           </span>
-          <span className="text-[13.5px] font-semibold">Nimbus</span>
+          <span className="text-[13.5px] font-semibold">Strato</span>
           <span className="hidden text-[12px] text-text-tertiary sm:inline">· reads the whole workspace, proposes changes, applies them after you approve</span>
           <span className="flex-1" />
           <Button size="sm" icon={<Plus />} className="md:hidden" onClick={() => setNewChatNonce((n) => n + 1)}>
             New chat
           </Button>
         </div>
-        <AgentChat variant="page" pending={null} consumePending={() => {}} pendingSession={pendingSession} consumePendingSession={() => setPendingSession(null)} pageContext={{ page: "Nimbus chat" }} newChatNonce={newChatNonce} onSessionChange={setActiveId} />
+        <AgentChat variant="page" pending={null} consumePending={() => {}} pendingSession={pendingSession} consumePendingSession={() => setPendingSession(null)} pageContext={{ page: "Strato chat" }} newChatNonce={newChatNonce} onSessionChange={setActiveId} />
       </section>
 
-      <ConfirmDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => void remove()} destructive title="Delete this conversation?" confirmLabel="Delete" message={<>“{deleting?.title}” is removed for everyone in the workspace. Changes Nimbus already applied are not undone.</>} />
+      <ConfirmDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => void remove()} destructive title="Delete this conversation?" confirmLabel="Delete" message={<>“{deleting?.title}” is removed for everyone in the workspace. Changes Strato already applied are not undone.</>} />
     </div>
   );
 }

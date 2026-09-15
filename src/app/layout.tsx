@@ -5,7 +5,7 @@ import "./globals.css";
 const inter = Inter({ variable: "--font-inter", subsets: ["latin"], display: "swap", weight: "variable" });
 
 export const metadata: Metadata = {
-  title: "Cumulus",
+  title: "cumulusOS",
   description: "Agentic, collaborative inventory management for small teams.",
 };
 

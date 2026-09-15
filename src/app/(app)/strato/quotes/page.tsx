@@ -45,7 +45,7 @@ export default function QuotesPage() {
   return (
     <Page
       title="Quotes"
-      subtitle="Priced offers built from your items, labour rate and margins. Nimbus drafts them from a sentence."
+      subtitle="Priced offers built from your items, labour rate and margins. Strato drafts them from a sentence."
       primaryAction={
         writable ? (
           <Button variant="primary" icon={<Plus />} onClick={() => setEditor({ open: true, id: null })}>

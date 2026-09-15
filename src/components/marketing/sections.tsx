@@ -3,7 +3,7 @@ import type { RuntimeConfig } from "@/lib/firebase-config";
 import { Badge, Button } from "@/components/ui";
 import { FOUNDING_PLAN, planSavingsPct } from "@/lib/billing";
 import { formatMoney } from "@/lib/format";
-import { NimbusPreview } from "./NimbusPreview";
+import { StratoPreview } from "./StratoPreview";
 import { ProductPreview } from "./ProductPreview";
 import { Reveal } from "./Reveal";
 import { SessionCta } from "./SessionCta";
@@ -16,7 +16,7 @@ export function Hero({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
       <div className="max-w-[760px]">
         <h1 className="hero-in text-[38px] font-semibold leading-[1.05] tracking-[-0.025em] text-text sm:text-[52px] md:text-[64px]">Inventory that keeps up with your team.</h1>
         <p className="hero-in mt-6 max-w-[600px] text-[17px] leading-7 text-text-secondary md:text-[19px] md:leading-8" style={{ animationDelay: "80ms" }}>
-          Cumulus tracks parts, BOMs, receiving and returns in one live workspace, and Nimbus makes the bulk changes you approve.
+          cumulusOS tracks parts, BOMs, receiving and returns in one live workspace, and Strato makes the bulk changes you approve.
         </p>
         <div className="hero-in mt-8" style={{ animationDelay: "160ms" }}>
           <SessionCta runtimeConfig={runtimeConfig} placement="hero" />
@@ -68,22 +68,22 @@ export function Features() {
   );
 }
 
-const NIMBUS_POINTS = [
+const STRATO_POINTS = [
   { title: "Plain language in, one proposal out", body: "A dozen price changes is one approval, not twelve. Per-item values, percentages and filters all fit in a single call." },
   { title: "Preview in the table", body: "Proposed rows turn orange in your inventory. Flip between current and proposed values, then apply from either side." },
-  { title: "Reads run, writes wait", body: "Nimbus looks things up on its own. Anything that changes data waits for you, or for a teammate whose role allows it." },
+  { title: "Reads run, writes wait", body: "Strato looks things up on its own. Anything that changes data waits for you, or for a teammate whose role allows it." },
 ];
 
-export function NimbusSection() {
+export function StratoSection() {
   return (
-    <section id="nimbus" className="scroll-mt-16 border-t border-border">
+    <section id="strato" className="scroll-mt-16 border-t border-border">
       <div className={`${container} grid items-center gap-12 py-20 md:py-28 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-16`}>
         <Reveal>
-          <div className="text-[12px] font-[550] uppercase tracking-[0.08em] text-text-tertiary">Nimbus</div>
+          <div className="text-[12px] font-[550] uppercase tracking-[0.08em] text-text-tertiary">Strato</div>
           <h2 className="mt-3 text-[30px] font-semibold leading-[1.1] tracking-[-0.02em] text-text md:text-[40px]">Ask for the change. Approve it once.</h2>
-          <p className="mt-4 text-[16px] leading-7 text-text-secondary md:text-[17px]">Nimbus reads your items, BOMs and movements, drafts the change, and shows it in the table before anything is written.</p>
+          <p className="mt-4 text-[16px] leading-7 text-text-secondary md:text-[17px]">Strato reads your items, BOMs and movements, drafts the change, and shows it in the table before anything is written.</p>
           <ul className="mt-8 flex flex-col gap-5">
-            {NIMBUS_POINTS.map((p) => (
+            {STRATO_POINTS.map((p) => (
               <li key={p.title} className="border-l-2 border-border pl-4">
                 <h3 className="text-[15px] font-semibold text-text">{p.title}</h3>
                 <p className="mt-1 text-[14px] leading-6 text-text-secondary">{p.body}</p>
@@ -93,7 +93,7 @@ export function NimbusSection() {
           <p className="mt-8 text-[13px] text-text-tertiary">Runs on Gemini Flash with your own API key. Other agents can use the same tools over MCP.</p>
         </Reveal>
         <Reveal delay={100}>
-          <NimbusPreview />
+          <StratoPreview />
         </Reveal>
       </div>
     </section>
@@ -104,7 +104,7 @@ const INTEGRATIONS = [
   { icon: ShoppingBag, title: "Shopify exports", body: "Variant SKUs, quantities, prices, cost and images map on their own." },
   { icon: Store, title: "WooCommerce exports", body: "Stock, sale and regular price, brands, weight and dimensions, plus the product id." },
   { icon: FileSpreadsheet, title: "CSV and pasted sheets", body: "Any spreadsheet works. Unknown columns become custom fields with one click." },
-  { icon: Plug, title: "MCP for other agents", body: "Every Nimbus tool is available to any MCP client, gated by a token you set." },
+  { icon: Plug, title: "MCP for other agents", body: "Every Strato tool is available to any MCP client, gated by a token you set." },
 ];
 
 export function Integrations() {
@@ -133,7 +133,7 @@ export function Integrations() {
 const STEPS = [
   { icon: FileSpreadsheet, title: "Import the sheet you already have", body: "Paste or upload. Columns map themselves, custom fields are one click, and the review shows what changes before it lands." },
   { icon: Users, title: "Invite the team", body: "Email and password, or a guest session for someone on the floor. Everyone sees the same numbers live." },
-  { icon: GitFork, title: "Hand the bulk work to Nimbus", body: "Price updates, cycle counts, receiving, BOM edits. One request, one approval, and the ledger records who did what." },
+  { icon: GitFork, title: "Hand the bulk work to Strato", body: "Price updates, cycle counts, receiving, BOM edits. One request, one approval, and the ledger records who did what." },
 ];
 
 export function PilotSteps() {
@@ -174,7 +174,7 @@ export function Pricing({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
           <div className="text-[12px] font-[550] uppercase tracking-[0.08em] text-text-tertiary">Pricing</div>
           <h2 className="mt-3 text-[30px] font-semibold leading-[1.1] tracking-[-0.02em] text-text md:text-[40px]">One plan. A founding price for early teams.</h2>
           <p className="mt-4 text-[16px] leading-7 text-text-secondary md:text-[17px]">
-            Cumulus is {price(plan.listMonthly)} a month for the whole company. Teams that join now pay {price(plan.monthly)}, keep that price for as long as they stay subscribed, and get every version we ship.
+            cumulusOS is {price(plan.listMonthly)} a month for the whole company. Teams that join now pay {price(plan.monthly)}, keep that price for as long as they stay subscribed, and get every version we ship.
           </p>
           <ul className="mt-8 flex flex-col gap-3 text-[14px] text-text-secondary">
             <li className="flex gap-3">
@@ -222,7 +222,7 @@ export function Pricing({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
               <SessionCta runtimeConfig={runtimeConfig} placement="pricing" />
             </div>
             <p className="mt-4 flex items-center gap-1.5 text-[12.5px] text-text-tertiary">
-              <Lock className="h-3.5 w-3.5" /> Billed monthly in {plan.currency}. Card details are handled by Stripe, never by Cumulus.
+              <Lock className="h-3.5 w-3.5" /> Billed monthly in {plan.currency}. Card details are handled by Stripe, never by cumulusOS.
             </p>
           </div>
         </Reveal>
@@ -238,7 +238,7 @@ export function FinalCta({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
         <Reveal className="flex flex-col items-start gap-8 md:flex-row md:items-end md:justify-between">
           <div className="max-w-[560px]">
             <h2 className="text-[30px] font-semibold leading-[1.1] tracking-[-0.02em] text-text md:text-[40px]">Start with your own data.</h2>
-            <p className="mt-4 text-[16px] leading-7 text-text-secondary md:text-[17px]">Create a workspace, import a sheet, and see the first proposal from Nimbus in minutes.</p>
+            <p className="mt-4 text-[16px] leading-7 text-text-secondary md:text-[17px]">Create a workspace, import a sheet, and see the first proposal from Strato in minutes.</p>
           </div>
           <SessionCta runtimeConfig={runtimeConfig} placement="band" />
         </Reveal>

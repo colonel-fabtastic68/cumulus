@@ -143,7 +143,7 @@ export function JoinInvite({ id }: { id: string }) {
         subtitle={invite.status === "accepted" ? `If that was you, sign in to open ${invite.workspaceName}.` : `Ask ${invite.invitedByName} to send a new one.`}
       >
         <Button variant="primary" href={session.status === "signed-out" ? signInHref(APP_HOME) : APP_HOME}>
-          {session.status === "signed-out" ? "Sign in" : "Open Cumulus"}
+          {session.status === "signed-out" ? "Sign in" : "Open cumulusOS"}
         </Button>
       </Card>
     );
@@ -207,7 +207,7 @@ export function JoinInvite({ id }: { id: string }) {
         </Button>
       </div>
       <p className="mt-4 text-center text-[12.5px] text-text-secondary">
-        New to Cumulus? The emailed link creates your account. Prefer a password?{" "}
+        New to cumulusOS? The emailed link creates your account. Prefer a password?{" "}
         <Link href={`${signUpHref(joinPath(id))}${signUpHref(joinPath(id)).includes("?") ? "&" : "?"}email=${encodeURIComponent(pending.email!)}`} className="font-medium text-accent hover:underline">
           Create an account
         </Link>

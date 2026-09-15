@@ -60,7 +60,7 @@ export function laborLine(hours: number, quoting: QuotingSettings, description =
   return newQuoteLine({ kind: "labor", description, qty: hours, unit: "h", unitPrice: quoting.laborRate, unitCost: quoting.laborCost ?? 0 });
 }
 
-/** What Nimbus's draft looks like before SKUs are resolved against the workspace. */
+/** What Strato's draft looks like before SKUs are resolved against the workspace. */
 export interface QuoteDraft {
   customer?: string;
   customerEmail?: string;

@@ -38,7 +38,7 @@ const auths = new WeakMap<FirebaseApp, Auth>();
 /**
  * Firebase Auth without a popup/redirect resolver. The default getAuth() loads
  * the auth iframe and Google's gapi at start-up to look for redirect results,
- * and the first auth state waits for it; Cumulus only signs in with passwords
+ * and the first auth state waits for it; cumulusOS only signs in with passwords
  * and email links, so none of that is needed.
  */
 export function getFirebaseAuth(app: FirebaseApp): Auth {

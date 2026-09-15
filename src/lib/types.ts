@@ -1,5 +1,5 @@
 /**
- * Cumulus domain model.
+ * cumulusOS domain model.
  *
  * Every record has a string `id`. Dates are ISO-8601 strings so records
  * serialise cleanly to localStorage and Firestore alike.
@@ -519,7 +519,7 @@ export interface IntegrationSettings {
   syncProducts?: boolean;
   /** Pull unfulfilled orders in as sales orders (channels). */
   syncOrders?: boolean;
-  /** Push Cumulus on-hand counts to the channel after every stock change. */
+  /** Push cumulusOS on-hand counts to the channel after every stock change. */
   pushStock?: boolean;
   /** Create items that are not in the channel yet as products there: a few seconds after they are added here, and on every sync. */
   pushProducts?: boolean;
@@ -533,9 +533,9 @@ export interface IntegrationSettings {
   deactivateOnStoreDelete?: boolean;
   /** On the first product sync, take the channel's quantities as the opening counts. */
   takeStockOnFirstSync?: boolean;
-  /** Apply stock changes reported by the channel (webhooks) as counts. Off means Cumulus is the source of truth. */
+  /** Apply stock changes reported by the channel (webhooks) as counts. Off means cumulusOS is the source of truth. */
   acceptStockFromChannel?: boolean;
-  /** Cumulus location that mirrors the channel's stock. */
+  /** cumulusOS location that mirrors the channel's stock. */
   locationId?: ID;
   /** The channel's own location id (Shopify) that stock is pushed to. */
   channelLocationId?: string;
@@ -604,7 +604,7 @@ export interface WorkspaceSettings {
   relievePolicy: "on_build" | "on_fulfill";
   /** Factor 16: auto-flag items with no movement for this many days. */
   inactivityDays: number;
-  /** Let Nimbus apply write actions without an explicit approval click. */
+  /** Let Strato apply write actions without an explicit approval click. */
   agentAutoApprove: boolean;
   automations: AgentAutomation[];
   /** Next document numbers. */
@@ -682,7 +682,7 @@ export interface Quote {
   validUntil?: string;
   notes?: string;
   terms?: string;
-  /** The request the quote was drafted from, when Nimbus wrote it. */
+  /** The request the quote was drafted from, when Strato wrote it. */
   sourcePrompt?: string;
   /** Sales order created from this quote, if accepted. */
   orderId?: ID;
@@ -721,7 +721,7 @@ export interface QuotingSettings {
   terms?: string;
 }
 
-/** Persisted agent chat session so teammates can see what Nimbus did. */
+/** Persisted agent chat session so teammates can see what Strato did. */
 export interface AgentSession {
   id: ID;
   title: string;

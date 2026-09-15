@@ -57,7 +57,7 @@ export default function ItemDetailPage() {
 
   const [tab, setTab] = useState<Tab>("overview");
   const TAB_VALUES: Tab[] = ["overview", "locations", "crossRefs", "bom", "whereUsed", "history", "batches", "pricing"];
-  // "?tab=locations" deep-links a tab (scan results and Nimbus use it).
+  // "?tab=locations" deep-links a tab (scan results and Strato use it).
   const onTabParam = useCallback((value: string) => {
     if ((TAB_VALUES as string[]).includes(value)) setTab(value as Tab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -157,7 +157,7 @@ export default function ItemDetailPage() {
           <Menu
             trigger={<IconButton aria-label="More actions" icon={<MoreHorizontal />} />}
             items={[
-              { label: "Ask Nimbus about this item", icon: <Sparkles />, onSelect: () => openAgent(`Tell me about ${item.sku} (${item.name}): stock position, recent usage, days of cover, where it is used, and anything I should act on.`, { send: true }) },
+              { label: "Ask Strato about this item", icon: <Sparkles />, onSelect: () => openAgent(`Tell me about ${item.sku} (${item.name}): stock position, recent usage, days of cover, where it is used, and anything I should act on.`, { send: true }) },
               ...(writable
                 ? [
                     "divider" as const,

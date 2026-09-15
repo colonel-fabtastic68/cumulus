@@ -97,7 +97,7 @@ export function Checkout() {
           </div>
           <dl className="flex flex-col gap-2 text-[14px]">
             <div className="flex justify-between gap-4">
-              <dt className="text-text-secondary">Cumulus, monthly</dt>
+              <dt className="text-text-secondary">cumulusOS, monthly</dt>
               <dd className="tabular text-text">{formatMoney(plan.listMonthly, plan.currency)}</dd>
             </div>
             <div className="flex justify-between gap-4">

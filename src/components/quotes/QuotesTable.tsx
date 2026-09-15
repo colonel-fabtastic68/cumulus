@@ -69,7 +69,7 @@ export function QuotesTable({ quotes, currency, onSelect, onNew }: { quotes: Quo
         </div>
       }
       footer={`${pluralize(rows.length, "quote")}${rows.length ? ` · ${formatMoney(rows.reduce((a, x) => a + quoteTotals(x).total, 0), currency)}` : ""}`}
-      emptyState={<EmptyState icon={<FileText />} title={quotes.length ? "No quotes match" : "No quotes yet"} description={quotes.length ? "Try another filter." : "Describe what a customer wants and Nimbus prices it from your items and labour rate, or build one line by line."} action={onNew && !quotes.length ? <Button variant="primary" onClick={onNew}>New quote</Button> : undefined} />}
+      emptyState={<EmptyState icon={<FileText />} title={quotes.length ? "No quotes match" : "No quotes yet"} description={quotes.length ? "Try another filter." : "Describe what a customer wants and Strato prices it from your items and labour rate, or build one line by line."} action={onNew && !quotes.length ? <Button variant="primary" onClick={onNew}>New quote</Button> : undefined} />}
     />
   );
 }

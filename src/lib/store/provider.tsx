@@ -16,7 +16,7 @@ interface StoreContextValue {
 const StoreContext = createContext<StoreContextValue | null>(null);
 
 /**
- * A proposed change (usually from Nimbus) overlaid on the items collection so
+ * A proposed change (usually from Strato) overlaid on the items collection so
  * tables and detail pages can show "what it would look like" before applying.
  */
 export interface PreviewState {

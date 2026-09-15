@@ -285,7 +285,7 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
         </Button>
       </div>
       {replace && <ConnectForm def={def} integration={integration} onClose={onClose} />}
-      <ConfirmDialog open={confirm} onClose={() => setConfirm(false)} onConfirm={() => void disconnect()} destructive title={`Disconnect ${def.name}?`} confirmLabel="Disconnect" loading={busy === "disconnect"} message={<>The stored credentials are deleted and the webhooks removed. Items, orders and shipments already in Cumulus stay as they are.</>} />
+      <ConfirmDialog open={confirm} onClose={() => setConfirm(false)} onConfirm={() => void disconnect()} destructive title={`Disconnect ${def.name}?`} confirmLabel="Disconnect" loading={busy === "disconnect"} message={<>The stored credentials are deleted and the webhooks removed. Items, orders and shipments already in cumulusOS stay as they are.</>} />
     </>
   );
 }
@@ -321,7 +321,7 @@ function RoadmapForm({ def, integration, onClose }: { def: IntegrationDef; integ
   return (
     <>
       <Banner tone="info" title="Live sync is on the roadmap">
-        Cumulus does not talk to {def.name} yet. Nothing you enter here is sent anywhere; it is stored with the workspace so the connection is ready to switch on later.
+        cumulusOS does not talk to {def.name} yet. Nothing you enter here is sent anywhere; it is stored with the workspace so the connection is ready to switch on later.
       </Banner>
       {field && (
         <div className="flex items-end gap-2">

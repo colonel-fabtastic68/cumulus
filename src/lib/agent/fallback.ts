@@ -1,7 +1,7 @@
 import { APICallError, type LanguageModel, type LanguageModelMiddleware } from "ai";
 
 /**
- * Model fallback for Nimbus. One request may try several Gemini models: the
+ * Model fallback for Strato. One request may try several Gemini models: the
  * primary, then the fallbacks, each with a connect timeout scaled to the size
  * of the prompt, all inside one time budget. A quota answer that names a
  * retry delay earns a second pass after that delay. Every attempt is recorded

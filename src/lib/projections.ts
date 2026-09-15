@@ -298,7 +298,7 @@ export function project(items: Item[], movements: StockMovement[], scope: Projec
   };
 }
 
-/** A scenario Nimbus can fill in from a sentence. Anything left out keeps the current value. */
+/** A scenario Strato can fill in from a sentence. Anything left out keeps the current value. */
 export interface ScenarioRequest {
   horizonDays?: number;
   historyDays?: number;

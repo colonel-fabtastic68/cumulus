@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import { SignUpForm } from "@/components/auth/SignUpForm";
 
-export const metadata: Metadata = { title: "Create your account · Cumulus" };
+export const metadata: Metadata = { title: "Create your account · cumulusOS" };
 
 export default function SignUpPage() {
   return (

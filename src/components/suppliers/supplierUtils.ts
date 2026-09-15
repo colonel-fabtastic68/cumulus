@@ -106,7 +106,7 @@ export function statsFor(map: Map<string, SupplierStats>, supplierId: string): S
   return map.get(supplierId) ?? EMPTY_STATS;
 }
 
-/** Prompt handed to Nimbus by "Draft reorder email". */
+/** Prompt handed to Strato by "Draft reorder email". */
 export function reorderEmailPrompt(supplier: Supplier, stats: SupplierStats, settings: WorkspaceSettings, actor: Pick<Member, "name">): string {
   const describe = (i: Item) => {
     const link = itemSupplierLinks(i).find((l) => l.supplierId === supplier.id);

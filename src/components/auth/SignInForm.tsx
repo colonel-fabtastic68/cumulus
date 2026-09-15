@@ -113,11 +113,11 @@ export function SignInForm() {
 
   return (
     <AuthPage
-      title={needsEmail ? "Finish signing in" : "Sign in to Cumulus"}
+      title={needsEmail ? "Finish signing in" : "Sign in to cumulusOS"}
       subtitle={needsEmail ? "Confirm the address this sign-in link was sent to." : "Your team's inventory workspace, live in Firestore."}
       footer={
         <>
-          New to Cumulus?{" "}
+          New to cumulusOS?{" "}
           <Link href={signUpHref(next)} className="font-medium text-accent hover:underline">
             Create your account
           </Link>

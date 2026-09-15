@@ -62,7 +62,7 @@ export function MapStep({ source, mapping, onMappingChange, onBack, onContinue }
         body: JSON.stringify({ headers: source.headers, sample: source.rows.slice(0, 5) }),
       });
       if (res.status === 503) {
-        setAiHint({ tone: "warning", text: "Nimbus needs a Gemini key to map columns. Add GOOGLE_GENERATIVE_AI_API_KEY to the environment and restart, or keep mapping by hand." });
+        setAiHint({ tone: "warning", text: "Strato needs a Gemini key to map columns. Add GOOGLE_GENERATIVE_AI_API_KEY to the environment and restart, or keep mapping by hand." });
         return;
       }
       if (!res.ok) throw new Error(`Mapping service returned ${res.status}`);
@@ -77,10 +77,10 @@ export function MapStep({ source, mapping, onMappingChange, onBack, onContinue }
         if (m.field !== "ignore") applied++;
       }
       onMappingChange(next);
-      toast(`Nimbus mapped ${applied} column${applied === 1 ? "" : "s"}`, "success");
+      toast(`Strato mapped ${applied} column${applied === 1 ? "" : "s"}`, "success");
       if (typeof data.notes === "string" && data.notes.trim()) setAiHint({ tone: "info", text: data.notes.trim() });
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Nimbus could not map the columns", "critical");
+      toast(err instanceof Error ? err.message : "Strato could not map the columns", "critical");
     } finally {
       setAiBusy(false);
     }
@@ -109,7 +109,7 @@ export function MapStep({ source, mapping, onMappingChange, onBack, onContinue }
               Reset
             </Button>
             <Button size="sm" icon={<Sparkles />} loading={aiBusy} onClick={mapWithAi}>
-              Map with Nimbus
+              Map with Strato
             </Button>
           </div>
         </div>

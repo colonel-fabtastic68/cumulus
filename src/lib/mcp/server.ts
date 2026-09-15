@@ -1,8 +1,8 @@
 /**
- * Minimal Model Context Protocol server for Cumulus.
+ * Minimal Model Context Protocol server for cumulusOS.
  *
  * Speaks JSON-RPC 2.0 over Streamable HTTP (POST /api/mcp) and exposes the
- * exact tool set Nimbus uses, so any MCP-capable agent (Claude Code, Claude
+ * exact tool set Strato uses, so any MCP-capable agent (Claude Code, Claude
  * Desktop, Cursor, custom agents) can query inventory and perform the same
  * operations. Stateless: every request stands on its own; no session ids.
  */
@@ -13,7 +13,7 @@ import { getServerStore } from "./store";
 
 export const PROTOCOL_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"] as const;
 export const LATEST_PROTOCOL = PROTOCOL_VERSIONS[0];
-export const SERVER_INFO = { name: "cumulus", title: "Cumulus inventory", version: "0.1.0" };
+export const SERVER_INFO = { name: "cumulusos", title: "cumulusOS inventory", version: "0.1.0" };
 
 /** The identity external agents act as; activity entries name it. */
 export const MCP_ACTOR = { id: "mcp", name: "External agent" };
@@ -21,7 +21,7 @@ export const MCP_ACTOR = { id: "mcp", name: "External agent" };
 const SUMMARY_RESOURCE = "cumulus://workspace/summary";
 
 export const SERVER_INSTRUCTIONS = [
-  "Cumulus is an inventory workspace. Tools mirror what the built-in assistant (Nimbus) can do: read items, BOMs and reports, and perform stock operations.",
+  "cumulusOS is an inventory workspace. Tools mirror what the built-in assistant (Strato) can do: read items, BOMs and reports, and perform stock operations.",
   "Read before you write: call getWorkspaceSummary or searchItems first. Quantities always flow through the stock ledger.",
   "Write tools (bulkUpdateItems, adjustStock, receiveStock, buildAssembly, updateBom, deactivateItems, createOrder, fulfillOrders, createRma, resolveRma, upsertSupplier, deleteItems) change data immediately.",
 ].join(" ");
@@ -51,7 +51,7 @@ function fail(id: JsonRpcId, code: number, message: string, data?: unknown): Jso
 
 type ZodLike = Parameters<typeof z.toJSONSchema>[0];
 
-/** Nimbus tool → MCP tool descriptor with a JSON Schema input. */
+/** Strato tool → MCP tool descriptor with a JSON Schema input. */
 export function listTools() {
   return (Object.keys(agentTools) as AgentToolName[]).map((name) => {
     const t = agentTools[name] as { description?: string; inputSchema: unknown };

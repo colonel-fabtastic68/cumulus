@@ -15,7 +15,7 @@ export interface Plan {
 }
 
 /**
- * The plans Cumulus sells. Prices are shown on the landing page, the checkout
+ * The plans cumulusOS sells. Prices are shown on the landing page, the checkout
  * page and the billing settings; Stripe holds the matching price objects.
  */
 export const PLANS: Record<PlanId, Plan> = {
@@ -29,7 +29,7 @@ export const PLANS: Record<PlanId, Plan> = {
     features: [
       "Unlimited team users: owners, admins, members, viewers and floor guests",
       "Unlimited items, BOMs, locations and stock movements",
-      "Nimbus, the agent that drafts bulk changes for your approval",
+      "Strato, the agent that drafts bulk changes for your approval",
       "Two-way Shopify and WooCommerce sync",
       "Shippo and EasyPost rates, labels and tracking",
       "Imports, exports, reports and the activity log",

@@ -103,7 +103,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
               </span>
               <span className="min-w-0 flex-1 leading-tight">
                 <span className="block truncate text-[13.5px] font-semibold text-text">{settings.companyName}</span>
-                <span className="block text-[11px] text-text-tertiary">{session.pendingInvites.length ? `${session.pendingInvites.length} pending invite${session.pendingInvites.length === 1 ? "" : "s"}` : "Cumulus"}</span>
+                <span className="block text-[11px] text-text-tertiary">{session.pendingInvites.length ? `${session.pendingInvites.length} pending invite${session.pendingInvites.length === 1 ? "" : "s"}` : "cumulusOS"}</span>
               </span>
               <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-text-tertiary" />
             </button>
@@ -131,7 +131,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           </span>
           <div className="min-w-0 leading-tight">
             <div className="truncate text-[13.5px] font-semibold text-text">{settings.companyName}</div>
-            <div className="text-[11px] text-text-tertiary">Cumulus</div>
+            <div className="text-[11px] text-text-tertiary">cumulusOS</div>
           </div>
         </div>
       )}

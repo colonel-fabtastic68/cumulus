@@ -1,7 +1,7 @@
 import type { UIMessage } from "ai";
 
 /**
- * Keeps a long Nimbus conversation affordable. Every model step resends the
+ * Keeps a long Strato conversation affordable. Every model step resends the
  * whole history, so tool results from earlier turns (hundreds of item rows,
  * report tables) would otherwise be paid for again and again. Recent tool
  * results stay complete; older ones are reduced to their counts and totals,

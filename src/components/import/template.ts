@@ -16,7 +16,7 @@ export function downloadTemplateCsv(): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "cumulus-import-template.csv";
+  a.download = "cumulusOS-import-template.csv";
   document.body.appendChild(a);
   a.click();
   a.remove();

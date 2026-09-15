@@ -3,8 +3,8 @@ import { Suspense } from "react";
 import { Checkout } from "@/components/marketing/Checkout";
 
 export const metadata: Metadata = {
-  title: "Founding Members checkout · Cumulus",
-  description: "Join Cumulus as a founding member: $199 a month instead of $299, unlimited team users, every future version included.",
+  title: "Founding Members checkout · cumulusOS",
+  description: "Join cumulusOS as a founding member: $199 a month instead of $299, unlimited team users, every future version included.",
 };
 
 export default function CheckoutPage() {

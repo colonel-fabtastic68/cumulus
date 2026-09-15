@@ -119,7 +119,7 @@ export function WorkspaceHub({ standalone = false, notice }: { standalone?: bool
         <span className="flex h-7 w-7 items-center justify-center rounded-[8px] bg-primary text-text-inverse">
           <CloudMark />
         </span>
-        <span className="text-[14px] font-semibold text-text">Cumulus</span>
+        <span className="text-[14px] font-semibold text-text">cumulusOS</span>
         <div className="ml-auto flex items-center gap-3 text-[12.5px] text-text-secondary">
           <span className="hidden sm:inline">
             Signed in as <span className="font-medium text-text">{profile?.name ?? "…"}</span>

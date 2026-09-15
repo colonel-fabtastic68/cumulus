@@ -5,7 +5,7 @@ import { runtimeConfigFromEnv } from "@/lib/firebase-config";
 import { FOUNDING_PLAN } from "@/lib/billing";
 import { formatMoney } from "@/lib/format";
 
-export const metadata: Metadata = { title: "Welcome, founding member · Cumulus" };
+export const metadata: Metadata = { title: "Welcome, founding member · cumulusOS" };
 
 /** Stripe sends people here after a successful checkout (success_url). */
 export default function CheckoutSuccessPage() {

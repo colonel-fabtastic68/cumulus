@@ -164,7 +164,7 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
       trigger={<IconButton aria-label="More actions" icon={<MoreHorizontal />} />}
       items={[
         { label: "Export CSV", icon: <FileDown />, onSelect: exportCsv, disabled: rows.length === 0 },
-        { label: "Ask Nimbus about this view", icon: <Sparkles />, onSelect: askAboutView },
+        { label: "Ask Strato about this view", icon: <Sparkles />, onSelect: askAboutView },
       ]}
     />
   );
@@ -222,7 +222,7 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
         Export
       </Button>
       <Button size="sm" icon={<Sparkles />} onClick={askAboutSelection} disabled={sel.size === 0}>
-        Ask Nimbus
+        Ask Strato
       </Button>
     </>
   );

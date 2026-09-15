@@ -33,9 +33,9 @@ function randomToken(): string {
 }
 
 /**
- * "Connect other agents": groundwork for the Cumulus MCP endpoint. Shows the
+ * "Connect other agents": groundwork for the cumulusOS MCP endpoint. Shows the
  * URL, how to connect from common agent hosts, the tool set (the same one
- * Nimbus uses), token setup, and a live call so the demo can be exercised.
+ * Strato uses), token setup, and a live call so the demo can be exercised.
  */
 export function McpCard() {
   const toast = useToast();
@@ -68,7 +68,7 @@ export function McpCard() {
   const info = status && status !== "error" ? status : null;
 
   const snippets: Record<Snippet, string> = {
-    "claude-code": `claude mcp add --transport http cumulus ${endpoint}${info?.tokenRequired || token || generated ? ` --header "Authorization: Bearer ${tokenValue}"` : ""}`,
+    "claude-code": `claude mcp add --transport http cumulusos ${endpoint}${info?.tokenRequired || token || generated ? ` --header "Authorization: Bearer ${tokenValue}"` : ""}`,
     json: JSON.stringify(
       {
         mcpServers: {
@@ -126,7 +126,7 @@ export function McpCard() {
             <Plug className="h-4 w-4 text-icon" /> Connect other agents (MCP)
           </span>
         }
-        subtitle="Cumulus speaks the Model Context Protocol, so Claude Code, Claude Desktop, Cursor or your own agents can query this workspace and run the same tools Nimbus uses."
+        subtitle="cumulusOS speaks the Model Context Protocol, so Claude Code, Claude Desktop, Cursor or your own agents can query this workspace and run the same tools Strato uses."
         actions={
           info ? (
             <>

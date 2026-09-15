@@ -29,7 +29,7 @@ function friendlyError(error: unknown): string {
 }
 
 function systemPrompt(context: string, userName: string, autoApprove: boolean) {
-  return `You are Nimbus, the inventory assistant built into Cumulus, a small company's inventory workspace. You can read everything and change anything through tools. Refer to yourself as Nimbus.
+  return `You are Strato, the inventory assistant built into cumulusOS, a small company's inventory workspace. You can read everything and change anything through tools. Refer to yourself as Strato.
 
 You are talking with ${userName}. Today is ${new Date().toISOString().slice(0, 10)}.
 
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
   const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return Response.json(
-      { error: "Missing GOOGLE_GENERATIVE_AI_API_KEY. Add it to .env.local to enable Nimbus." },
+      { error: "Missing GOOGLE_GENERATIVE_AI_API_KEY. Add it to .env.local to enable Strato." },
       { status: 503 },
     );
   }

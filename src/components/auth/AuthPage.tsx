@@ -42,7 +42,7 @@ export function AuthPage({ title, subtitle, children, footer }: { title: string;
 
   if (hydrated && mode === "local") {
     return (
-      <AuthCard title="No sign-in needed here" subtitle="This Cumulus runs in local mode, so there are no accounts. Everything is stored in this browser.">
+      <AuthCard title="No sign-in needed here" subtitle="This cumulusOS install runs in local mode, so there are no accounts. Everything is stored in this browser.">
         <Button variant="primary" size="lg" fullWidth href={APP_HOME}>
           Open the workspace
         </Button>

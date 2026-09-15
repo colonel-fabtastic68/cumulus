@@ -59,7 +59,7 @@ export function TopBar({ onMenu }: { onMenu?: () => void }) {
         className="flex h-8 w-full max-w-md items-center gap-2 rounded-[var(--radius-sm)] border border-border bg-surface px-3 text-[13px] text-text-tertiary shadow-[var(--shadow-100)] hover:border-border-strong"
       >
         <Search className="h-3.5 w-3.5" />
-        <span className="flex-1 text-left">Search Cumulus…</span>
+        <span className="flex-1 text-left">Search cumulusOS…</span>
         <Kbd>⌘K</Kbd>
       </button>
       <div className="flex-1" />
@@ -69,7 +69,7 @@ export function TopBar({ onMenu }: { onMenu?: () => void }) {
           <span>{online.length} online</span>
         </div>
       )}
-      <Button variant={isOpen ? "primary" : "secondary"} size="md" icon={<Sparkles />} onClick={() => (isOpen ? toggleAgent() : openAgent())} className="hidden sm:inline-flex">Nimbus <Kbd>⌘J</Kbd>
+      <Button variant={isOpen ? "primary" : "secondary"} size="md" icon={<Sparkles />} onClick={() => (isOpen ? toggleAgent() : openAgent())} className="hidden sm:inline-flex">Strato <Kbd>⌘J</Kbd>
       </Button>
       <IconButton variant="plain" size="md" className="text-text-secondary" aria-label="Scan a barcode (⌘/)" title="Scan (⌘/)" onClick={() => setScan({ open: true })} icon={<ScanBarcode />} />
       <IconButton variant="plain" size="md" className="text-text-secondary" aria-label="Activity" href="/activity" icon={<Bell />} />

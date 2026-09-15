@@ -5,7 +5,7 @@ import { SessionCta } from "./SessionCta";
 
 const LINKS = [
   { href: "#product", label: "Product" },
-  { href: "#nimbus", label: "Nimbus" },
+  { href: "#strato", label: "Strato" },
   { href: "#pilot", label: "Pilot" },
   { href: "#pricing", label: "Pricing" },
 ];
@@ -16,7 +16,7 @@ export function Wordmark({ className }: { className?: string }) {
       <span className="flex h-7 w-7 items-center justify-center rounded-[8px] bg-primary text-text-inverse">
         <CloudMark />
       </span>
-      Cumulus
+      cumulusOS
     </Link>
   );
 }
@@ -63,7 +63,7 @@ export function MarketingFooter() {
           </a>
         </nav>
       </div>
-      <div className="mx-auto max-w-[1120px] px-6 pb-8 text-[12px] text-text-tertiary">© {new Date().getFullYear()} Cumulus</div>
+      <div className="mx-auto max-w-[1120px] px-6 pb-8 text-[12px] text-text-tertiary">© {new Date().getFullYear()} cumulusOS</div>
     </footer>
   );
 }

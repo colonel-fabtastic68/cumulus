@@ -59,7 +59,7 @@ export default function SettingsPage() {
   const formKey = settings.updatedAt;
 
   return (
-    <Page narrow title="Settings" subtitle="Company details, inventory policy, Nimbus, your plan and where the data lives">
+    <Page narrow title="Settings" subtitle="Company details, inventory policy, Strato, your plan and where the data lives">
       {readOnly && (
         <Banner tone="info" title="Read-only" className="mb-5">
           Only owners and admins can change settings. You can still review everything here.
@@ -81,7 +81,7 @@ export default function SettingsPage() {
         <Row id="quoting">
           <QuotingSection key={formKey} settings={settings} readOnly={readOnly} />
         </Row>
-        <Row id="nimbus">
+        <Row id="strato">
           <AgentSection key={formKey} settings={settings} readOnly={readOnly} />
         </Row>
         <Row id="billing">
