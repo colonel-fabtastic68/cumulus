@@ -133,8 +133,8 @@ export const INTEGRATIONS: IntegrationDef[] = [
     description: "Products and Services come in as items by SKU with their sales price, purchase cost and reorder point, and each item remembers its QuickBooks id so costs and books line up.",
     fields: [],
     settings: [
-      { key: "syncProducts", label: "Pull Products and Services in", help: "Create or update items by SKU on every sync and in the nightly pass.", default: true },
-      { key: "takeStockOnFirstSync", label: "Take QuickBooks quantities on the first sync", help: "Only for a fresh workspace: opening counts for inventory items come from QuickBooks.", default: false },
+      { key: "syncProducts", label: "Pull Products and Services in", help: "Create or update items on every sync and in the nightly pass, matched by SKU (or by name when QuickBooks has no SKU).", default: true },
+      { key: "takeStockOnFirstSync", label: "Take QuickBooks quantities for new items", help: "Inventory items that do not exist here yet arrive with their QuickBooks quantity on hand as the opening count. Existing counts are never changed by a pull.", default: false },
     ],
     setup: {
       steps: ["Press Connect to QuickBooks and sign in to Intuit", "Pick the company to connect and approve access", "You come straight back here, connected; press Sync now to pull Products and Services in"],
