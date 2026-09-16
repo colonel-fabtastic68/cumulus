@@ -23,17 +23,25 @@ export const QBO_SCOPE = "com.intuit.quickbooks.accounting";
 export const QBO_MINOR_VERSION = "75";
 export const OAUTH_STATES = "oauthStates";
 
+/** Env values pasted with surrounding quotes or a "Client ID:" label still work. */
+function envValue(name: string): string {
+  return (process.env[name] ?? "").trim().replace(/^["']+|["']+$/g, "").replace(/^[A-Za-z ]+:\s*/, "").trim();
+}
+
 export function quickbooksConfig(): QboConfig | null {
-  const clientId = process.env.QUICKBOOKS_CLIENT_ID?.trim() ?? "";
-  const clientSecret = process.env.QUICKBOOKS_CLIENT_SECRET?.trim() ?? "";
+  const clientId = envValue("QUICKBOOKS_CLIENT_ID");
+  const clientSecret = envValue("QUICKBOOKS_CLIENT_SECRET");
   if (!clientId || !clientSecret) return null;
-  const environment: QboEnvironment = /^prod/i.test(process.env.QUICKBOOKS_ENVIRONMENT?.trim() ?? "") ? "production" : "sandbox";
+  const environment: QboEnvironment = /^prod/i.test(envValue("QUICKBOOKS_ENVIRONMENT")) ? "production" : "sandbox";
   return { clientId, clientSecret, environment };
 }
 
 export function requireQuickbooksConfig(): QboConfig {
   const config = quickbooksConfig();
   if (!config) throw new HttpError(503, "QuickBooks is not configured on this server. Add QUICKBOOKS_CLIENT_ID and QUICKBOOKS_CLIENT_SECRET to the deployment's environment.");
+  // Intuit ids and secrets are plain tokens; anything else is a paste gone wrong and Intuit would answer "client_id missing".
+  if (!/^[A-Za-z0-9]{20,}$/.test(config.clientId)) throw new HttpError(503, "QUICKBOOKS_CLIENT_ID does not look like an Intuit client id (letters and digits only, no quotes or spaces). Copy it again from Keys & credentials in the Intuit developer portal.");
+  if (/\s/.test(config.clientSecret) || config.clientSecret.length < 20) throw new HttpError(503, "QUICKBOOKS_CLIENT_SECRET does not look like an Intuit client secret. Copy it again from Keys & credentials in the Intuit developer portal.");
   return config;
 }
 
