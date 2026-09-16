@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { CalendarClock } from "lucide-react";
 import { Banner, Button, TextField } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
 import { signInHref } from "@/lib/auth-routes";
@@ -54,6 +55,19 @@ export function SignUpForm() {
           Create account
         </Button>
       </form>
+
+      <div className="mt-6 flex items-start gap-3 rounded-[var(--radius)] border border-border bg-surface-subdued p-4">
+        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-accent-soft text-accent">
+          <CalendarClock className="h-4 w-4" />
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-[13.5px] font-semibold text-text">Want a walkthrough first?</h2>
+          <p className="mt-1 text-[12.5px] leading-5 text-text-secondary">Book half an hour with us and we will set cumulusOS up on your own parts, BOMs and suppliers.</p>
+          <Button size="sm" href="/demo" className="mt-3">
+            Book a demo
+          </Button>
+        </div>
+      </div>
     </AuthPage>
   );
 }

@@ -55,12 +55,18 @@ export function MarketingFooter() {
               {l.label}
             </a>
           ))}
+          <Link href="/demo" className="hover:text-text">
+            Book a demo
+          </Link>
           <Link href="/sign-in" className="hover:text-text">
             Sign in
           </Link>
-          <a href="https://github.com/colonel-fabtastic68/cumulus" className="hover:text-text" rel="noreferrer">
-            GitHub
-          </a>
+          <Link href="/privacy" className="hover:text-text">
+            Privacy policy
+          </Link>
+          <Link href="/terms" className="hover:text-text">
+            Terms of service
+          </Link>
         </nav>
       </div>
       <div className="mx-auto max-w-[1120px] px-6 pb-8 text-[12px] text-text-tertiary">© {new Date().getFullYear()} cumulusOS</div>

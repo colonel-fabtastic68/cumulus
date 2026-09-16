@@ -73,8 +73,8 @@ export function SessionCta({ runtimeConfig, placement }: { runtimeConfig: Runtim
         <Button size="md" variant="tertiary" href="/sign-in">
           Sign in
         </Button>
-        <Button size="md" variant="primary" href="/sign-up">
-          Get started
+        <Button size="md" variant="primary" href="/demo">
+          Book a demo
         </Button>
       </div>
     );
