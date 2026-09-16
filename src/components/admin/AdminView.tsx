@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { RefreshCw, ShieldCheck } from "lucide-react";
-import { Badge, Banner, Button, CloudMark, DescriptionList, Skeleton, Stat, Table, type Column } from "@/components/ui";
-import { accountFetch } from "@/lib/account-fetch";
+import { RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
+import { Badge, Banner, Button, Checkbox, CloudMark, ConfirmDialog, DescriptionList, Skeleton, Stat, Table, useToast, type Column } from "@/components/ui";
+import { AccountApiError, accountFetch } from "@/lib/account-fetch";
 import { APP_HOME, signInHref } from "@/lib/auth-routes";
 import { formatDate, formatRelative } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import type { AdminAccount, AdminFeedback, AdminOverview, AdminSubscription, AdminWorkspace } from "@/lib/server/admin";
+import type { DeleteUserResult } from "@/lib/server/adminActions";
 
 /** Founder's read-only view of every account, workspace and subscription (ADMIN_EMAILS on the server decides who may open it). */
 export function AdminView() {
@@ -82,14 +83,43 @@ export function AdminView() {
             <Skeleton className="h-64 w-full" />
           </div>
         ) : (
-          <Overview data={data} open={open} onOpen={(id) => setOpen((cur) => (cur === id ? null : id))} selected={selected} />
+          <Overview data={data} open={open} onOpen={(id) => setOpen((cur) => (cur === id ? null : id))} selected={selected} onChanged={() => void load()} />
         )}
       </main>
     </div>
   );
 }
 
-function Overview({ data, open, onOpen, selected }: { data: AdminOverview; open: string | null; onOpen: (id: string) => void; selected: AdminWorkspace | null }) {
+function Overview({ data, open, onOpen, selected, onChanged }: { data: AdminOverview; open: string | null; onOpen: (id: string) => void; selected: AdminWorkspace | null; onChanged: () => void }) {
+  const session = useSession();
+  const toast = useToast();
+  const [target, setTarget] = useState<AdminAccount | null>(null);
+  const [alsoWorkspaces, setAlsoWorkspaces] = useState(false);
+  const [ownsMessage, setOwnsMessage] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const askDelete = (a: AdminAccount) => {
+    setTarget(a);
+    setAlsoWorkspaces(false);
+    setOwnsMessage(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!target || !session.app) return;
+    setDeleting(true);
+    try {
+      const r = await accountFetch<DeleteUserResult>(session.app, "/api/admin/users/delete", { uid: target.id, deleteOwnedWorkspaces: alsoWorkspaces });
+      toast(`Deleted ${r.email || target.id}: ${r.membershipsRemoved} membership${r.membershipsRemoved === 1 ? "" : "s"} removed, ${r.workspacesDeleted.length} workspace${r.workspacesDeleted.length === 1 ? "" : "s"} deleted${r.authDeleted ? "" : " (sign-in account could not be removed)"}${r.subscriptions.length ? ` · cancel ${r.subscriptions.length} subscription${r.subscriptions.length === 1 ? "" : "s"} in Stripe` : ""}`, r.authDeleted ? "success" : "default");
+      setTarget(null);
+      onChanged();
+    } catch (e) {
+      if (e instanceof AccountApiError && e.status === 409) setOwnsMessage(e.message);
+      else toast(e instanceof Error ? e.message : String(e), "critical");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const paying = data.subscriptions.filter((s) => s.status === "active" || s.status === "trialing").length;
   const seenThisWeek = new Set(data.workspaces.flatMap((w) => w.members.filter((m) => m.lastSeenAt && Date.now() - Date.parse(m.lastSeenAt) < 7 * 86_400_000).map((m) => m.id))).size;
 
@@ -112,6 +142,16 @@ function Overview({ data, open, onOpen, selected }: { data: AdminOverview; open:
     { key: "wants", header: "Wants", render: (a) => <span className="text-text-secondary">{a.business?.integrations?.filter((i) => i !== "none").join(", ") || "—"}</span> },
     { key: "workspaces", header: "Workspaces", align: "right", render: (a) => a.workspaceIds.length, sortValue: (a) => a.workspaceIds.length },
     { key: "created", header: "Signed up", render: (a) => <span className="text-text-secondary">{formatRelative(a.createdAt)}</span>, sortValue: (a) => a.createdAt },
+    {
+      key: "actions",
+      header: "",
+      align: "right",
+      width: "48px",
+      render: (a) =>
+        a.id === session.account?.uid ? null : (
+          <Button size="sm" variant="plain" icon={<Trash2 />} aria-label={`Delete ${a.email || a.id}`} title="Delete account" className="text-critical" onClick={() => askDelete(a)} />
+        ),
+    },
   ];
 
   const subColumns: Column<AdminSubscription>[] = [
@@ -162,8 +202,25 @@ function Overview({ data, open, onOpen, selected }: { data: AdminOverview; open:
       </section>
 
       <p className="flex items-center gap-1.5 text-[11.5px] text-text-tertiary">
-        <ShieldCheck className="h-3.5 w-3.5" /> Read-only. Generated {formatRelative(data.generatedAt)}.
+        <ShieldCheck className="h-3.5 w-3.5" /> Deletions are logged. Generated {formatRelative(data.generatedAt)}.
       </p>
+
+      <ConfirmDialog
+        open={!!target}
+        onClose={() => (deleting ? undefined : setTarget(null))}
+        onConfirm={() => void confirmDelete()}
+        destructive
+        loading={deleting}
+        confirmLabel={alsoWorkspaces ? "Delete account and workspaces" : "Delete account"}
+        title={`Delete ${target?.email || target?.name || "this account"}?`}
+        message={
+          <div className="flex flex-col gap-3">
+            <p>Removes their sign-in, profile and every workspace membership. This cannot be undone. Subscriptions are not cancelled here; do that in Stripe.</p>
+            {ownsMessage && <Banner tone="warning">{ownsMessage}</Banner>}
+            {(ownsMessage || target?.workspaceIds.length) ? <Checkbox label="Also delete the workspaces this account owns, with all their data" checked={alsoWorkspaces} onChange={setAlsoWorkspaces} /> : null}
+          </div>
+        }
+      />
     </div>
   );
 }
