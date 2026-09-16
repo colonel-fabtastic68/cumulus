@@ -123,6 +123,15 @@ export async function connectIntegration(ctx: ServerContext, req: Request, id: I
  */
 async function reconnectQuickbooks(ctx: ServerContext, body: ConnectBody): Promise<Integration> {
   const existing = await ctx.store.get("integrations", "quickbooks");
+  const pastedRefresh = clean(body.credentials?.refreshToken);
+  const pastedRealm = clean(body.credentials?.realmId);
+  if (pastedRefresh || pastedRealm) {
+    // Sandbox-only: a refresh token minted by Intuit's OAuth playground for this app, while the hosted consent page is unavailable.
+    const config = qbo.requireQuickbooksConfig();
+    if (config.environment !== "sandbox") throw new HttpError(400, "Pasting playground tokens only works with sandbox keys. Use Connect to QuickBooks.");
+    if (!pastedRefresh || !/^\d{1,32}$/.test(pastedRealm)) throw new HttpError(400, "Enter both the refresh token and the realm (company) id from the playground.");
+    await writeSecrets(ctx, "quickbooks", qbo.secretsFromRefreshToken(pastedRefresh, pastedRealm, config.environment));
+  }
   const { company, secrets } = await qbo.verifyConnection(ctx);
   const now = nowIso();
   const doc: Integration = {
@@ -130,8 +139,8 @@ async function reconnectQuickbooks(ctx: ServerContext, body: ConnectBody): Promi
     status: "connected",
     config: { ...(existing?.config ?? {}), realmId: secrets.realmId, companyName: company.CompanyName, environment: secrets.environment ?? "sandbox", ...(company.Country ? { country: company.Country } : {}) },
     settings: { ...(existing?.settings ?? {}), ...(body.settings ?? {}) },
-    connectedAt: existing?.connectedAt ?? now,
-    connectedBy: existing?.connectedBy ?? ctx.actor.id,
+    connectedAt: pastedRefresh ? now : (existing?.connectedAt ?? now),
+    connectedBy: pastedRefresh ? ctx.actor.id : (existing?.connectedBy ?? ctx.actor.id),
     lastSyncAt: existing?.lastSyncAt,
     lastSyncSummary: existing?.lastSyncSummary,
     webhooks: [],

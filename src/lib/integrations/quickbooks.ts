@@ -167,6 +167,12 @@ function tokenSecrets(t: TokenResponse, realmId: string, environment: QboEnviron
   return { accessToken: t.access_token, refreshToken: t.refresh_token, accessExpiresAt: times.accessExpiresAt, refreshExpiresAt: times.refreshExpiresAt, realmId, environment };
 }
 
+/** Secrets for a refresh token issued elsewhere (Intuit's OAuth playground): the first call refreshes at once and learns the real expiry. */
+export function secretsFromRefreshToken(refreshToken: string, realmId: string, environment: QboEnvironment): Secrets {
+  const times = expiryTimes(0, 100 * 86_400);
+  return { accessToken: "", refreshToken, accessExpiresAt: times.accessExpiresAt, refreshExpiresAt: times.refreshExpiresAt, realmId, environment };
+}
+
 /** Refreshes with retry on transient failures; the rotated refresh token replaces the old one at once. */
 async function refreshTokens(ctx: Pick<ServerContext, "db" | "workspaceId">, config: QboConfig, secrets: Secrets): Promise<Secrets> {
   let lastError: unknown;

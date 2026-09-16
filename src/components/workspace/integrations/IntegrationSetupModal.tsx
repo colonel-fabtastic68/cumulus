@@ -52,7 +52,7 @@ function SetupForm({ def, integration, onClose }: { def: IntegrationDef; integra
         ) : connected && integration ? (
           <ConnectedPanel def={def} integration={integration} onClose={onClose} />
         ) : def.oauth ? (
-          <OAuthConnect def={def} integration={integration} />
+          <OAuthConnect def={def} integration={integration} onClose={onClose} />
         ) : (
           <ConnectForm def={def} integration={integration} onClose={onClose} />
         )}
@@ -157,10 +157,28 @@ function ConnectForm({ def, integration, onClose }: { def: IntegrationDef; integ
 }
 
 /** Starts the platform's own sign-in: the server issues a single-use state and the browser follows the consent URL. */
-function OAuthConnect({ def, integration }: { def: IntegrationDef; integration?: Integration }) {
+function OAuthConnect({ def, integration, onClose }: { def: IntegrationDef; integration?: Integration; onClose?: () => void }) {
   const api = useApi();
+  const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(integration?.status === "error" && integration.lastError ? integration.lastError : null);
+  const [manual, setManual] = useState(false);
+  const [realmId, setRealmId] = useState(integration?.config?.realmId ?? "");
+  const [refreshToken, setRefreshToken] = useState("");
+
+  const paste = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api<{ integration: Integration }>(`/api/integrations/${def.id}/connect`, { credentials: { realmId, refreshToken } });
+      toast(`${def.name} connected (${res.integration.config?.companyName ?? "sandbox"})`, "success");
+      onClose?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not connect");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const start = async () => {
     setBusy(true);
@@ -178,11 +196,26 @@ function OAuthConnect({ def, integration }: { def: IntegrationDef; integration?:
     <>
       <SetupSteps def={def} />
       {error && <Banner tone="critical">{error}</Banner>}
-      <div className="flex justify-end">
-        <Button variant="primary" icon={<ExternalLink />} onClick={() => void start()} loading={busy}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Button variant="plain" size="sm" onClick={() => setManual((v) => !v)}>
+          {manual ? "Hide sandbox token entry" : "Sandbox: paste tokens from Intuit's playground instead"}
+        </Button>
+        <Button variant="primary" icon={<ExternalLink />} onClick={() => void start()} loading={busy && !manual}>
           Connect to {def.name.replace(/ Online$/, "")}
         </Button>
       </div>
+      {manual && (
+        <div className="flex flex-col gap-3 rounded-[var(--radius)] border border-border bg-surface-subdued p-4">
+          <p className="text-[12.5px] leading-5 text-text-secondary">For sandbox development keys only. In Intuit&apos;s OAuth 2.0 Playground, get an authorization code for this app, press Get tokens, then copy the refresh token and realm id here. They are kept on the server and refreshed like any other connection.</p>
+          <TextField label="Realm (company) ID" placeholder="9341457924087297" value={realmId} onChange={(e) => setRealmId(e.target.value)} autoComplete="off" />
+          <TextField label="Refresh token" type="password" placeholder="RT1-…" value={refreshToken} onChange={(e) => setRefreshToken(e.target.value)} autoComplete="off" />
+          <div className="flex justify-end">
+            <Button variant="primary" icon={<Plug />} onClick={() => void paste()} loading={busy && manual} disabled={!realmId.trim() || !refreshToken.trim()}>
+              Connect with these tokens
+            </Button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -321,7 +354,7 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
           Disconnect
         </Button>
       </div>
-      {replace && (def.oauth ? <OAuthConnect def={def} /> : <ConnectForm def={def} integration={integration} onClose={onClose} />)}
+      {replace && (def.oauth ? <OAuthConnect def={def} integration={integration} onClose={onClose} /> : <ConnectForm def={def} integration={integration} onClose={onClose} />)}
       <ConfirmDialog open={confirm} onClose={() => setConfirm(false)} onConfirm={() => void disconnect()} destructive title={`Disconnect ${def.name}?`} confirmLabel="Disconnect" loading={busy === "disconnect"} message={def.oauth ? <>Access is revoked with {def.name} and the stored tokens are deleted. Items already in cumulusOS stay as they are.</> : <>The stored credentials are deleted and the webhooks removed. Items, orders and shipments already in cumulusOS stay as they are.</>} />
     </>
   );
