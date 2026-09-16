@@ -143,12 +143,29 @@ export function WorkspaceHub({ standalone = false, notice }: { standalone?: bool
 
 function AccountCard() {
   const session = useSession();
-  const { signOut } = useAuth();
+  const { signOut, resetPassword } = useAuth();
   const toast = useToast();
   const [password, setPw] = useState("");
   const [pwError, setPwError] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
   const profile = session.profile;
+  const hasPassword = session.account?.passwordAccount === true;
+
+  // Password accounts change theirs through the reset email: Firebase wants a sign-in from the last few minutes otherwise.
+  const sendReset = async () => {
+    const email = session.account?.email;
+    if (!email) return;
+    setSaving(true);
+    try {
+      if (await resetPassword(email)) {
+        setResetSent(true);
+        toast(`Password reset email sent to ${email}`, "success");
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
@@ -179,7 +196,20 @@ function AccountCard() {
           Sign out
         </Button>
       </div>
-      {!profile?.guest && (
+      {!profile?.guest && hasPassword && (
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+          <div className="flex items-center gap-2 text-[13px] text-text-secondary">
+            <KeyRound className="h-4 w-4 text-text-tertiary" />
+            <span>
+              <span className="font-medium text-text">Password</span> · set. You sign in with your email and password.
+            </span>
+          </div>
+          <Button size="sm" onClick={() => void sendReset()} loading={saving} disabled={saving || resetSent}>
+            {resetSent ? "Reset email sent" : "Change password"}
+          </Button>
+        </div>
+      )}
+      {!profile?.guest && !hasPassword && (
         <form onSubmit={save} noValidate className="mt-5 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-end">
           <PasswordField
             label="Set a password"

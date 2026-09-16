@@ -148,7 +148,7 @@ export function describeAuthError(e: unknown): string {
   const code = (e as { code?: string })?.code ?? "";
   if (code.includes("invalid-action-code") || code.includes("expired-action-code")) return "This sign-in link has expired or was already used. Ask for a new one.";
   if (code.includes("unauthorized-continue-uri") || code.includes("unauthorized-domain")) return "This site's address is not authorised for sign-in links yet. In the Firebase console open Authentication → Settings → Authorized domains and add it.";
-  if (code.includes("requires-recent-login")) return "For security, sign in again (a fresh emailed link works) and then set the password.";
+  if (code.includes("requires-recent-login")) return "For security, sign out and sign in again, then set the password within a few minutes.";
   if (code.includes("invalid-continue-uri") || code.includes("missing-continue-uri")) return "The sign-in link could not be built for this address. Reload and try again.";
   if (code.includes("invalid-credential") || code.includes("wrong-password") || code.includes("user-not-found")) return "Email or password is incorrect.";
   if (code.includes("invalid-email")) return "That email address doesn't look right.";
