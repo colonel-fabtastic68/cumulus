@@ -4,6 +4,7 @@ import { nowIso } from "@/lib/utils";
 import { CARRIERS, isCarrier } from "./carriers";
 import { isChannel } from "./channelSync";
 import { HttpError, appUrl, deleteSecrets, newToken, readSecrets, writeSecrets, type Secrets, type ServerContext } from "./server";
+import * as qbo from "./quickbooks";
 import * as shopify from "./shopify";
 import * as woo from "./woocommerce";
 
@@ -23,6 +24,7 @@ function clean(v: unknown): string {
  * registers webhooks and marks the integration connected.
  */
 export async function connectIntegration(ctx: ServerContext, req: Request, id: IntegrationId, body: ConnectBody): Promise<Integration> {
+  if (id === "quickbooks") return reconnectQuickbooks(ctx, body);
   if (!isChannel(id) && !isCarrier(id)) throw new HttpError(501, `${NAMES[id]} is on the roadmap; use the CSV export for now.`);
   const creds = body.credentials ?? {};
   const existing = await ctx.store.get("integrations", id);
@@ -114,6 +116,31 @@ export async function connectIntegration(ctx: ServerContext, req: Request, id: I
   return doc;
 }
 
+/**
+ * QuickBooks connects through OAuth (see /api/integrations/quickbooks/authorize),
+ * so "connect" here re-checks the stored tokens against the company and
+ * saves any settings changes; it never takes credentials from the browser.
+ */
+async function reconnectQuickbooks(ctx: ServerContext, body: ConnectBody): Promise<Integration> {
+  const existing = await ctx.store.get("integrations", "quickbooks");
+  const { company, secrets } = await qbo.verifyConnection(ctx);
+  const now = nowIso();
+  const doc: Integration = {
+    id: "quickbooks",
+    status: "connected",
+    config: { ...(existing?.config ?? {}), realmId: secrets.realmId, companyName: company.CompanyName, environment: secrets.environment ?? "sandbox", ...(company.Country ? { country: company.Country } : {}) },
+    settings: { ...(existing?.settings ?? {}), ...(body.settings ?? {}) },
+    connectedAt: existing?.connectedAt ?? now,
+    connectedBy: existing?.connectedBy ?? ctx.actor.id,
+    lastSyncAt: existing?.lastSyncAt,
+    lastSyncSummary: existing?.lastSyncSummary,
+    webhooks: [],
+    createdAt: existing?.createdAt ?? now,
+  };
+  await ctx.store.put("integrations", doc);
+  return doc;
+}
+
 async function removeWebhooks(existing: Integration | null, secrets: Secrets | null, id: IntegrationId): Promise<void> {
   if (!existing?.webhooks?.length || !secrets) return;
   for (const hook of existing.webhooks) {
@@ -132,9 +159,14 @@ export async function disconnectIntegration(ctx: ServerContext, id: IntegrationI
   const existing = await ctx.store.get("integrations", id);
   const secrets = await readSecrets(ctx, id);
   await removeWebhooks(existing, secrets, id);
+  if (id === "quickbooks" && secrets?.refreshToken) {
+    // Best effort: the tokens are deleted here regardless, and Intuit's own expiry finishes the job if revocation fails.
+    const config = qbo.quickbooksConfig();
+    if (config) await qbo.revoke(config, secrets).catch((e) => console.warn("[quickbooks] revoke failed:", e instanceof Error ? e.message : e));
+  }
   await deleteSecrets(ctx, id);
   const now = nowIso();
-  const doc: Integration = { id, status: "not_connected", config: existing?.config ? { ...(existing.config.shop ? { shop: existing.config.shop } : {}), ...(existing.config.siteUrl ? { siteUrl: existing.config.siteUrl } : {}) } : {}, settings: existing?.settings, webhooks: [], createdAt: existing?.createdAt ?? now };
+  const doc: Integration = { id, status: "not_connected", config: existing?.config ? { ...(existing.config.shop ? { shop: existing.config.shop } : {}), ...(existing.config.siteUrl ? { siteUrl: existing.config.siteUrl } : {}), ...(existing.config.realmId ? { realmId: existing.config.realmId } : {}) } : {}, settings: existing?.settings, webhooks: [], createdAt: existing?.createdAt ?? now };
   await ctx.store.batch([{ op: "put", collection: "integrations", doc }, activityOp(ctx.actor, "integration.disconnected", `Disconnected ${NAMES[id]}`, { entityType: "integration", entityId: id })]);
 }
 

@@ -1,4 +1,5 @@
 import { isChannel, runChannelSync } from "@/lib/integrations/channelSync";
+import { runQuickbooksSync } from "@/lib/integrations/quickbooksSync";
 import { HttpError, authenticate, jsonError, loadConnected, readJson } from "@/lib/integrations/server";
 import { nowIso } from "@/lib/utils";
 
@@ -16,12 +17,12 @@ interface SyncBody {
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    if (!isChannel(id)) throw new HttpError(404, "Only sales channels sync.");
+    if (!isChannel(id) && id !== "quickbooks") throw new HttpError(404, "Only sales channels and QuickBooks sync.");
     const ctx = await authenticate(req, { write: true });
     const body = await readJson<SyncBody>(req).catch(() => ({}) as SyncBody);
     const { integration, secrets } = await loadConnected(ctx, id);
     try {
-      const result = await runChannelSync(ctx, integration, secrets, body);
+      const result = id === "quickbooks" ? await runQuickbooksSync(ctx, integration, secrets) : await runChannelSync(ctx, integration, secrets, body);
       return Response.json(result);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);

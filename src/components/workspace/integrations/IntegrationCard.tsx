@@ -9,7 +9,7 @@ import type { IntegrationDef } from "./catalog";
 export function IntegrationCard({ def, integration, onSetUp }: { def: IntegrationDef; integration?: Integration; onSetUp: () => void }) {
   const status = integration?.status ?? "not_connected";
   const connected = status === "connected" || status === "error";
-  const where = integration?.config?.shop ?? integration?.config?.siteUrl ?? integration?.config?.account ?? Object.values(integration?.config ?? {})[0];
+  const where = integration?.config?.shop ?? integration?.config?.siteUrl ?? integration?.config?.companyName ?? integration?.config?.account ?? Object.values(integration?.config ?? {})[0];
   return (
     <div className="card flex flex-col gap-3 p-4">
       <div className="min-w-0">
@@ -17,6 +17,7 @@ export function IntegrationCard({ def, integration, onSetUp }: { def: Integratio
           <h3 className="text-[13.5px] font-semibold text-text">{def.name}</h3>
           <StatusBadge status={status} />
           {def.kind === "roadmap" && <Badge tone="default">Roadmap</Badge>}
+          {connected && integration?.config?.environment === "sandbox" && <Badge tone="attention">Sandbox</Badge>}
         </div>
         <p className="mt-1 text-[12.5px] leading-[1.45] text-text-secondary">{def.description}</p>
       </div>

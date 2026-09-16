@@ -71,8 +71,11 @@ service cloud.firestore {
       }
     }
 
-    // One-time sign-up codes and subscription records are handled by the server only.
+    // One-time sign-up codes, subscription records and in-flight OAuth states are handled by the server only.
     match /emailCodes/{userId} {
+      allow read, write: if false;
+    }
+    match /oauthStates/{state} {
       allow read, write: if false;
     }
     match /subscriptions/{subscriptionId} {

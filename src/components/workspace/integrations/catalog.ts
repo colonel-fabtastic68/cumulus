@@ -6,7 +6,7 @@ import type { IntegrationId, IntegrationSettings } from "@/lib/types";
  * and keeps them in a subcollection browsers cannot read. The rest are on the
  * roadmap and fall back to CSV import.
  */
-export type IntegrationKind = "channel" | "carrier" | "roadmap";
+export type IntegrationKind = "channel" | "carrier" | "accounting" | "roadmap";
 
 export interface CredentialField {
   key: string;
@@ -32,6 +32,8 @@ export interface IntegrationDef {
   description: string;
   fields: CredentialField[];
   settings?: SettingDef[];
+  /** Connects by sending the browser to the platform's consent screen instead of pasting credentials. */
+  oauth?: boolean;
   setup: { steps: string[]; docsUrl?: string };
   /** CSV fallback for product data. */
   export?: { steps: string[]; headers: string[]; note: string };
@@ -125,11 +127,19 @@ export const INTEGRATIONS: IntegrationDef[] = [
   },
   {
     id: "quickbooks",
-    name: "QuickBooks",
-    kind: "roadmap",
-    description: "Match items to Products and Services, keep purchase costs and sales prices aligned, and post inventory value and cost of goods sold to your books.",
-    fields: [{ key: "realmId", label: "Company (realm) ID", placeholder: "1234567890", help: "Found under Settings → Account and settings → Billing & subscription. Saved for later; nothing is contacted." }],
-    setup: { steps: [] },
+    name: "QuickBooks Online",
+    kind: "accounting",
+    oauth: true,
+    description: "Products and Services come in as items by SKU with their sales price, purchase cost and reorder point, and each item remembers its QuickBooks id so costs and books line up.",
+    fields: [],
+    settings: [
+      { key: "syncProducts", label: "Pull Products and Services in", help: "Create or update items by SKU on every sync and in the nightly pass.", default: true },
+      { key: "takeStockOnFirstSync", label: "Take QuickBooks quantities on the first sync", help: "Only for a fresh workspace: opening counts for inventory items come from QuickBooks.", default: false },
+    ],
+    setup: {
+      steps: ["Press Connect to QuickBooks and sign in to Intuit", "Pick the company to connect and approve access", "You come straight back here, connected; press Sync now to pull Products and Services in"],
+      docsUrl: "https://quickbooks.intuit.com/learn-support/en-us/help-article/manage-inventory/add-product-service-items-quickbooks-online/L4Gqgk3PW_US_en_US",
+    },
     export: {
       steps: ["In QuickBooks Online open Sales → Products and services", "Use the export icon above the list to download an Excel file, then save it as CSV", "Upload the file on the Import page"],
       headers: ["Product/Service Name", "SKU", "Type", "Sales description", "Sales price/rate", "Purchase cost", "Quantity on hand", "Reorder point"],

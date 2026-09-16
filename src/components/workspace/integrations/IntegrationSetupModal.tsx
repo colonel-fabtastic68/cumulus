@@ -37,7 +37,7 @@ function SetupForm({ def, integration, onClose }: { def: IntegrationDef; integra
           <StatusBadge status={integration?.status ?? "not_connected"} />
         </span>
       }
-      subtitle={live ? (def.kind === "carrier" ? "Rates, labels and tracking for the carriers on your account." : "Credentials are verified with the platform and kept on the server, never in the browser.") : "On the roadmap. Save your details now and use the CSV export until it ships."}
+      subtitle={live ? (def.kind === "carrier" ? "Rates, labels and tracking for the carriers on your account." : def.oauth ? `You sign in with ${def.name} itself; the access it grants is kept on the server, never in the browser.` : "Credentials are verified with the platform and kept on the server, never in the browser.") : "On the roadmap. Save your details now and use the CSV export until it ships."}
       footer={<Button onClick={onClose}>Close</Button>}
     >
       <div className="flex flex-col gap-4">
@@ -51,6 +51,8 @@ function SetupForm({ def, integration, onClose }: { def: IntegrationDef; integra
           <Banner tone="info">Only workspace owners and admins can connect or change {def.name}.</Banner>
         ) : connected && integration ? (
           <ConnectedPanel def={def} integration={integration} onClose={onClose} />
+        ) : def.oauth ? (
+          <OAuthConnect def={def} integration={integration} />
         ) : (
           <ConnectForm def={def} integration={integration} onClose={onClose} />
         )}
@@ -65,7 +67,7 @@ function SetupSteps({ def }: { def: IntegrationDef }) {
   return (
     <div className="rounded-[var(--radius)] border border-border bg-surface-subdued p-4">
       <div className="flex items-start justify-between gap-2">
-        <h4 className="text-[13px] font-semibold text-text">Where the credentials come from</h4>
+        <h4 className="text-[13px] font-semibold text-text">{def.oauth ? "How connecting works" : "Where the credentials come from"}</h4>
         {def.setup.docsUrl && (
           <a href={def.setup.docsUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[12px] text-accent hover:underline">
             {def.name} docs <ExternalLink className="h-3 w-3" />
@@ -154,6 +156,37 @@ function ConnectForm({ def, integration, onClose }: { def: IntegrationDef; integ
   );
 }
 
+/** Starts the platform's own sign-in: the server issues a single-use state and the browser follows the consent URL. */
+function OAuthConnect({ def, integration }: { def: IntegrationDef; integration?: Integration }) {
+  const api = useApi();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(integration?.status === "error" && integration.lastError ? integration.lastError : null);
+
+  const start = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api<{ url: string }>(`/api/integrations/${def.id}/authorize`, {});
+      window.location.assign(res.url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not start the sign-in");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <SetupSteps def={def} />
+      {error && <Banner tone="critical">{error}</Banner>}
+      <div className="flex justify-end">
+        <Button variant="primary" icon={<ExternalLink />} onClick={() => void start()} loading={busy}>
+          Connect to {def.name.replace(/ Online$/, "")}
+        </Button>
+      </div>
+    </>
+  );
+}
+
 function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; integration: Integration; onClose: () => void }) {
   const api = useApi();
   const store = useStore();
@@ -205,6 +238,7 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
     run("reconnect", async () => {
       const res = await api<{ integration: Integration }>(`/api/integrations/${def.id}/connect`, { credentials: {}, settings });
       const hooks = res.integration.webhooks?.length ?? 0;
+      if (def.oauth) return `Reconnected · ${res.integration.config?.companyName ?? def.name} still grants access`;
       return res.integration.lastError ? `Reconnected with a warning: ${res.integration.lastError}` : `Reconnected · ${hooks} webhook${hooks === 1 ? "" : "s"} registered`;
     });
 
@@ -228,25 +262,30 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
   if (integration.config?.shop) rows.push({ label: "Store", value: <span className="font-mono text-[12px]">{integration.config.shop}</span> });
   if (integration.config?.siteUrl) rows.push({ label: "Site", value: <span className="font-mono text-[12px]">{integration.config.siteUrl}</span> });
   if (integration.config?.shopName || integration.config?.siteName) rows.push({ label: "Name", value: integration.config.shopName ?? integration.config.siteName });
+  if (integration.config?.companyName) rows.push({ label: "Company", value: integration.config.companyName });
+  if (integration.config?.realmId) rows.push({ label: "Company ID", value: <span className="font-mono text-[12px]">{integration.config.realmId}</span> });
+  if (integration.config?.environment) rows.push({ label: "Environment", value: <Badge tone={integration.config.environment === "sandbox" ? "attention" : "success"}>{integration.config.environment === "sandbox" ? "Sandbox" : "Production"}</Badge> });
   if (integration.config?.account) rows.push({ label: "Account", value: integration.config.account });
   if (integration.config?.mode) rows.push({ label: "Key", value: <Badge tone={integration.config.mode === "test" ? "attention" : "success"}>{integration.config.mode === "test" ? "Test" : "Live"}</Badge> });
   if (integration.config?.currency) rows.push({ label: "Currency", value: integration.config.currency });
   rows.push({ label: "Connected", value: integration.connectedAt ? <span title={formatDateTime(integration.connectedAt)}>{formatRelative(integration.connectedAt)}</span> : "—" });
-  if (def.kind === "channel") rows.push({ label: "Last sync", value: integration.lastSyncAt ? <span title={formatDateTime(integration.lastSyncAt)}>{formatRelative(integration.lastSyncAt)}{integration.lastSyncSummary ? ` · ${integration.lastSyncSummary}` : ""}</span> : <span className="text-text-tertiary">Not yet</span> });
-  rows.push({ label: "Webhooks", value: integration.webhooks?.length ? `${integration.webhooks.length} registered (${integration.webhooks.map((w) => w.topic).join(", ")})` : <span className="text-text-tertiary">None</span> });
+  if (def.kind === "channel" || def.kind === "accounting") rows.push({ label: "Last sync", value: integration.lastSyncAt ? <span title={formatDateTime(integration.lastSyncAt)}>{formatRelative(integration.lastSyncAt)}{integration.lastSyncSummary ? ` · ${integration.lastSyncSummary}` : ""}</span> : <span className="text-text-tertiary">Not yet</span> });
+  if (def.kind !== "accounting") rows.push({ label: "Webhooks", value: integration.webhooks?.length ? `${integration.webhooks.length} registered (${integration.webhooks.map((w) => w.topic).join(", ")})` : <span className="text-text-tertiary">None</span> });
 
   return (
     <>
       <DescriptionList rows={rows} />
       {message && <Banner tone={message.tone}>{message.text}</Banner>}
-      {def.kind === "channel" && (
+      {(def.kind === "channel" || def.kind === "accounting") && (
         <div className="flex flex-wrap gap-2">
           <Button variant="primary" icon={<RefreshCw />} onClick={() => void sync()} loading={busy === "sync"} disabled={busy !== null}>
             Sync now
           </Button>
-          <Button icon={<ArrowRight />} onClick={() => void push()} loading={busy === "push"} disabled={busy !== null}>
-            Push to store
-          </Button>
+          {def.kind === "channel" && (
+            <Button icon={<ArrowRight />} onClick={() => void push()} loading={busy === "push"} disabled={busy !== null}>
+              Push to store
+            </Button>
+          )}
         </div>
       )}
       {def.kind === "carrier" && (
@@ -275,15 +314,15 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
             Reconnect
           </Button>
           <Button size="sm" variant="plain" onClick={() => setReplace((v) => !v)}>
-            {replace ? "Keep current credentials" : "Replace credentials"}
+            {replace ? (def.oauth ? "Keep this company" : "Keep current credentials") : def.oauth ? "Connect a different company" : "Replace credentials"}
           </Button>
         </div>
         <Button size="sm" icon={<Unplug />} className="text-critical" onClick={() => setConfirm(true)} disabled={busy !== null}>
           Disconnect
         </Button>
       </div>
-      {replace && <ConnectForm def={def} integration={integration} onClose={onClose} />}
-      <ConfirmDialog open={confirm} onClose={() => setConfirm(false)} onConfirm={() => void disconnect()} destructive title={`Disconnect ${def.name}?`} confirmLabel="Disconnect" loading={busy === "disconnect"} message={<>The stored credentials are deleted and the webhooks removed. Items, orders and shipments already in cumulusOS stay as they are.</>} />
+      {replace && (def.oauth ? <OAuthConnect def={def} /> : <ConnectForm def={def} integration={integration} onClose={onClose} />)}
+      <ConfirmDialog open={confirm} onClose={() => setConfirm(false)} onConfirm={() => void disconnect()} destructive title={`Disconnect ${def.name}?`} confirmLabel="Disconnect" loading={busy === "disconnect"} message={def.oauth ? <>Access is revoked with {def.name} and the stored tokens are deleted. Items already in cumulusOS stay as they are.</> : <>The stored credentials are deleted and the webhooks removed. Items, orders and shipments already in cumulusOS stay as they are.</>} />
     </>
   );
 }

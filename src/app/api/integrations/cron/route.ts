@@ -2,6 +2,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import type { Integration } from "@/lib/types";
 import { CARRIERS, isCarrier } from "@/lib/integrations/carriers";
 import { isChannel, runChannelSync } from "@/lib/integrations/channelSync";
+import { runQuickbooksSync } from "@/lib/integrations/quickbooksSync";
 import { readSecrets, requireServiceAccount, systemContext } from "@/lib/integrations/server";
 import { applyTracking } from "@/lib/integrations/tracking";
 import { adminApp } from "@/lib/mcp/adminStore";
@@ -37,6 +38,9 @@ export async function GET(req: Request) {
       try {
         if (isChannel(integration.id)) {
           const result = await runChannelSync(ctx, integration, secrets, {});
+          report.push({ workspace: wsRef.id, integration: integration.id, outcome: result.summary });
+        } else if (integration.id === "quickbooks" && integration.settings?.syncProducts !== false) {
+          const result = await runQuickbooksSync(ctx, integration, secrets);
           report.push({ workspace: wsRef.id, integration: integration.id, outcome: result.summary });
         } else if (isCarrier(integration.id) && secrets.token) {
           const outcome = await refreshTracking(ctx, integration.id, secrets.token);

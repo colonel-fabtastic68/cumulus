@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import type { IntegrationId } from "@/lib/types";
 import { useCollection } from "@/lib/store/provider";
 import { useSession } from "@/lib/session";
 import { useAgent } from "@/components/agent/AgentProvider";
-import { Banner, Page } from "@/components/ui";
+import { Banner, Page, QueryParamEffect, useToast } from "@/components/ui";
 import { AvailableNowCards, INTEGRATIONS, IntegrationCard, IntegrationSetupModal, integrationDef } from "@/components/workspace/integrations";
 
 function SectionHeading({ title, description }: { title: string; description?: string }) {
@@ -21,7 +21,20 @@ export default function IntegrationsPage() {
   const integrations = useCollection("integrations");
   const { mode } = useSession();
   const { setPageContext } = useAgent();
+  const toast = useToast();
   const [setupId, setSetupId] = useState<IntegrationId | null>(null);
+
+  // Landing back from a platform's consent screen (?connected=quickbooks or ?error=…).
+  const onConnected = useCallback(
+    (id: string) => {
+      const def = integrationDef(id);
+      if (!def) return;
+      toast(`${def.name} connected`, "success");
+      setSetupId(def.id);
+    },
+    [toast],
+  );
+  const onError = useCallback((message: string) => toast(message, "critical"), [toast]);
 
   useEffect(() => {
     setPageContext({ page: "Integrations" });
@@ -31,10 +44,15 @@ export default function IntegrationsPage() {
   const setupDef = integrationDef(setupId);
   const channels = INTEGRATIONS.filter((d) => d.kind === "channel");
   const carriers = INTEGRATIONS.filter((d) => d.kind === "carrier");
+  const accounting = INTEGRATIONS.filter((d) => d.kind === "accounting");
   const roadmap = INTEGRATIONS.filter((d) => d.kind === "roadmap");
 
   return (
     <Page title="Integrations" subtitle="Connect the places your inventory already lives">
+      <Suspense>
+        <QueryParamEffect param="connected" onValue={onConnected} />
+        <QueryParamEffect param="error" onValue={onError} />
+      </Suspense>
       <div className="flex flex-col gap-5">
         {mode !== "firestore" && (
           <Banner tone="info" title="Live connections run in the hosted version">
@@ -55,6 +73,15 @@ export default function IntegrationsPage() {
           <SectionHeading title="Shipping carriers" description="Connect one aggregator and every carrier on that account shows up when you ship an order: rates, labels and tracking." />
           <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2">
             {carriers.map((def) => (
+              <IntegrationCard key={def.id} def={def} integration={byId.get(def.id)} onSetUp={() => setSetupId(def.id)} />
+            ))}
+          </div>
+        </section>
+
+        <section>
+          <SectionHeading title="Accounting" description="Products and Services in by SKU, with sales prices and purchase costs, so items here match the books." />
+          <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2">
+            {accounting.map((def) => (
               <IntegrationCard key={def.id} def={def} integration={byId.get(def.id)} onSetUp={() => setSetupId(def.id)} />
             ))}
           </div>
