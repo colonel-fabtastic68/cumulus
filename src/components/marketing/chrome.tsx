@@ -67,6 +67,9 @@ export function MarketingFooter() {
           <Link href="/terms" className="hover:text-text">
             Terms of service
           </Link>
+          <Link href="/eula" className="hover:text-text">
+            Licence agreement
+          </Link>
         </nav>
       </div>
       <div className="mx-auto max-w-[1120px] px-6 pb-8 text-[12px] text-text-tertiary">© {new Date().getFullYear()} cumulusOS</div>
