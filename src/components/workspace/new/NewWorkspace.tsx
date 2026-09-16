@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Building2, Check, CreditCard, Lock, LogOut, Sparkles } from "lucide-react";
-import { Badge, Banner, Button, CloudMark, Select, Skeleton, TextField, Toggle, useToast } from "@/components/ui";
+import { Badge, Banner, Button, CloudMark, Select, Skeleton, TextField, useToast } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
 import { accountFetch } from "@/lib/account-fetch";
 import { APP_HOME, signInHref } from "@/lib/auth-routes";
@@ -42,11 +42,10 @@ export function NewWorkspace() {
   const cancelled = params.get("checkout") === "cancelled";
   const [billing, setBilling] = useState<BillingState | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"checkout" | "create" | null>(null);
+  const [busy, setBusy] = useState<"checkout" | "create" | "sample" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState(() => session.profile?.business?.name ?? "");
   const [currency, setCurrency] = useState("USD");
-  const [sample, setSample] = useState(false);
   const [nameError, setNameError] = useState<string | undefined>();
   const confirmed = useRef(false);
 
@@ -91,14 +90,14 @@ export function NewWorkspace() {
     }
   };
 
-  const create = async (e: FormEvent) => {
-    e.preventDefault();
+  const create = async (e: FormEvent | undefined, sample: boolean) => {
+    e?.preventDefault();
     if (!name.trim()) {
       setNameError("Give the company a name.");
       return;
     }
     setNameError(undefined);
-    setBusy("create");
+    setBusy(sample ? "sample" : "create");
     setError(null);
     try {
       const membership = await session.createWorkspace({ name, currency, sample });
@@ -143,14 +142,19 @@ export function NewWorkspace() {
         )}
         <h2 className="text-[16px] font-semibold text-text">Name your workspace</h2>
         <p className="mt-1 text-[13px] text-text-secondary">You become its owner and can invite the team from the Team page, free for every teammate.</p>
-        <form onSubmit={create} noValidate className="mt-5 flex flex-col gap-4">
+        <form onSubmit={(e) => void create(e, false)} noValidate className="mt-5 flex flex-col gap-4">
           <TextField label="Company name" value={name} onChange={(e) => setName(e.target.value)} error={nameError} placeholder="Halcyon Audio" autoComplete="organization" autoFocus />
           <Select label="Currency" value={currency} onChange={(e) => setCurrency(e.target.value)} options={CURRENCIES.map((c) => ({ value: c, label: c }))} />
-          <Toggle label="Start with sample data" help="Loads the Halcyon Audio demo with six months of history. Clear it later from Settings." checked={sample} onChange={setSample} size="sm" />
           {error && <Banner tone="critical">{error}</Banner>}
-          <Button type="submit" variant="primary" size="lg" icon={sample ? <Sparkles /> : <Building2 />} loading={busy === "create"} disabled={busy !== null} className="self-start">
-            Create workspace
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="submit" variant="primary" size="lg" icon={<Building2 />} loading={busy === "create"} disabled={busy !== null}>
+              Create workspace
+            </Button>
+            <Button type="button" size="lg" icon={<Sparkles />} loading={busy === "sample"} disabled={busy !== null} onClick={() => void create(undefined, true)}>
+              Create with sample data
+            </Button>
+          </div>
+          <p className="text-[12.5px] text-text-secondary">Sample data loads the Halcyon Audio demo: parts, BOMs, suppliers, orders and six months of history under your company name. Clear it later from Settings.</p>
         </form>
       </section>
     );
