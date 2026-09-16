@@ -44,7 +44,7 @@ export function NewWorkspace() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"checkout" | "create" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [name, setName] = useState("");
+  const [name, setName] = useState(() => session.profile?.business?.name ?? "");
   const [currency, setCurrency] = useState("USD");
   const [sample, setSample] = useState(false);
   const [nameError, setNameError] = useState<string | undefined>();

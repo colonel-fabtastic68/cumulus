@@ -4,10 +4,10 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import type { FirebaseApp } from "firebase/app";
 import type { User } from "firebase/auth";
 import { getRuntimeConfig } from "@/lib/firebase-config";
-import type { MemberRole, UserProfile, WorkspaceInvite, WorkspaceMembership } from "@/lib/types";
+import type { BusinessIntake, MemberRole, UserProfile, WorkspaceInvite, WorkspaceMembership } from "@/lib/types";
 import { debugLog } from "@/lib/debug";
 import { getFirebaseApp, getFirebaseAuth, readFirebaseConfig } from "@/lib/store/firestore";
-import { acceptInvite as acceptInviteDoc, createInvite as createInviteDoc, createWorkspace as createWorkspaceDoc, hasMembership, loadOrCreateProfile, rememberWorkspace, removeWorkspaceFromProfile, revokeInvite as revokeInviteDoc, subscribeInvitesForEmail, subscribeProfile, subscribeWorkspaceInvites, updateWorkspaceName as updateWorkspaceNameDoc, type CreateWorkspaceOptions } from "@/lib/workspaces";
+import { acceptInvite as acceptInviteDoc, createInvite as createInviteDoc, createWorkspace as createWorkspaceDoc, hasMembership, loadOrCreateProfile, rememberWorkspace, removeWorkspaceFromProfile, revokeInvite as revokeInviteDoc, saveBusinessIntake, subscribeInvitesForEmail, subscribeProfile, subscribeWorkspaceInvites, updateWorkspaceName as updateWorkspaceNameDoc, type CreateWorkspaceOptions } from "@/lib/workspaces";
 
 export type SessionStatus = "loading" | "signed-out" | "no-workspace" | "ready";
 
@@ -25,6 +25,8 @@ export interface SessionUser {
 
 /** Password accounts created from this moment confirm their email with a one-time code. Older accounts are left alone. */
 export const EMAIL_CODES_FROM = "2026-09-15T00:00:00.000Z";
+/** Accounts created from this moment see the short business intake once. */
+export const INTAKE_FROM = "2026-09-16T00:00:00.000Z";
 
 function toSessionUser(user: User): SessionUser {
   return {
@@ -73,6 +75,10 @@ export interface SessionValue {
   forgetWorkspace: (id: string) => Promise<boolean>;
   /** A new password account that still has to enter the emailed one-time code. */
   needsEmailCode: boolean;
+  /** A new account that has not answered (or skipped) the welcome intake yet. */
+  needsIntake: boolean;
+  /** Saves the welcome intake on the profile; the listener clears needsIntake. */
+  saveIntake: (intake: Omit<BusinessIntake, "completedAt">) => Promise<void>;
   /** Reloads the Firebase account, e.g. after its email was verified. */
   refreshAccount: () => Promise<void>;
 }
@@ -99,6 +105,8 @@ const LOCAL_SESSION: SessionValue = {
   updateWorkspaceName: () => {},
   forgetWorkspace: () => Promise.resolve(false),
   needsEmailCode: false,
+  needsIntake: false,
+  saveIntake: () => Promise.resolve(),
   refreshAccount: () => Promise.resolve(),
 };
 
@@ -293,6 +301,15 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
   }, [app]);
 
   const needsEmailCode = !!(getRuntimeConfig().emailCodes && account && !account.isAnonymous && account.passwordAccount && !account.emailVerified && account.createdAt >= EMAIL_CODES_FROM);
+  // Once the email is confirmed, a new account answers the intake before the app opens; the answer lives on the profile.
+  const needsIntake = !!(account && !account.isAnonymous && !needsEmailCode && profile && !profile.guest && !profile.business && account.createdAt >= INTAKE_FROM);
+  const saveIntake = useCallback(
+    async (intake: Omit<BusinessIntake, "completedAt">) => {
+      if (!account) return;
+      await saveBusinessIntake(app, account.uid, intake);
+    },
+    [app, account],
+  );
 
   const updateWorkspaceName = useCallback(
     (id: string, name: string) => {
@@ -339,9 +356,11 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
       updateWorkspaceName,
       forgetWorkspace,
       needsEmailCode,
+      needsIntake,
+      saveIntake,
       refreshAccount,
     }),
-    [app, status, account, profile, workspaces, workspaceId, pendingInvites, error, notice, clearNotice, switchWorkspace, createWorkspace, acceptInvite, createInvite, revokeInvite, subscribeInvites, updateWorkspaceName, forgetWorkspace, needsEmailCode, refreshAccount],
+    [app, status, account, profile, workspaces, workspaceId, pendingInvites, error, notice, clearNotice, switchWorkspace, createWorkspace, acceptInvite, createInvite, revokeInvite, subscribeInvites, updateWorkspaceName, forgetWorkspace, needsEmailCode, needsIntake, saveIntake, refreshAccount],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

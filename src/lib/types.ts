@@ -430,11 +430,25 @@ export interface WorkspaceMembership {
   joinedAt: string;
 }
 
+/** Answers from the short intake shown once to new accounts. */
+export interface BusinessIntake {
+  name: string;
+  industry: string;
+  size: string;
+  /** Integration ids the person expects to use (catalog ids, or "none"). */
+  integrations: string[];
+  /** True when the form was skipped; the fields above are then empty. */
+  skipped?: boolean;
+  completedAt: string;
+}
+
 export interface UserProfile {
   id: ID;
   email: string;
   name: string;
   guest?: boolean;
+  /** Filled in (or skipped) on the welcome screen after sign-up. */
+  business?: BusinessIntake;
   /** Workspaces this account belongs to, by workspace id. */
   workspaces: Record<ID, WorkspaceMembership>;
   lastWorkspaceId?: ID;

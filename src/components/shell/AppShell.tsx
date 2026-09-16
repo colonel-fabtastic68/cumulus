@@ -102,6 +102,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (needsCode) router.replace(`/verify-email?next=${encodeURIComponent(pathname)}`);
   }, [needsCode, pathname, router]);
 
+  // Then, once, the short intake about the business.
+  const needsIntake = mode === "firestore" && !needsCode && session.needsIntake;
+  useEffect(() => {
+    if (needsIntake) router.replace(`/welcome?next=${encodeURIComponent(pathname)}`);
+  }, [needsIntake, pathname, router]);
+
   // Flag a slow Firestore connection so the skeleton never looks frozen.
   useEffect(() => {
     if (mode !== "firestore" || ready || !signedIn) return;
@@ -113,7 +119,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   if (mode === "firestore" && !signedIn) return <LoadingSkeleton />;
 
-  if (needsCode) return <LoadingSkeleton />;
+  if (needsCode || needsIntake) return <LoadingSkeleton />;
 
   // Signed in, but not in any workspace yet: create one or join one you were invited to.
   if (mode === "firestore" && session.status === "no-workspace") {

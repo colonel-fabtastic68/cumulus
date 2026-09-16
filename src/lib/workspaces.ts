@@ -10,7 +10,7 @@ import { getRuntimeConfig } from "@/lib/firebase-config";
 import { sendMagicLink } from "@/lib/auth-link";
 import { getDb, getFirebaseAuth } from "@/lib/store/firestore";
 import { buildSeed, freshWorkspace, seedSettings } from "@/lib/seed";
-import { COLLECTIONS, type ActivityEvent, type Member, type MemberRole, type UserProfile, type WorkspaceInvite, type WorkspaceMembership, type WorkspaceSettings, type WorkspaceSnapshot } from "@/lib/types";
+import { COLLECTIONS, type ActivityEvent, type BusinessIntake, type Member, type MemberRole, type UserProfile, type WorkspaceInvite, type WorkspaceMembership, type WorkspaceSettings, type WorkspaceSnapshot } from "@/lib/types";
 import { newId, nowIso } from "@/lib/utils";
 import { avatarColor } from "@/lib/colors";
 import { AccountApiError, accountFetch } from "@/lib/account-fetch";
@@ -88,6 +88,12 @@ export async function loadOrCreateProfile(app: FirebaseApp, user: User, preferre
 
 export function subscribeProfile(app: FirebaseApp, uid: string, cb: (profile: UserProfile | null) => void): () => void {
   return onSnapshot(doc(db(app), "users", uid), (snap) => cb(snap.exists() ? (snap.data() as UserProfile) : null));
+}
+
+/** Stores the welcome intake (or the fact that it was skipped) on the profile. */
+export async function saveBusinessIntake(app: FirebaseApp, uid: string, intake: Omit<BusinessIntake, "completedAt">): Promise<void> {
+  const business: BusinessIntake = { ...intake, completedAt: nowIso() };
+  await updateDoc(doc(db(app), "users", uid), { business, updatedAt: business.completedAt });
 }
 
 export async function rememberWorkspace(app: FirebaseApp, uid: string, workspaceId: string): Promise<void> {
