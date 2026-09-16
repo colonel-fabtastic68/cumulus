@@ -6,38 +6,19 @@ import { Badge, Button, StatusBadge } from "@/components/ui";
 import { formatRelative } from "@/lib/format";
 import type { IntegrationDef } from "./catalog";
 
-export function IntegrationMark({ def, size = 40 }: { def: IntegrationDef; size?: number }) {
-  return (
-    <span aria-hidden style={{ width: size, height: size, background: def.mark.bg, color: def.mark.fg, fontSize: Math.round(size * (def.letter.length > 1 ? 0.34 : 0.42)) }} className="inline-flex shrink-0 items-center justify-center rounded-[10px] font-semibold leading-none">
-      {def.letter}
-    </span>
-  );
-}
-
 export function IntegrationCard({ def, integration, onSetUp }: { def: IntegrationDef; integration?: Integration; onSetUp: () => void }) {
   const status = integration?.status ?? "not_connected";
   const connected = status === "connected" || status === "error";
   const where = integration?.config?.shop ?? integration?.config?.siteUrl ?? integration?.config?.account ?? Object.values(integration?.config ?? {})[0];
   return (
     <div className="card flex flex-col gap-3 p-4">
-      <div className="flex items-start gap-3">
-        <IntegrationMark def={def} />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-[13.5px] font-semibold text-text">{def.name}</h3>
-            <StatusBadge status={status} />
-            {def.kind === "roadmap" && <Badge tone="default">Roadmap</Badge>}
-          </div>
-          <p className="mt-1 text-[12.5px] leading-[1.45] text-text-secondary">{def.description}</p>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-[13.5px] font-semibold text-text">{def.name}</h3>
+          <StatusBadge status={status} />
+          {def.kind === "roadmap" && <Badge tone="default">Roadmap</Badge>}
         </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-[11.5px] text-text-tertiary">{def.kind === "roadmap" ? "Will sync:" : def.kind === "carrier" ? "Does:" : "Syncs:"}</span>
-        {def.syncs.map((s) => (
-          <Badge key={s} tone="default">
-            {s}
-          </Badge>
-        ))}
+        <p className="mt-1 text-[12.5px] leading-[1.45] text-text-secondary">{def.description}</p>
       </div>
       {integration?.lastError && (
         <p className="flex items-start gap-1.5 text-[12px] text-critical">

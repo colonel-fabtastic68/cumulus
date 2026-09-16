@@ -12,7 +12,6 @@ import { useCurrentUser } from "@/lib/auth";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { nowIso } from "@/lib/utils";
 import { defaultSettings, type IntegrationDef } from "./catalog";
-import { IntegrationMark } from "./IntegrationCard";
 
 /** Gate: mounts the form only while open so its state resets per platform. */
 export function IntegrationSetupModal({ open, onClose, def, integration }: { open: boolean; onClose: () => void; def?: IntegrationDef; integration?: Integration }) {
@@ -34,7 +33,6 @@ function SetupForm({ def, integration, onClose }: { def: IntegrationDef; integra
       size="lg"
       title={
         <span className="inline-flex items-center gap-2">
-          <IntegrationMark def={def} size={24} />
           {connected ? def.name : `Connect ${def.name}`}
           <StatusBadge status={integration?.status ?? "not_connected"} />
         </span>

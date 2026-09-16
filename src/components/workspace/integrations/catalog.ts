@@ -29,12 +29,7 @@ export interface IntegrationDef {
   id: IntegrationId;
   name: string;
   kind: IntegrationKind;
-  /** Letter mark shown in the card avatar. */
-  letter: string;
-  mark: { bg: string; fg: string };
   description: string;
-  /** What the connection syncs or does. */
-  syncs: string[];
   fields: CredentialField[];
   settings?: SettingDef[];
   setup: { steps: string[]; docsUrl?: string };
@@ -47,10 +42,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     id: "shopify",
     name: "Shopify",
     kind: "channel",
-    letter: "S",
-    mark: { bg: "#e6f4ec", fg: "#1f7a4d" },
     description: "Products and variants come in as items keyed by SKU, paid orders become sales orders, and on-hand counts go back to the store so it never oversells.",
-    syncs: ["Products & SKUs", "Orders in", "Stock out", "Webhooks"],
     fields: [
       { key: "shop", label: "Store address", placeholder: "your-store.myshopify.com", help: "The .myshopify.com address from Shopify admin." },
       { key: "accessToken", label: "Admin API access token", placeholder: "shpat_…", secret: true, help: "From the custom app you create in Shopify admin (steps below)." },
@@ -87,10 +79,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     id: "woocommerce",
     name: "WooCommerce",
     kind: "channel",
-    letter: "W",
-    mark: { bg: "#f1e8f7", fg: "#7a3e9d" },
     description: "Products and variations come in by SKU, processing orders become sales orders, and stock quantities are pushed back so the shop stays in step.",
-    syncs: ["Products & SKUs", "Orders in", "Stock out", "Webhooks"],
     fields: [
       { key: "siteUrl", label: "Site URL", placeholder: "https://shop.example.com", help: "Your WordPress site, over https." },
       { key: "consumerKey", label: "Consumer key", placeholder: "ck_…", secret: true },
@@ -122,10 +111,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     id: "shippo",
     name: "Shippo",
     kind: "carrier",
-    letter: "Sh",
-    mark: { bg: "#e8f0fb", fg: "#1f4f9c" },
     description: "One API key for USPS, UPS, FedEx, DHL and the other carriers on your Shippo account: compare rates when shipping an order, buy the label, and track it to the door.",
-    syncs: ["Rate shopping", "Labels", "Tracking"],
     fields: [{ key: "token", label: "API token", placeholder: "shippo_live_… or shippo_test_…", secret: true, help: "A test token buys sample labels and costs nothing; switch to the live token when ready." }],
     setup: { steps: ["In Shippo open Settings → API and generate a token", "Add your carrier accounts under Settings → Carriers (USPS comes built in)", "Paste the token here, then set a ship-from address under Settings → Shipping and scanning"], docsUrl: "https://docs.goshippo.com/docs/guides_general/authentication/" },
   },
@@ -133,10 +119,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     id: "easypost",
     name: "EasyPost",
     kind: "carrier",
-    letter: "E",
-    mark: { bg: "#e9f3f9", fg: "#0b5c8a" },
     description: "Rate-shop and buy labels across the carriers on your EasyPost account, with tracking updates pushed back to each shipment.",
-    syncs: ["Rate shopping", "Labels", "Tracking"],
     fields: [{ key: "token", label: "API key", placeholder: "EZAK… (production) or EZTK… (test)", secret: true, help: "Test keys buy sample labels for free." }],
     setup: { steps: ["In the EasyPost dashboard open Account Settings → API Keys", "Copy the production key (or the test key to try it out)", "Paste it here, then set a ship-from address under Settings → Shipping and scanning"], docsUrl: "https://docs.easypost.com/docs/api-keys" },
   },
@@ -144,10 +127,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     id: "quickbooks",
     name: "QuickBooks",
     kind: "roadmap",
-    letter: "Q",
-    mark: { bg: "#e8f1f8", fg: "#1f5f8b" },
     description: "Match items to Products and Services, keep purchase costs and sales prices aligned, and post inventory value and cost of goods sold to your books.",
-    syncs: ["Products & SKUs", "Costs & prices", "Inventory value"],
     fields: [{ key: "realmId", label: "Company (realm) ID", placeholder: "1234567890", help: "Found under Settings → Account and settings → Billing & subscription. Saved for later; nothing is contacted." }],
     setup: { steps: [] },
     export: {
@@ -160,10 +140,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     id: "square",
     name: "Square",
     kind: "roadmap",
-    letter: "□",
-    mark: { bg: "#f3f3f4", fg: "#303030" },
     description: "Sync the Square item library and per-location counts, and record point-of-sale and online sales as orders that relieve stock.",
-    syncs: ["Item library", "Stock by location", "Sales"],
     fields: [{ key: "location", label: "Location name", placeholder: "Main Street store", help: "The Square location this workspace should mirror. Saved for later; nothing is contacted." }],
     setup: { steps: [] },
     export: {
