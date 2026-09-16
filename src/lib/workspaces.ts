@@ -9,14 +9,12 @@ import { collection, deleteField, doc, getDoc, getDocFromCache, onSnapshot, quer
 import { getRuntimeConfig } from "@/lib/firebase-config";
 import { sendMagicLink } from "@/lib/auth-link";
 import { getDb, getFirebaseAuth } from "@/lib/store/firestore";
-import { buildSeed, freshWorkspace, seedSettings } from "@/lib/seed";
-import { COLLECTIONS, type ActivityEvent, type BusinessIntake, type Member, type MemberRole, type UserProfile, type WorkspaceInvite, type WorkspaceMembership, type WorkspaceSettings, type WorkspaceSnapshot } from "@/lib/types";
+import { type ActivityEvent, type BusinessIntake, type Member, type MemberRole, type UserProfile, type WorkspaceInvite, type WorkspaceMembership, type WorkspaceSettings } from "@/lib/types";
 import { newId, nowIso } from "@/lib/utils";
 import { avatarColor } from "@/lib/colors";
 import { AccountApiError, accountFetch } from "@/lib/account-fetch";
 
 /** Firestore batches take 500 writes; leave headroom. */
-const BATCH_SIZE = 450;
 
 export class WorkspaceError extends Error {}
 
@@ -245,41 +243,19 @@ export interface CreateWorkspaceOptions {
 }
 
 /**
- * Create a workspace owned by the signed-in account. The server creates the
- * workspace, the owner's member record, settings and profile entry, and claims
- * a paid subscription for it; then the starting data is written from here.
+ * Create a workspace owned by the signed-in account. The server writes the
+ * starting data, creates the workspace, the owner's member record, settings
+ * and profile entry, and claims a paid subscription for it, all in one call.
  */
-export async function createWorkspace(app: FirebaseApp, profile: UserProfile, opts: CreateWorkspaceOptions): Promise<WorkspaceMembership> {
+export async function createWorkspace(app: FirebaseApp, _profile: UserProfile, opts: CreateWorkspaceOptions): Promise<WorkspaceMembership> {
   const name = opts.name.trim();
   if (!name) throw new WorkspaceError("Give the company a name.");
-  const now = nowIso();
-  const snapshot: WorkspaceSnapshot = opts.sample ? buildSeed() : freshWorkspace({ companyName: name, currency: opts.currency });
-  const settings: WorkspaceSettings = { ...(snapshot.settings[0] ?? seedSettings()), id: "default", companyName: name, currency: opts.currency };
-
-  let membership: WorkspaceMembership;
   try {
-    ({ membership } = await accountFetch<{ membership: WorkspaceMembership }>(app, "/api/workspaces", { name, currency: opts.currency, settings: clean(settings) }));
+    const { membership } = await accountFetch<{ membership: WorkspaceMembership }>(app, "/api/workspaces", { name, currency: opts.currency, sample: opts.sample === true });
+    return membership;
   } catch (e) {
     throw e instanceof AccountApiError ? new WorkspaceError(e.message) : e;
   }
-
-  const id = membership.id;
-  snapshot.activity = [
-    ...snapshot.activity,
-    { id: newId("act"), type: "settings.updated", message: `${profile.name} created ${name}`, actorId: profile.id, actorName: profile.name, createdAt: now },
-  ];
-  const firestore = db(app);
-  const rest: Array<{ collection: string; row: { id: string } }> = [];
-  for (const col of COLLECTIONS) {
-    if (col === "members" || col === "settings") continue;
-    for (const row of snapshot[col] as Array<{ id: string }>) rest.push({ collection: col, row });
-  }
-  for (let i = 0; i < rest.length; i += BATCH_SIZE) {
-    const batch = writeBatch(firestore);
-    for (const { collection: col, row } of rest.slice(i, i + BATCH_SIZE)) batch.set(doc(firestore, "workspaces", id, col, row.id), clean(row));
-    await batch.commit();
-  }
-  return membership;
 }
 
 /** Plain-language messages for the Firestore errors people hit on these flows. */

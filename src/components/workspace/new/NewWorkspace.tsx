@@ -48,6 +48,8 @@ export function NewWorkspace() {
   const [currency, setCurrency] = useState("USD");
   const [nameError, setNameError] = useState<string | undefined>();
   const confirmed = useRef(false);
+  // Once creation starts the plan is never re-read: the subscription is claimed by the workspace, and a refetch would show the pay step again.
+  const creating = useRef(false);
 
   const here = `${pathname}${params.toString() ? `?${params.toString()}` : ""}`;
   useEffect(() => {
@@ -57,7 +59,7 @@ export function NewWorkspace() {
 
   const ready = session.mode === "firestore" && !!app && (status === "ready" || status === "no-workspace") && !needsEmailCode;
   useEffect(() => {
-    if (!ready || !app) return;
+    if (!ready || !app || creating.current) return;
     let stale = false;
     (async () => {
       try {
@@ -87,6 +89,8 @@ export function NewWorkspace() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setBusy(null);
+      // An unused subscription turned up (e.g. the page was stale): show the naming step instead of the pay step.
+      accountFetch<BillingState>(app, "/api/billing/status").then(setBilling).catch(() => {});
     }
   };
 
@@ -99,11 +103,13 @@ export function NewWorkspace() {
     setNameError(undefined);
     setBusy(sample ? "sample" : "create");
     setError(null);
+    creating.current = true;
     try {
       const membership = await session.createWorkspace({ name, currency, sample });
       toast(`${membership.name} is ready`, "success");
       router.replace(APP_HOME);
     } catch (err) {
+      creating.current = false;
       setError(describeWorkspaceError(err));
       setBusy(null);
     }
