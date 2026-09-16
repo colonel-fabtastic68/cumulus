@@ -42,11 +42,23 @@ export interface AdminSubscription extends Pick<SubscriptionRecord, "id" | "emai
   workspaceName?: string;
 }
 
+export interface AdminFeedback {
+  id: string;
+  email: string;
+  kind: string;
+  message: string;
+  page?: string;
+  workspaceId?: string;
+  workspaceName?: string;
+  createdAt: string;
+}
+
 export interface AdminOverview {
   generatedAt: string;
   accounts: AdminAccount[];
   workspaces: AdminWorkspace[];
   subscriptions: AdminSubscription[];
+  feedback: AdminFeedback[];
 }
 
 async function countOf(db: Firestore, path: string): Promise<number> {
@@ -59,7 +71,7 @@ async function countOf(db: Firestore, path: string): Promise<number> {
 }
 
 export async function buildAdminOverview(db: Firestore): Promise<AdminOverview> {
-  const [users, workspaces, subs] = await Promise.all([db.collection("users").get(), db.collection("workspaces").get(), db.collection("subscriptions").get()]);
+  const [users, workspaces, subs, notes] = await Promise.all([db.collection("users").get(), db.collection("workspaces").get(), db.collection("subscriptions").get(), db.collection("feedback").orderBy("createdAt", "desc").limit(200).get()]);
 
   const accounts: AdminAccount[] = users.docs
     .map((d) => d.data() as UserProfile)
@@ -109,6 +121,10 @@ export async function buildAdminOverview(db: Firestore): Promise<AdminOverview> 
   const nameById = new Map(out.map((w) => [w.id, w.name]));
   for (const s of subscriptions) if (s.workspaceId) s.workspaceName = nameById.get(s.workspaceId);
   subscriptions.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  const feedback: AdminFeedback[] = notes.docs.map((d) => {
+    const f = d.data() as AdminFeedback;
+    return { id: f.id ?? d.id, email: f.email, kind: f.kind, message: f.message, page: f.page, workspaceId: f.workspaceId, workspaceName: f.workspaceId ? nameById.get(f.workspaceId) : undefined, createdAt: f.createdAt };
+  });
 
-  return { generatedAt: new Date().toISOString(), accounts, workspaces: out, subscriptions };
+  return { generatedAt: new Date().toISOString(), accounts, workspaces: out, subscriptions, feedback };
 }

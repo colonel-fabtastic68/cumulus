@@ -35,12 +35,18 @@ function SetupForm({ def, integration, onClose }: { def: IntegrationDef; integra
         <span className="inline-flex items-center gap-2">
           {connected ? def.name : `Connect ${def.name}`}
           <StatusBadge status={integration?.status ?? "not_connected"} />
+          {def.stage === "in_progress" && <Badge tone="attention">In progress</Badge>}
         </span>
       }
       subtitle={live ? (def.kind === "carrier" ? "Rates, labels and tracking for the carriers on your account." : def.oauth ? `You sign in with ${def.name} itself; the access it grants is kept on the server, never in the browser.` : "Credentials are verified with the platform and kept on the server, never in the browser.") : "On the roadmap. Save your details now and use the CSV export until it ships."}
       footer={<Button onClick={onClose}>Close</Button>}
     >
       <div className="flex flex-col gap-4">
+        {def.stage === "in_progress" && live && (
+          <Banner tone="warning" title="Still being finished">
+            {def.name} connects and syncs, but it has not been proven on a customer&apos;s account yet. Use it, and tell us what breaks through Feedback &amp; requests in the sidebar.
+          </Banner>
+        )}
         {!live ? (
           <RoadmapForm def={def} integration={integration} onClose={onClose} />
         ) : mode !== "firestore" ? (

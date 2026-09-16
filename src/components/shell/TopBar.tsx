@@ -1,5 +1,7 @@
 "use client";
 
+import { useModKey } from "@/lib/platform";
+
 import { useEffect, useState } from "react";
 import { Bell, ChevronDown, LogOut, Menu as MenuIcon, ScanBarcode, Search, Settings2, Sparkles, UserRound } from "lucide-react";
 import { Avatar, AvatarStack, Button, IconButton, Kbd, Menu } from "@/components/ui";
@@ -11,6 +13,7 @@ import { useSettings } from "@/lib/store/provider";
 import { GlobalSearch } from "./GlobalSearch";
 
 export function TopBar({ onMenu }: { onMenu?: () => void }) {
+  const mod = useModKey();
   const { mode, switchUser, signOut } = useAuth();
   const user = useCurrentUser();
   const members = useCollection("members");
@@ -60,7 +63,7 @@ export function TopBar({ onMenu }: { onMenu?: () => void }) {
       >
         <Search className="h-3.5 w-3.5" />
         <span className="flex-1 text-left">Search cumulusOS…</span>
-        <Kbd>⌘K</Kbd>
+        <Kbd>{mod}K</Kbd>
       </button>
       <div className="flex-1" />
       {online.length > 0 && (
@@ -69,9 +72,9 @@ export function TopBar({ onMenu }: { onMenu?: () => void }) {
           <span>{online.length} online</span>
         </div>
       )}
-      <Button variant={isOpen ? "primary" : "secondary"} size="md" icon={<Sparkles />} onClick={() => (isOpen ? toggleAgent() : openAgent())} className="hidden sm:inline-flex">Strato <Kbd>⌘J</Kbd>
+      <Button variant={isOpen ? "primary" : "secondary"} size="md" icon={<Sparkles />} onClick={() => (isOpen ? toggleAgent() : openAgent())} className="hidden sm:inline-flex">Strato <Kbd>{mod}J</Kbd>
       </Button>
-      <IconButton variant="plain" size="md" className="text-text-secondary" aria-label="Scan a barcode (⌘/)" title="Scan (⌘/)" onClick={() => setScan({ open: true })} icon={<ScanBarcode />} />
+      <IconButton variant="plain" size="md" className="text-text-secondary" aria-label={`Scan a barcode (${mod}/)`} title={`Scan (${mod}/)`} onClick={() => setScan({ open: true })} icon={<ScanBarcode />} />
       <IconButton variant="plain" size="md" className="text-text-secondary" aria-label="Activity" href="/activity" icon={<Bell />} />
       <Menu
         trigger={

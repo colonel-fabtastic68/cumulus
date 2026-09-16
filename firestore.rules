@@ -78,6 +78,9 @@ service cloud.firestore {
     match /oauthStates/{state} {
       allow read, write: if false;
     }
+    match /feedback/{noteId} {
+      allow read, write: if false;
+    }
     match /subscriptions/{subscriptionId} {
       allow read, write: if false;
     }

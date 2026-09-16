@@ -34,6 +34,8 @@ export interface IntegrationDef {
   settings?: SettingDef[];
   /** Connects by sending the browser to the platform's consent screen instead of pasting credentials. */
   oauth?: boolean;
+  /** Live connections are proven with real stores; the rest connect but are still being finished. */
+  stage?: "live" | "in_progress";
   setup: { steps: string[]; docsUrl?: string };
   /** CSV fallback for product data. */
   export?: { steps: string[]; headers: string[]; note: string };
@@ -44,6 +46,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     id: "shopify",
     name: "Shopify",
     kind: "channel",
+    stage: "in_progress",
     description: "Products and variants come in as items keyed by SKU, paid orders become sales orders, and on-hand counts go back to the store so it never oversells.",
     fields: [
       { key: "shop", label: "Store address", placeholder: "your-store.myshopify.com", help: "The .myshopify.com address from Shopify admin." },
@@ -81,6 +84,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     id: "woocommerce",
     name: "WooCommerce",
     kind: "channel",
+    stage: "live",
     description: "Products and variations come in by SKU, processing orders become sales orders, and stock quantities are pushed back so the shop stays in step.",
     fields: [
       { key: "siteUrl", label: "Site URL", placeholder: "https://shop.example.com", help: "Your WordPress site, over https." },
@@ -113,6 +117,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     id: "shippo",
     name: "Shippo",
     kind: "carrier",
+    stage: "in_progress",
     description: "One API key for USPS, UPS, FedEx, DHL and the other carriers on your Shippo account: compare rates when shipping an order, buy the label, and track it to the door.",
     fields: [{ key: "token", label: "API token", placeholder: "shippo_live_… or shippo_test_…", secret: true, help: "A test token buys sample labels and costs nothing; switch to the live token when ready." }],
     setup: { steps: ["In Shippo open Settings → API and generate a token", "Add your carrier accounts under Settings → Carriers (USPS comes built in)", "Paste the token here, then set a ship-from address under Settings → Shipping and scanning"], docsUrl: "https://docs.goshippo.com/docs/guides_general/authentication/" },
@@ -121,6 +126,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     id: "easypost",
     name: "EasyPost",
     kind: "carrier",
+    stage: "in_progress",
     description: "Rate-shop and buy labels across the carriers on your EasyPost account, with tracking updates pushed back to each shipment.",
     fields: [{ key: "token", label: "API key", placeholder: "EZAK… (production) or EZTK… (test)", secret: true, help: "Test keys buy sample labels for free." }],
     setup: { steps: ["In the EasyPost dashboard open Account Settings → API Keys", "Copy the production key (or the test key to try it out)", "Paste it here, then set a ship-from address under Settings → Shipping and scanning"], docsUrl: "https://docs.easypost.com/docs/api-keys" },
@@ -129,6 +135,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     id: "quickbooks",
     name: "QuickBooks Online",
     kind: "accounting",
+    stage: "in_progress",
     oauth: true,
     description: "Products and Services come in as items by SKU with their sales price, purchase cost and reorder point, and each item remembers its QuickBooks id so costs and books line up.",
     fields: [],

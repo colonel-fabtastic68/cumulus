@@ -17,6 +17,8 @@ export function IntegrationCard({ def, integration, onSetUp }: { def: Integratio
           <h3 className="text-[13.5px] font-semibold text-text">{def.name}</h3>
           <StatusBadge status={status} />
           {def.kind === "roadmap" && <Badge tone="default">Roadmap</Badge>}
+          {def.stage === "in_progress" && <Badge tone="attention">In progress</Badge>}
+          {def.stage === "live" && <Badge tone="success">Live</Badge>}
           {connected && integration?.config?.environment === "sandbox" && <Badge tone="attention">Sandbox</Badge>}
         </div>
         <p className="mt-1 text-[12.5px] leading-[1.45] text-text-secondary">{def.description}</p>

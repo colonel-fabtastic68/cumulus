@@ -9,7 +9,7 @@ import { accountFetch } from "@/lib/account-fetch";
 import { APP_HOME, signInHref } from "@/lib/auth-routes";
 import { formatDate, formatRelative } from "@/lib/format";
 import { useSession } from "@/lib/session";
-import type { AdminAccount, AdminOverview, AdminSubscription, AdminWorkspace } from "@/lib/server/admin";
+import type { AdminAccount, AdminFeedback, AdminOverview, AdminSubscription, AdminWorkspace } from "@/lib/server/admin";
 
 /** Founder's read-only view of every account, workspace and subscription (ADMIN_EMAILS on the server decides who may open it). */
 export function AdminView() {
@@ -123,6 +123,14 @@ function Overview({ data, open, onOpen, selected }: { data: AdminOverview; open:
     { key: "created", header: "Started", render: (s) => <span className="text-text-secondary">{formatDate(s.createdAt)}</span>, sortValue: (s) => s.createdAt },
   ];
 
+  const feedbackColumns: Column<AdminFeedback>[] = [
+    { key: "kind", header: "Kind", render: (f) => <Badge tone={f.kind === "bug" ? "critical" : f.kind === "feature" ? "info" : "default"}>{f.kind === "feature" ? "feature request" : f.kind}</Badge>, sortValue: (f) => f.kind, width: "140px" },
+    { key: "message", header: "Message", render: (f) => <span className="whitespace-pre-wrap text-text">{f.message}</span> },
+    { key: "from", header: "From", render: (f) => <span className="text-text-secondary">{f.email}{f.workspaceName ? ` · ${f.workspaceName}` : ""}</span>, sortValue: (f) => f.email },
+    { key: "page", header: "Page", render: (f) => <span className="font-mono text-[11.5px] text-text-tertiary">{f.page ?? "—"}</span> },
+    { key: "when", header: "When", render: (f) => <span className="text-text-secondary">{formatRelative(f.createdAt)}</span>, sortValue: (f) => f.createdAt },
+  ];
+
   return (
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -136,6 +144,11 @@ function Overview({ data, open, onOpen, selected }: { data: AdminOverview; open:
         <Heading title="Workspaces" hint="Click a row for members, connections and plan." />
         <Table rows={data.workspaces} columns={workspaceColumns} rowKey={(w) => w.id} onRowClick={(w) => onOpen(w.id)} rowClassName={(w) => (w.id === open ? "bg-surface-selected" : "")} defaultSort={{ key: "created", dir: "desc" }} dense emptyState="No workspaces yet." />
         {selected && <WorkspaceDetail w={selected} />}
+      </section>
+
+      <section>
+        <Heading title="Feedback and requests" hint="Sent from the sidebar chip. Newest first." />
+        <Table rows={data.feedback} columns={feedbackColumns} rowKey={(f) => f.id} defaultSort={{ key: "when", dir: "desc" }} dense emptyState="Nothing sent yet." />
       </section>
 
       <section>

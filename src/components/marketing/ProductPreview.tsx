@@ -1,5 +1,7 @@
 "use client";
 
+import { useModKey } from "@/lib/platform";
+
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { AlertTriangle, Boxes, ClipboardList, Eye, FileBarChart2, Hammer, Home, PackageCheck, Plus, RotateCcw, Search, ShoppingCart, Sparkles, Truck } from "lucide-react";
 import { Badge, Button, CloudMark, Kbd, SimpleTable, Toggle } from "@/components/ui";
@@ -39,6 +41,7 @@ function nextTab(id: TabId): TabId {
  * stops while hovered, focused, off-screen, or under prefers-reduced-motion.
  */
 export function ProductPreview({ className }: { className?: string }) {
+  const mod = useModKey();
   const [active, setActive] = useState<TabId>("inventory");
   const [paused, setPaused] = useState(false);
   const [inView, setInView] = useState(false);
@@ -102,11 +105,11 @@ export function ProductPreview({ className }: { className?: string }) {
           <div className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-sm)] border border-border bg-surface px-3 text-text-tertiary shadow-[var(--shadow-100)] sm:max-w-sm">
             <Search className="h-3.5 w-3.5" />
             <span className="flex-1 truncate text-left">Search items, orders, suppliers</span>
-            <Kbd>⌘K</Kbd>
+            <Kbd>{mod}K</Kbd>
           </div>
           <div className="ml-auto hidden items-center gap-2 sm:flex">
             <Button variant="primary" size="md" icon={<Sparkles />}>
-              Strato <Kbd>⌘J</Kbd>
+              Strato <Kbd>{mod}J</Kbd>
             </Button>
             <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#1f5f8b] text-[11px] font-semibold text-white">MO</span>
           </div>

@@ -11,6 +11,7 @@ import { isLowStock } from "@/lib/inventory";
 import { useSession } from "@/lib/session";
 import { APP_HOME } from "@/lib/auth-routes";
 import { isChildNavActive, isNavActive, NAV, NAV_SECONDARY, type NavItem } from "./nav";
+import { FeedbackChip } from "./FeedbackChip";
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
@@ -140,6 +141,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <div className="mt-4 mb-1 px-2.5 text-[12px] font-[550] text-text-secondary">Workspace</div>
         {NAV_SECONDARY.map(renderLink)}
       </nav>
+      <FeedbackChip />
       <div className="flex items-center gap-1.5 border-t border-border px-4 py-2 text-[11px] text-text-tertiary" title="Hold Shift and press the up or down arrow to move between pages">
         <Kbd>⇧</Kbd>
         <Kbd>↑</Kbd>
