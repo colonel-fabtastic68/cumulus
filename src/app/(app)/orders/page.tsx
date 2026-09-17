@@ -1,13 +1,15 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { Plus } from "lucide-react";
-import type { SalesOrder } from "@/lib/types";
+import { BookmarkPlus, ChevronDown, Plus, Trash2 } from "lucide-react";
+import type { OrderTemplate, SalesOrder } from "@/lib/types";
 import { cancelOrder } from "@/lib/inventory";
+import { deleteOrderTemplate } from "@/lib/orderTemplates";
+import { formatDate, pluralize } from "@/lib/format";
 import { useCollection, useItemsById, useStore } from "@/lib/store/provider";
 import { canWrite, useCurrentUser } from "@/lib/auth";
 import { useAgent } from "@/components/agent/AgentProvider";
-import { Button, ConfirmDialog, Page, QueryParamEffect, useToast } from "@/components/ui";
+import { Button, ConfirmDialog, EmptyState, Menu, Modal, Page, QueryParamEffect, useToast } from "@/components/ui";
 import { NewOrderModal, OrderDetailModal, OrderStats, OrdersTable, ShipOrderModal } from "@/components/orders";
 
 export default function OrdersPage() {
@@ -20,6 +22,17 @@ export default function OrdersPage() {
   const { setPageContext } = useAgent();
 
   const [creating, setCreating] = useState(false);
+  const templates = useCollection("orderTemplates");
+  const [templateId, setTemplateId] = useState<string | null>(null);
+  const [manageTemplates, setManageTemplates] = useState(false);
+  const [deletingTemplate, setDeletingTemplate] = useState<OrderTemplate | null>(null);
+  const sortedTemplates = useMemo(() => [...templates].sort((a, b) => a.name.localeCompare(b.name)), [templates]);
+  const template = useMemo(() => (templateId ? (templates.find((t) => t.id === templateId) ?? null) : null), [templates, templateId]);
+  const startFromTemplate = (id: string) => {
+    setManageTemplates(false);
+    setTemplateId(id);
+    setCreating(true);
+  };
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<SalesOrder | null>(null);
   const [shipTarget, setShipTarget] = useState<SalesOrder | null>(null);
@@ -85,7 +98,42 @@ export default function OrdersPage() {
   ) : undefined;
 
   return (
-    <Page title="Orders" subtitle="Sales orders relieve stock when shipped" primaryAction={newOrderButton}>
+    <Page
+      title="Orders"
+      subtitle="Sales orders relieve stock when shipped"
+      primaryAction={newOrderButton}
+      secondaryActions={
+        writable ? (
+          <Menu
+            align="right"
+            trigger={
+              <Button icon={<BookmarkPlus />} iconRight={<ChevronDown />}>
+                From template
+              </Button>
+            }
+            items={[
+              ...(sortedTemplates.length
+                ? sortedTemplates.map((t) => ({
+                    label: (
+                      <span className="block min-w-0">
+                        <span className="block truncate">{t.name}</span>
+                        <span className="block text-[11px] text-text-tertiary">
+                          {t.customer ? `${t.customer} · ` : ""}
+                          {pluralize(t.lines.length, "line")}
+                          {t.description ? ` · ${t.description}` : ""}
+                        </span>
+                      </span>
+                    ),
+                    onSelect: () => startFromTemplate(t.id),
+                  }))
+                : [{ label: <span className="text-text-tertiary">No templates yet. Open New order and choose “Save as template”.</span>, disabled: true }]),
+              "divider" as const,
+              { label: "Manage templates", onSelect: () => setManageTemplates(true) },
+            ]}
+          />
+        ) : undefined
+      }
+    >
       {/* "?highlight=<orderId>" opens that order, also when navigating here while already on the page. */}
       <Suspense fallback={null}>
         <QueryParamEffect param="highlight" onValue={setSelectedId} />
@@ -96,7 +144,53 @@ export default function OrdersPage() {
         <OrdersTable orders={orders} canWrite={writable} busyId={busyId} onSelect={(o) => setSelectedId(o.id)} onFulfil={fulfil} onCancel={requestCancel} onNew={writable ? () => setCreating(true) : undefined} />
       </div>
 
-      <NewOrderModal open={creating} onClose={() => setCreating(false)} onCreated={(order) => setSelectedId(order.id)} />
+      <NewOrderModal
+        open={creating}
+        template={template}
+        onClose={() => {
+          setCreating(false);
+          setTemplateId(null);
+        }}
+        onCreated={(order) => setSelectedId(order.id)}
+      />
+      <Modal open={manageTemplates} onClose={() => setManageTemplates(false)} size="md" title="Order templates" subtitle="Saved customers, lines and notes. Start an order from one and adjust it." footer={<Button onClick={() => setManageTemplates(false)}>Close</Button>}>
+        {sortedTemplates.length === 0 ? (
+          <EmptyState icon={<BookmarkPlus />} title="No templates yet" description="Open New order, fill it in, and choose “Save as template” in the footer." />
+        ) : (
+          <ul className="divide-y divide-border">
+            {sortedTemplates.map((t) => (
+              <li key={t.id} className="flex items-center gap-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[13px] font-medium text-text">{t.name}</div>
+                  <div className="truncate text-[12px] text-text-secondary">
+                    {t.customer ? `${t.customer} · ` : ""}
+                    {pluralize(t.lines.length, "line")} · saved {formatDate(t.updatedAt)}
+                    {t.description ? ` · ${t.description}` : ""}
+                  </div>
+                </div>
+                <Button size="sm" onClick={() => startFromTemplate(t.id)}>
+                  Use
+                </Button>
+                <Button size="sm" variant="plain" icon={<Trash2 />} className="text-critical" onClick={() => setDeletingTemplate(t)} aria-label={`Delete ${t.name}`} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </Modal>
+      <ConfirmDialog
+        open={!!deletingTemplate}
+        onClose={() => setDeletingTemplate(null)}
+        destructive
+        title={`Delete template “${deletingTemplate?.name}”?`}
+        confirmLabel="Delete"
+        onConfirm={async () => {
+          if (!deletingTemplate) return;
+          await deleteOrderTemplate(store, deletingTemplate.id);
+          toast("Template deleted", "success");
+          setDeletingTemplate(null);
+        }}
+        message={<>Orders already created from it are not affected.</>}
+      />
 
       <OrderDetailModal order={selected} onClose={() => setSelectedId(null)} canWrite={writable} busy={!!selected && busyId === selected.id} onFulfil={fulfil} onCancel={requestCancel} />
 

@@ -226,6 +226,43 @@ input[type="number"]::-webkit-outer-spin-button {
 .animate-in {
   animation: fade-in 160ms ease-out;
 }
+/* Dropdowns and disclosure lists: a short settle from just above their resting place. */
+.animate-menu {
+  transform-origin: top;
+  animation: menu-in 170ms cubic-bezier(0.2, 0, 0, 1);
+}
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* Every close control: a generous target with a soft red ring, so it reads as "dismiss" at a glance. */
+.btn-close {
+  display: inline-flex;
+  height: 36px;
+  width: 36px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid rgba(229, 28, 0, 0.35);
+  background: var(--surface);
+  color: var(--critical);
+  transition: background-color 100ms, border-color 100ms;
+}
+.btn-close:hover {
+  background: var(--critical-soft);
+  border-color: rgba(229, 28, 0, 0.6);
+}
+.btn-close svg {
+  height: 18px;
+  width: 18px;
+}
 @keyframes fade-in {
   from {
     opacity: 0;

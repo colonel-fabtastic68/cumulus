@@ -256,6 +256,21 @@ export interface SalesOrder {
   createdBy: string;
 }
 
+/** A saved order to start similar orders from: customer, lines and note. */
+export interface OrderTemplate {
+  id: ID;
+  name: string;
+  description?: string;
+  customer?: string;
+  customerEmail?: string;
+  shipTo?: Address;
+  lines: Array<{ itemId: ID; qty: number; unitPrice?: number }>;
+  note?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+}
+
 export type RmaStatus = "open" | "inspecting" | "restocked" | "refunded" | "scrapped";
 export type RmaCondition = "good" | "damaged" | "unknown";
 export type RmaDisposition = "restock" | "refund" | "scrap";
@@ -771,6 +786,7 @@ export interface CollectionMap {
   quotes: Quote;
   channelTombstones: ChannelTombstone;
   quoteTemplates: QuoteTemplate;
+  orderTemplates: OrderTemplate;
 }
 
 export type CollectionName = keyof CollectionMap;
@@ -795,6 +811,7 @@ export const COLLECTIONS: CollectionName[] = [
   "quotes",
   "channelTombstones",
   "quoteTemplates",
+  "orderTemplates",
 ];
 
 /** A full snapshot of a workspace. Used for seed data, export and import. */

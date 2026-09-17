@@ -50,8 +50,9 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             <span className="flex-1">{n.label}</span>
             <ChevronDown className={cn("h-3.5 w-3.5 text-text-tertiary transition-transform", active ? "rotate-0" : "-rotate-90")} />
           </Link>
-          {active &&
-            n.children.map((c) => {
+          {active && (
+            <div className="animate-menu flex flex-col gap-0.5">
+            {n.children.map((c) => {
               const ChildIcon = c.icon;
               const childActive = isChildNavActive(c, n.children!, pathname);
               return (
@@ -70,6 +71,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                 </Link>
               );
             })}
+            </div>
+          )}
         </div>
       );
     }

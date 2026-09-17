@@ -4,7 +4,6 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { IconButton } from "./Button";
 
 /** Open dialogs, innermost last. Only the topmost one reacts to Escape. */
 const dialogStack: string[] = [];
@@ -88,9 +87,9 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
               {title && <h2 id={`${id}-title`} className="text-[16px] font-[650] leading-6 text-text">{title}</h2>}
               {subtitle && <p className="mt-0.5 text-[12.5px] text-text-secondary">{subtitle}</p>}
             </div>
-            <IconButton variant="plain" size="sm" onClick={onClose} aria-label="Close" className="text-text-secondary">
-              <X className="h-4 w-4" />
-            </IconButton>
+            <button type="button" onClick={onClose} aria-label="Close" title="Close" className="btn-close">
+              <X />
+            </button>
           </div>
         )}
         <div className="px-5 py-4">{children}</div>
@@ -117,9 +116,9 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
           </div>
           <div className="flex items-center gap-1">
             {headerActions}
-            <IconButton variant="plain" size="sm" onClick={onClose} aria-label="Close" className="text-text-secondary">
-              <X className="h-4 w-4" />
-            </IconButton>
+            <button type="button" onClick={onClose} aria-label="Close" title="Close" className="btn-close">
+              <X />
+            </button>
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>

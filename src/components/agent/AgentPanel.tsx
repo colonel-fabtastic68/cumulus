@@ -327,9 +327,9 @@ export function AgentChat({ onClose, pending, consumePending, pendingSession, co
         <HeaderButton label="New conversation" tone="solid" onClick={newChat}>
           <Plus />
         </HeaderButton>
-        <HeaderButton label="Close" onClick={onClose}>
+        <button type="button" aria-label="Close" title="Close" onClick={onClose} className="btn-close">
           <X />
-        </HeaderButton>
+        </button>
       </div>
       )}
 

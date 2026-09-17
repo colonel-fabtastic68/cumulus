@@ -1,14 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { MapPin, Plus, Trash2 } from "lucide-react";
-import type { Address, Item, OrderSource, SalesOrder } from "@/lib/types";
+import { BookmarkPlus, MapPin, Plus, Trash2 } from "lucide-react";
+import type { Address, Item, OrderSource, OrderTemplate, SalesOrder } from "@/lib/types";
 import { createOrder, InventoryError, priceForQty } from "@/lib/inventory";
 import { useCollection, useSettings, useStore } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
 import { formatMoney, formatQty } from "@/lib/format";
 import { cn, newId, round, sum, uniq } from "@/lib/utils";
 import { Button, Checkbox, FormGrid, IconButton, Modal, Select, TextArea, TextField, useToast } from "@/components/ui";
+import { saveOrderTemplate } from "@/lib/orderTemplates";
 import { ItemPicker } from "@/components/inventory";
 import { currencySymbol } from "./orderUtils";
 
@@ -16,12 +17,14 @@ interface NewOrderModalProps {
   open: boolean;
   onClose: () => void;
   onCreated?: (order: SalesOrder) => void;
+  /** Start pre-filled from a saved template. */
+  template?: OrderTemplate | null;
 }
 
 /** Mounts the form only while open so every opening starts from a clean state. */
 export function NewOrderModal(props: NewOrderModalProps) {
   if (!props.open) return null;
-  return <NewOrderForm {...props} />;
+  return <NewOrderForm key={props.template?.id ?? "new"} {...props} />;
 }
 
 interface LineState {
@@ -41,22 +44,53 @@ const SOURCE_OPTIONS: Array<{ value: OrderSource; label: string }> = [
   { value: "woocommerce", label: "WooCommerce" },
 ];
 
-function NewOrderForm({ open, onClose, onCreated }: NewOrderModalProps) {
+function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps) {
   const store = useStore();
   const user = useCurrentUser();
   const toast = useToast();
   const orders = useCollection("orders");
+  const allItems = useCollection("items");
   const { currency } = useSettings();
   const symbol = currencySymbol(currency);
 
-  const [customer, setCustomer] = useState("");
-  const [customerEmail, setCustomerEmail] = useState("");
-  const [addressOpen, setAddressOpen] = useState(false);
-  const [shipTo, setShipTo] = useState<Address>({ street1: "", city: "", state: "", zip: "", country: "US" });
+  const [customer, setCustomer] = useState(template?.customer ?? "");
+  const [customerEmail, setCustomerEmail] = useState(template?.customerEmail ?? "");
+  const [addressOpen, setAddressOpen] = useState(!!template?.shipTo);
+  const [shipTo, setShipTo] = useState<Address>(template?.shipTo ?? { street1: "", city: "", state: "", zip: "", country: "US" });
   const setA = (k: keyof Address) => (e: React.ChangeEvent<HTMLInputElement>) => setShipTo((a) => ({ ...a, [k]: e.target.value }));
   const [source, setSource] = useState<OrderSource>("manual");
-  const [lines, setLines] = useState<LineState[]>(() => [newLine()]);
-  const [note, setNote] = useState("");
+  // Template lines find their items by id; the price is the template's, else today's price for that quantity.
+  const [lines, setLines] = useState<LineState[]>(() => {
+    if (!template) return [newLine()];
+    const fromTemplate = template.lines.flatMap((l) => {
+      const item = allItems.find((i) => i.id === l.itemId);
+      if (!item) return [];
+      const price = l.unitPrice ?? priceForQty(item, l.qty);
+      return [{ key: newId("ln"), item, qty: String(l.qty), unitPrice: price === undefined ? "" : String(price), priceTouched: l.unitPrice !== undefined }];
+    });
+    return fromTemplate.length ? fromTemplate : [newLine()];
+  });
+  const [note, setNote] = useState(template?.note ?? "");
+  const [templateModal, setTemplateModal] = useState(false);
+  const [templateName, setTemplateName] = useState(template?.name ?? "");
+  const [templateNote, setTemplateNote] = useState(template?.description ?? "");
+  const [savingTemplate, setSavingTemplate] = useState(false);
+
+  const saveTemplate = async () => {
+    const chosen = lines.filter((l) => l.item && Number(l.qty) > 0);
+    if (!templateName.trim() || chosen.length === 0) return;
+    setSavingTemplate(true);
+    try {
+      const address = shipTo.street1.trim() ? { ...shipTo, country: shipTo.country.trim().toUpperCase() || "US" } : undefined;
+      const t = await saveOrderTemplate(store, user, { name: templateName, description: templateNote, customer, customerEmail, shipTo: address, note, lines: chosen.map((l) => ({ itemId: l.item!.id, qty: Number(l.qty), unitPrice: l.priceTouched && l.unitPrice !== "" ? Number(l.unitPrice) : undefined })) }, template?.id);
+      toast(`Saved template “${t.name}”`, "success");
+      setTemplateModal(false);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not save the template", "critical");
+    } finally {
+      setSavingTemplate(false);
+    }
+  };
   const [shipNow, setShipNow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -139,10 +173,13 @@ function NewOrderForm({ open, onClose, onCreated }: NewOrderModalProps) {
       open={open}
       onClose={onClose}
       title="New order"
-      subtitle="Open orders wait on the shelf; stock is relieved when the order ships."
+      subtitle={template ? `From template “${template.name}”. Check quantities and prices, then create.` : "Open orders wait on the shelf; stock is relieved when the order ships."}
       size="lg"
       footer={
         <>
+          <Button variant="plain" icon={<BookmarkPlus />} onClick={() => setTemplateModal(true)} disabled={validLines.length === 0} className="mr-auto">
+            Save as template
+          </Button>
           <Button onClick={onClose}>Cancel</Button>
           <Button variant="primary" onClick={submit} loading={busy} disabled={validLines.length === 0}>
             {shipNow ? "Create and ship" : "Create order"}
@@ -252,6 +289,26 @@ function NewOrderForm({ open, onClose, onCreated }: NewOrderModalProps) {
         />
         {error && <p className="text-[12.5px] text-critical">{error}</p>}
       </div>
+      <Modal
+        open={templateModal}
+        onClose={() => setTemplateModal(false)}
+        size="sm"
+        title={template ? "Update template" : "Save as template"}
+        subtitle="Customer, lines and note are kept. Prices you typed by hand are saved; the rest follow today's prices when the template is used."
+        footer={
+          <>
+            <Button onClick={() => setTemplateModal(false)}>Cancel</Button>
+            <Button variant="primary" onClick={() => void saveTemplate()} loading={savingTemplate} disabled={!templateName.trim()}>
+              {template ? "Update template" : "Save template"}
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-3">
+          <TextField label="Template name" value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder={customer ? `${customer} standing order` : "Weekly restock"} autoFocus />
+          <TextField label="Description" hint="(optional)" value={templateNote} onChange={(e) => setTemplateNote(e.target.value)} placeholder="When to use it" />
+        </div>
+      </Modal>
     </Modal>
   );
 }

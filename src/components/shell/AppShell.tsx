@@ -184,7 +184,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="fixed inset-0 z-[80] bg-black/30 md:hidden" onClick={() => setMobileNav(false)}>
           <div className="absolute inset-y-0 left-0" onClick={(e) => e.stopPropagation()}>
             <Sidebar onNavigate={() => setMobileNav(false)} />
-            <button type="button" className="absolute right-2 top-3 rounded p-1 text-text-secondary" onClick={() => setMobileNav(false)} aria-label="Close">
+            <button type="button" className="btn-close absolute right-2 top-2" onClick={() => setMobileNav(false)} aria-label="Close" title="Close">
               <X className="h-4 w-4" />
             </button>
           </div>

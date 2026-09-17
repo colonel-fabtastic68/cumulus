@@ -221,7 +221,7 @@ export function Menu({ trigger, items, align = "right", className, menuClassName
     <div ref={ref} className={cn("relative inline-block", className)}>
       <div onClick={() => setOpen((o) => !o)}>{trigger}</div>
       {open && (
-        <div role="menu" className={cn("animate-in absolute z-[60] mt-1 min-w-[180px] rounded-[var(--radius)] bg-surface p-1 shadow-[var(--shadow-pop)]", align === "right" ? "right-0" : "left-0", menuClassName)}>
+        <div role="menu" className={cn("animate-menu absolute z-[60] mt-1 min-w-[180px] rounded-[var(--radius)] bg-surface p-1 shadow-[var(--shadow-pop)]", align === "right" ? "right-0" : "left-0", menuClassName)}>
           {items.map((it, i) =>
             it === "divider" ? (
               <div key={i} className="my-1 border-t border-border" />
