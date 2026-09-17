@@ -12,6 +12,7 @@ import { formatDateTime, formatMoney, formatNumber, formatQty, formatRelative, p
 import { cn } from "@/lib/utils";
 import { Badge, Button, DescriptionList, Modal, SimpleTable, StatusBadge, useToast } from "@/components/ui";
 import { orderAvailability, orderOpenUnits, orderTotal, orderUnits, SourceBadge } from "./orderUtils";
+import { findCustomer } from "@/lib/customers";
 
 interface OrderDetailModalProps {
   order: SalesOrder | null;
@@ -31,6 +32,7 @@ export function OrderDetailModal({ order, ...rest }: OrderDetailModalProps) {
 function OrderDetail({ order, onClose, canWrite, busy, onFulfil, onCancel }: OrderDetailModalProps & { order: SalesOrder }) {
   const itemsById = useItemsById();
   const members = useCollection("members");
+  const customerRecords = useCollection("customers");
   const { currency } = useSettings();
 
   const open = isOrderOpen(order);
@@ -77,7 +79,19 @@ function OrderDetail({ order, onClose, canWrite, busy, onFulfil, onCancel }: Ord
         <div className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
           <DescriptionList
             rows={[
-              { label: "Customer", value: order.customer },
+              {
+                label: "Customer",
+                value: (() => {
+                  const c = findCustomer(customerRecords, { id: order.customerId, email: order.customerEmail, name: order.customer });
+                  return c ? (
+                    <Link href={`/customers?highlight=${c.id}`} className="text-accent hover:underline">
+                      {order.customer}
+                    </Link>
+                  ) : (
+                    order.customer
+                  );
+                })(),
+              },
               { label: "Source", value: <SourceBadge source={order.source} /> },
               {
                 label: "Availability",

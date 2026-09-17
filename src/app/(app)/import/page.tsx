@@ -6,6 +6,7 @@ import { Banner, Button, Page } from "@/components/ui";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { canWrite, useCurrentUser } from "@/lib/auth";
 import { ImportWizard } from "@/components/import/ImportWizard";
+import { CustomerImport } from "@/components/customers";
 
 export default function ImportPage() {
   const { setPageContext } = useAgent();
@@ -18,7 +19,7 @@ export default function ImportPage() {
   return (
     <Page
       title="Import"
-      subtitle="Bring in items from a spreadsheet, Shopify or WooCommerce export"
+      subtitle="Bring in items or customers from a spreadsheet or a store export"
       secondaryActions={
         <Button icon={<Plug />} href="/integrations">
           Integrations
@@ -31,6 +32,9 @@ export default function ImportPage() {
         </Banner>
       )}
       <ImportWizard />
+      <div id="customers" className="mt-6 scroll-mt-4">
+        <CustomerImport />
+      </div>
     </Page>
   );
 }

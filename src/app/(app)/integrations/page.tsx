@@ -45,6 +45,7 @@ export default function IntegrationsPage() {
   const channels = INTEGRATIONS.filter((d) => d.kind === "channel");
   const carriers = INTEGRATIONS.filter((d) => d.kind === "carrier");
   const accounting = INTEGRATIONS.filter((d) => d.kind === "accounting");
+  const payments = INTEGRATIONS.filter((d) => d.kind === "payments");
   const roadmap = INTEGRATIONS.filter((d) => d.kind === "roadmap");
 
   return (
@@ -82,6 +83,15 @@ export default function IntegrationsPage() {
           <SectionHeading title="Accounting" description="Products and Services in by SKU, with sales prices and purchase costs, so items here match the books." />
           <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2">
             {accounting.map((def) => (
+              <IntegrationCard key={def.id} def={def} integration={byId.get(def.id)} onSetUp={() => setSetupId(def.id)} />
+            ))}
+          </div>
+        </section>
+
+        <section>
+          <SectionHeading title="Payments" description="Take card payments on orders and quotes and reconcile the deposits." />
+          <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2">
+            {payments.map((def) => (
               <IntegrationCard key={def.id} def={def} integration={byId.get(def.id)} onSetUp={() => setSetupId(def.id)} />
             ))}
           </div>

@@ -24,7 +24,7 @@ function SetupForm({ def, integration, onClose }: { def: IntegrationDef; integra
   const user = useCurrentUser();
   const canManage = user.role === "owner" || user.role === "admin";
   const connected = integration?.status === "connected" || integration?.status === "error";
-  const live = def.kind !== "roadmap";
+  const live = def.kind !== "roadmap" && def.kind !== "payments";
 
   return (
     <Modal
@@ -396,7 +396,7 @@ function RoadmapForm({ def, integration, onClose }: { def: IntegrationDef; integ
 
   return (
     <>
-      <Banner tone="info" title="Live sync is on the roadmap">
+      <Banner tone="info" title={def.stage === "in_progress" ? "Being built now" : "Live sync is on the roadmap"}>
         cumulusOS does not talk to {def.name} yet. Nothing you enter here is sent anywhere; it is stored with the workspace so the connection is ready to switch on later.
       </Banner>
       {field && (

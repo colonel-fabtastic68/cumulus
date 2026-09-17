@@ -6,7 +6,8 @@ import type { Item, Rma, RmaCondition } from "@/lib/types";
 import { createRma } from "@/lib/inventory";
 import { useCollection, useStore } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
-import { newId } from "@/lib/utils";
+import { newId, uniq } from "@/lib/utils";
+import { ensureCustomer } from "@/lib/customers";
 import { Button, FormGrid, IconButton, Modal, Select, TextArea, TextField, useToast } from "@/components/ui";
 import { ItemPicker } from "@/components/inventory";
 
@@ -44,6 +45,8 @@ function NewRmaForm({ open, onClose, onCreated }: NewRmaModalProps) {
   const orders = useCollection("orders");
 
   const [customer, setCustomer] = useState("");
+  const customerRecords = useCollection("customers");
+  const customerNames = useMemo(() => uniq(customerRecords.map((c) => c.name.trim()).filter(Boolean)).sort((a, b) => a.localeCompare(b)), [customerRecords]);
   const [reference, setReference] = useState("");
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
@@ -88,6 +91,8 @@ function NewRmaForm({ open, onClose, onCreated }: NewRmaModalProps) {
         note: note.trim() || undefined,
         lines: filled.map((l) => ({ itemId: l.item!.id, qty: Number(l.qty), condition: l.condition })),
       });
+      const record = await ensureCustomer(store, user, { name: rma.customer, source: "order" }).catch(() => undefined);
+      if (record) await store.patch("rmas", rma.id, { customerId: record.id }).catch(() => {});
       toast(`Opened ${rma.number} for ${rma.customer}`, "success");
       onCreated?.(rma);
       onClose();
@@ -116,7 +121,12 @@ function NewRmaForm({ open, onClose, onCreated }: NewRmaModalProps) {
     >
       <div className="flex flex-col gap-4">
         <FormGrid cols={2}>
-          <TextField label="Customer" value={customer} onChange={(e) => setCustomer(e.target.value)} placeholder="Chicago Music Exchange" autoFocus />
+          <TextField label="Customer" value={customer} onChange={(e) => setCustomer(e.target.value)} list="cumulus-rma-customers" placeholder="Chicago Music Exchange" autoFocus />
+          <datalist id="cumulus-rma-customers">
+            {customerNames.map((c) => (
+              <option key={c} value={c} />
+            ))}
+          </datalist>
           <div>
             <TextField
               label="Reference"

@@ -239,6 +239,8 @@ export interface SalesOrder {
   id: ID;
   number: string; // SO-1001
   customer: string;
+  /** The customer record, when the order was placed for one. */
+  customerId?: ID;
   /** partial = some units shipped, the rest still open. */
   status: "open" | "partial" | "fulfilled" | "cancelled";
   source: OrderSource;
@@ -254,6 +256,43 @@ export interface SalesOrder {
   fulfilledAt?: string;
   createdAt: string;
   createdBy: string;
+}
+
+/** Someone the business sells to. Orders, returns and quotes point back here by id or, for older records, by name. */
+export interface Customer {
+  id: ID;
+  name: string;
+  email?: string;
+  phone?: string;
+  company?: string;
+  address?: Address;
+  tags?: string[];
+  notes?: string;
+  /** Where the record came from (manual, import, an order that named them, a channel). */
+  source?: "manual" | "import" | "order" | "shopify" | "woocommerce";
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+}
+
+/** A shared team calendar entry. Dates are YYYY-MM-DD in the workspace's local sense (no time zone shifts). */
+export interface CalendarEvent {
+  id: ID;
+  title: string;
+  date: string;
+  /** Inclusive end date for multi-day events. */
+  endDate?: string;
+  /** "HH:MM", when the event is at a time rather than all day. */
+  time?: string;
+  notes?: string;
+  links?: Array<{ label: string; url: string }>;
+  /** Public share slug, once the event has been shared. */
+  slug?: string;
+  color?: string;
+  createdBy: string;
+  createdByName?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /** A saved order to start similar orders from: customer, lines and note. */
@@ -286,6 +325,7 @@ export interface Rma {
   id: ID;
   number: string; // RMA-1001
   customer: string;
+  customerId?: ID;
   orderId?: ID;
   reference?: string;
   status: RmaStatus;
@@ -541,7 +581,7 @@ export interface ActivityEvent {
   createdAt: string;
 }
 
-export type IntegrationId = "shopify" | "woocommerce" | "quickbooks" | "square" | "shippo" | "easypost";
+export type IntegrationId = "shopify" | "woocommerce" | "quickbooks" | "square" | "shippo" | "easypost" | "evalon";
 
 export interface IntegrationSettings {
   /** Pull products and variants in as items (channels). */
@@ -787,6 +827,8 @@ export interface CollectionMap {
   channelTombstones: ChannelTombstone;
   quoteTemplates: QuoteTemplate;
   orderTemplates: OrderTemplate;
+  customers: Customer;
+  events: CalendarEvent;
 }
 
 export type CollectionName = keyof CollectionMap;
@@ -812,6 +854,8 @@ export const COLLECTIONS: CollectionName[] = [
   "channelTombstones",
   "quoteTemplates",
   "orderTemplates",
+  "customers",
+  "events",
 ];
 
 /** A full snapshot of a workspace. Used for seed data, export and import. */

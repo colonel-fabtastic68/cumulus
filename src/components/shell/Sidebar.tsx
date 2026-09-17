@@ -50,29 +50,31 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             <span className="flex-1">{n.label}</span>
             <ChevronDown className={cn("h-3.5 w-3.5 text-text-tertiary transition-transform", active ? "rotate-0" : "-rotate-90")} />
           </Link>
-          {active && (
-            <div className="animate-menu flex flex-col gap-0.5">
-            {n.children.map((c) => {
-              const ChildIcon = c.icon;
-              const childActive = isChildNavActive(c, n.children!, pathname);
-              return (
-                <Link
-                  key={c.href}
-                  href={c.href}
-                  onClick={onNavigate}
-                  aria-current={childActive ? "page" : undefined}
-                  className={cn(
-                    "group ml-4 flex h-7 items-center gap-2 rounded-[var(--radius-sm)] px-2.5 text-[12.5px] font-[550] transition-colors",
-                    childActive ? "bg-surface text-text shadow-[var(--shadow-100),0_0_0_1px_rgba(26,26,26,0.07)]" : "text-text-secondary hover:bg-[rgba(0,0,0,0.04)] hover:text-text",
-                  )}
-                >
-                  <ChildIcon className={cn("h-3.5 w-3.5", childActive ? "text-text" : "text-icon")} />
-                  <span className="flex-1">{c.label}</span>
-                </Link>
-              );
-            })}
+          {/* Children stay mounted so the list can slide shut as well as open; hidden ones are inert. */}
+          <div className="grid transition-[grid-template-rows,opacity] duration-200 ease-out" style={{ gridTemplateRows: active ? "1fr" : "0fr", opacity: active ? 1 : 0 }} aria-hidden={!active} inert={!active}>
+            <div className="flex min-h-0 flex-col gap-0.5 overflow-hidden">
+              {n.children.map((c) => {
+                const ChildIcon = c.icon;
+                const childActive = isChildNavActive(c, n.children!, pathname);
+                return (
+                  <Link
+                    key={c.href}
+                    href={c.href}
+                    onClick={onNavigate}
+                    tabIndex={active ? undefined : -1}
+                    aria-current={childActive ? "page" : undefined}
+                    className={cn(
+                      "group ml-4 flex h-7 items-center gap-2 rounded-[var(--radius-sm)] px-2.5 text-[12.5px] font-[550] transition-colors",
+                      childActive ? "bg-surface text-text shadow-[var(--shadow-100),0_0_0_1px_rgba(26,26,26,0.07)]" : "text-text-secondary hover:bg-[rgba(0,0,0,0.04)] hover:text-text",
+                    )}
+                  >
+                    <ChildIcon className={cn("h-3.5 w-3.5", childActive ? "text-text" : "text-icon")} />
+                    <span className="flex-1">{c.label}</span>
+                  </Link>
+                );
+              })}
             </div>
-          )}
+          </div>
         </div>
       );
     }

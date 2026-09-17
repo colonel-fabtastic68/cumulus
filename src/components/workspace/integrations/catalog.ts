@@ -6,7 +6,7 @@ import type { IntegrationId, IntegrationSettings } from "@/lib/types";
  * and keeps them in a subcollection browsers cannot read. The rest are on the
  * roadmap and fall back to CSV import.
  */
-export type IntegrationKind = "channel" | "carrier" | "accounting" | "roadmap";
+export type IntegrationKind = "channel" | "carrier" | "accounting" | "payments" | "roadmap";
 
 export interface CredentialField {
   key: string;
@@ -152,6 +152,15 @@ export const INTEGRATIONS: IntegrationDef[] = [
       headers: ["Product/Service Name", "SKU", "Type", "Sales description", "Sales price/rate", "Purchase cost", "Quantity on hand", "Reorder point"],
       note: "SKU, Quantity on hand, Purchase cost and Reorder point are recognised; map Product/Service Name to Name and Sales price/rate to Price in the wizard, or let the AI mapper suggest it.",
     },
+  },
+  {
+    id: "evalon",
+    name: "Evalon",
+    kind: "payments",
+    stage: "in_progress",
+    description: "Card payments and settlement: take payment on orders and quotes, and reconcile deposits against what shipped.",
+    fields: [{ key: "merchantId", label: "Merchant ID", placeholder: "1234567890", help: "From your Evalon merchant portal. Saved for later; nothing is contacted yet." }],
+    setup: { steps: [] },
   },
   {
     id: "square",

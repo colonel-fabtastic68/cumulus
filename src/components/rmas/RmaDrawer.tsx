@@ -6,6 +6,7 @@ import { Search } from "lucide-react";
 import type { Rma, RmaCondition, RmaDisposition, RmaStatus } from "@/lib/types";
 import { resolveRma } from "@/lib/inventory";
 import { useCollection, useDoc, useItemsById, useStore } from "@/lib/store/provider";
+import { findCustomer } from "@/lib/customers";
 import { canWrite, useCurrentUser } from "@/lib/auth";
 import { formatDateTime, formatQty } from "@/lib/format";
 import { sum } from "@/lib/utils";
@@ -40,6 +41,7 @@ function RmaDrawerInner({ rma, onClose }: { rma: Rma; onClose: () => void }) {
   const toast = useToast();
   const itemsById = useItemsById();
   const members = useCollection("members");
+  const customerRecords = useCollection("customers");
 
   const [dispositions, setDispositions] = useState<Record<string, RmaDisposition | "">>(() => Object.fromEntries(rma.lines.map((l) => [l.itemId, l.disposition ?? ""])));
   const [conditions, setConditions] = useState<Record<string, RmaCondition>>(() => Object.fromEntries(rma.lines.map((l) => [l.itemId, l.condition])));
@@ -129,7 +131,19 @@ function RmaDrawerInner({ rma, onClose }: { rma: Rma; onClose: () => void }) {
         <div className="flex flex-col gap-5">
           <DescriptionList
             rows={[
-              { label: "Customer", value: rma.customer },
+              {
+                label: "Customer",
+                value: (() => {
+                  const c = findCustomer(customerRecords, { id: rma.customerId, name: rma.customer });
+                  return c ? (
+                    <Link href={`/customers?highlight=${c.id}`} className="text-accent hover:underline">
+                      {rma.customer}
+                    </Link>
+                  ) : (
+                    rma.customer
+                  );
+                })(),
+              },
               { label: "Reference", value: rma.reference ? <span className="font-mono text-[12.5px]">{rma.reference}</span> : "—" },
               { label: "Reason", value: <span className="whitespace-normal">{rma.reason}</span> },
               { label: "Opened", value: `${formatDateTime(rma.createdAt)}${openedBy ? ` by ${openedBy}` : ""}` },

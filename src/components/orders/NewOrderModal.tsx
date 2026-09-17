@@ -10,6 +10,7 @@ import { formatMoney, formatQty } from "@/lib/format";
 import { cn, newId, round, sum, uniq } from "@/lib/utils";
 import { Button, Checkbox, FormGrid, IconButton, Modal, Select, TextArea, TextField, useToast } from "@/components/ui";
 import { saveOrderTemplate } from "@/lib/orderTemplates";
+import { ensureCustomer, findCustomer } from "@/lib/customers";
 import { ItemPicker } from "@/components/inventory";
 import { currencySymbol } from "./orderUtils";
 
@@ -50,6 +51,7 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
   const toast = useToast();
   const orders = useCollection("orders");
   const allItems = useCollection("items");
+  const customerRecords = useCollection("customers");
   const { currency } = useSettings();
   const symbol = currencySymbol(currency);
 
@@ -95,7 +97,20 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const customers = useMemo(() => uniq(orders.map((o) => o.customer.trim()).filter(Boolean)).sort((a, b) => a.localeCompare(b)), [orders]);
+  // Suggestions: customer records first, then names seen on past orders that have no record yet.
+  const customers = useMemo(() => uniq([...customerRecords.map((c) => c.name.trim()), ...orders.map((o) => o.customer.trim())].filter(Boolean)).sort((a, b) => a.localeCompare(b)), [customerRecords, orders]);
+  // Picking a known customer fills in what the record knows.
+  const onCustomerChange = (value: string) => {
+    setCustomer(value);
+    const known = findCustomer(customerRecords, { name: value });
+    if (known) {
+      if (known.email && !customerEmail) setCustomerEmail(known.email);
+      if (known.address && !shipTo.street1) {
+        setShipTo({ ...known.address, name: known.address.name ?? known.name });
+        setAddressOpen(true);
+      }
+    }
+  };
 
   const patchLine = (key: string, fn: (line: LineState) => LineState) => setLines((prev) => prev.map((l) => (l.key === key ? fn(l) : l)));
 
@@ -150,6 +165,9 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
         lines: validLines.map((l) => ({ itemId: l.item!.id, qty: Number(l.qty), unitPrice: Number(l.unitPrice) })),
         fulfill: shipNow,
       });
+      // Every order points at a customer record; one is created from the order when none matches.
+      const record = await ensureCustomer(store, user, { name: order.customer, email: order.customerEmail, address: address, source: "order" }).catch(() => undefined);
+      if (record) await store.patch("orders", order.id, { customerId: record.id }).catch(() => {});
       toast(shipNow ? `Created and shipped ${order.number} for ${order.customer}` : `Created ${order.number} for ${order.customer}`, "success");
       onCreated?.(order);
       onClose();
@@ -190,7 +208,7 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
       <div className="flex flex-col gap-4">
         <FormGrid cols={3}>
           <div className="sm:col-span-2">
-            <TextField label="Customer" value={customer} onChange={(e) => setCustomer(e.target.value)} list="cumulus-order-customers" placeholder="Sweetwater" autoFocus />
+            <TextField label="Customer" value={customer} onChange={(e) => onCustomerChange(e.target.value)} list="cumulus-order-customers" placeholder="Sweetwater" autoFocus />
             <datalist id="cumulus-order-customers">
               {customers.map((c) => (
                 <option key={c} value={c} />

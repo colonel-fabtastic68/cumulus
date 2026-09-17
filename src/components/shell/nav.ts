@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Boxes, ClipboardList, Download, FileBarChart2, FileText, Hammer, Home, MessageSquare, PackageCheck, Plug, RotateCcw, Settings, ShoppingCart, Sparkles, TrendingUp, Truck, Upload, Users, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, Boxes, CalendarDays, ClipboardList, Contact, Download, FileBarChart2, FileText, Hammer, Home, MessageSquare, PackageCheck, Plug, RotateCcw, Settings, ShoppingCart, Sparkles, TrendingUp, Truck, Upload, UserRound, Users, type LucideIcon } from "lucide-react";
 
 export interface NavItem {
   href: string;
@@ -17,6 +17,7 @@ export const NAV: NavItem[] = [
   { href: "/orders", label: "Orders", icon: ShoppingCart },
   { href: "/rmas", label: "Returns", icon: RotateCcw },
   { href: "/suppliers", label: "Suppliers", icon: Truck },
+  { href: "/customers", label: "Customers", icon: Contact },
   { href: "/reports", label: "Reports", icon: FileBarChart2 },
 ];
 
@@ -34,7 +35,15 @@ export const NAV_SECONDARY: NavItem[] = [
   { href: "/import", label: "Import", icon: Download },
   { href: "/exports", label: "Exports", icon: Upload },
   { href: "/integrations", label: "Integrations", icon: Plug },
-  { href: "/team", label: "Team", icon: Users },
+  {
+    href: "/team",
+    label: "Team",
+    icon: Users,
+    children: [
+      { href: "/team", label: "Members", icon: UserRound },
+      { href: "/team/calendar", label: "Calendar", icon: CalendarDays },
+    ],
+  },
   { href: "/activity", label: "Activity", icon: ClipboardList },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

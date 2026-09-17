@@ -38,6 +38,8 @@ export default function ExportsPage() {
     channelTombstones: useCollection("channelTombstones"),
     quoteTemplates: useCollection("quoteTemplates"),
     orderTemplates: useCollection("orderTemplates"),
+    customers: useCollection("customers"),
+    events: useCollection("events"),
   };
   const [selected, setSelected] = useState<Set<DatasetId>>(() => new Set<DatasetId>(["items"]));
   const [format, setFormat] = useState<ExportFormat>("csv");

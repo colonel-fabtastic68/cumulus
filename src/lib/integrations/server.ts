@@ -163,7 +163,7 @@ export function jsonError(e: unknown): Response {
 }
 
 export function isIntegrationId(id: string): id is IntegrationId {
-  return ["shopify", "woocommerce", "quickbooks", "square", "shippo", "easypost"].includes(id);
+  return ["shopify", "woocommerce", "quickbooks", "square", "shippo", "easypost", "evalon"].includes(id);
 }
 
 export const USER_AGENT = "cumulusOS/0.1 (+https://github.com/colonel-fabtastic68/cumulus)";

@@ -1,11 +1,11 @@
-import type { ActivityEvent, Build, Item, Location, Member, Receipt, Rma, SalesOrder, Shipment, Supplier, Transfer } from "./types";
+import type { ActivityEvent, Build, Customer, Item, Location, Member, Receipt, Rma, SalesOrder, Shipment, Supplier, Transfer } from "./types";
 import { crossRefText } from "./scan";
 import { formatDate, formatQty, formatRelative } from "./format";
 
-export type SearchKind = "Page" | "Item" | "BOM" | "Order" | "Shipment" | "Return" | "Receipt" | "Transfer" | "Build" | "Supplier" | "Location" | "Member" | "Integration" | "Report" | "Setting" | "Activity";
+export type SearchKind = "Page" | "Item" | "BOM" | "Order" | "Shipment" | "Return" | "Receipt" | "Transfer" | "Build" | "Supplier" | "Customer" | "Location" | "Member" | "Integration" | "Report" | "Setting" | "Activity";
 
 /** Group order in the search dialog. */
-export const SEARCH_KINDS: SearchKind[] = ["Page", "Item", "BOM", "Order", "Shipment", "Return", "Receipt", "Transfer", "Build", "Supplier", "Location", "Member", "Integration", "Report", "Setting", "Activity"];
+export const SEARCH_KINDS: SearchKind[] = ["Page", "Item", "BOM", "Order", "Shipment", "Return", "Receipt", "Transfer", "Build", "Supplier", "Customer", "Location", "Member", "Integration", "Report", "Setting", "Activity"];
 
 export const SEARCH_GROUP_LABELS: Record<SearchKind, string> = {
   Page: "Pages",
@@ -18,6 +18,7 @@ export const SEARCH_GROUP_LABELS: Record<SearchKind, string> = {
   Transfer: "Transfers",
   Build: "Builds",
   Supplier: "Suppliers",
+  Customer: "Customers",
   Location: "Locations",
   Member: "Team",
   Integration: "Integrations",
@@ -62,6 +63,7 @@ export interface SearchSource {
   transfers: Transfer[];
   builds: Build[];
   suppliers: Supplier[];
+  customers?: Customer[];
   locations: Location[];
   members: Member[];
   integrations: SearchIntegration[];
@@ -205,6 +207,15 @@ export function searchWorkspace(query: string, src: SearchSource, { perKind = 5,
       label: s.name,
       sub: [s.email, s.terms].filter(Boolean).join(" · ") || undefined,
       href: `/suppliers?highlight=${s.id}`,
+    });
+  }
+
+  for (const c of src.customers ?? []) {
+    add("Customer", scoreFields(q, [c.name, c.email, c.company], [c.phone, c.tags?.join(" "), c.address?.city, c.notes]), {
+      key: c.id,
+      label: c.name,
+      sub: [c.company, c.email, c.phone].filter(Boolean).join(" · ") || undefined,
+      href: `/customers?highlight=${c.id}`,
     });
   }
 

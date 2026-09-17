@@ -84,6 +84,9 @@ service cloud.firestore {
     match /adminActions/{actionId} {
       allow read, write: if false;
     }
+    match /eventShares/{slug} {
+      allow read, write: if false;
+    }
     match /subscriptions/{subscriptionId} {
       allow read, write: if false;
     }

@@ -180,6 +180,6 @@ export function emptySnapshot(): WorkspaceSnapshot {
     shipments: [],
     quotes: [],
     channelTombstones: [],
-    quoteTemplates: [], orderTemplates: [],
+    quoteTemplates: [], orderTemplates: [], customers: [], events: [],
   };
 }
