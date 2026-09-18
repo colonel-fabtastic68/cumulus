@@ -24,7 +24,7 @@ function SetupForm({ def, integration, onClose }: { def: IntegrationDef; integra
   const user = useCurrentUser();
   const canManage = user.role === "owner" || user.role === "admin";
   const connected = integration?.status === "connected" || integration?.status === "error";
-  const live = def.kind !== "roadmap" && def.kind !== "payments";
+  const live = def.kind !== "roadmap";
 
   return (
     <Modal

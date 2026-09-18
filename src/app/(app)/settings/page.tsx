@@ -9,6 +9,7 @@ import {
   AboutSection,
   AgentSection,
   BillingSection,
+  CatalogSection,
   CompanySection,
   DataSection,
   InventoryPolicySection,
@@ -71,6 +72,9 @@ export default function SettingsPage() {
         </Row>
         <Row id="inventory-policy">
           <InventoryPolicySection key={formKey} settings={settings} readOnly={readOnly} />
+        </Row>
+        <Row id="catalog">
+          <CatalogSection key={formKey} settings={settings} readOnly={readOnly} />
         </Row>
         <Row id="locations">
           <LocationsSection readOnly={readOnly} />

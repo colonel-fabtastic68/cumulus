@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import type { Item, Member, Supplier, WorkspaceSettings } from "@/lib/types";
+import type { Contact, Item, Member, Supplier, WorkspaceSettings } from "@/lib/types";
 import { inventoryValue, isLowStock, reorderQty } from "@/lib/inventory";
 import { formatMoney, formatQty } from "@/lib/format";
 import { itemSupplierLinks, supplierItems } from "@/lib/suppliers";
@@ -15,6 +15,19 @@ export interface SupplierDraft {
   leadTimeDays: string;
   terms: string;
   notes: string;
+  contacts: Contact[];
+  attributes: Record<string, string>;
+}
+
+export function cleanContacts(contacts: Contact[] | undefined): Contact[] | undefined {
+  const out = (contacts ?? []).map((c) => ({ name: c.name.trim(), role: c.role?.trim() || undefined, email: c.email?.trim() || undefined, phone: c.phone?.trim() || undefined })).filter((c) => c.name || c.email || c.phone);
+  return out.length ? out : undefined;
+}
+
+export function cleanAttributes(attrs: Record<string, string> | undefined): Record<string, string> | undefined {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(attrs ?? {})) if (v?.trim()) out[k] = v.trim();
+  return Object.keys(out).length ? out : undefined;
 }
 
 export const TERMS_SUGGESTIONS = ["Net 15", "Net 30", "Net 60", "Prepaid", "Credit card", "COD"];
@@ -28,11 +41,17 @@ export function draftFromSupplier(s?: Supplier | null): SupplierDraft {
     leadTimeDays: s?.leadTimeDays !== undefined ? String(s.leadTimeDays) : "",
     terms: s?.terms ?? "",
     notes: s?.notes ?? "",
+    contacts: (s?.contacts ?? []).map((c) => ({ ...c })),
+    attributes: { ...(s?.attributes ?? {}) },
   };
 }
 
 export function isDraftDirty(a: SupplierDraft, b: SupplierDraft): boolean {
-  return (Object.keys(a) as Array<keyof SupplierDraft>).some((k) => a[k].trim() !== b[k].trim());
+  return (Object.keys(a) as Array<keyof SupplierDraft>).some((k) => {
+    const x = a[k];
+    const y = b[k];
+    return typeof x === "string" && typeof y === "string" ? x.trim() !== y.trim() : JSON.stringify(x) !== JSON.stringify(y);
+  });
 }
 
 /** Returns a readable problem, or null when the draft can be saved. */
@@ -58,6 +77,8 @@ export function draftToInput(d: SupplierDraft): Partial<Supplier> & { name: stri
     leadTimeDays: lead !== undefined && Number.isFinite(lead) ? lead : undefined,
     terms: opt(d.terms),
     notes: opt(d.notes),
+    contacts: cleanContacts(d.contacts),
+    attributes: cleanAttributes(d.attributes),
   };
 }
 

@@ -43,7 +43,7 @@ const PAGES: SearchPage[] = [
   ...SETTINGS_SECTIONS.map((s) => ({ kind: "Setting" as const, label: s.title, href: `/settings#${s.id}`, sub: s.description, keywords: s.keywords })),
 ];
 
-const INTEGRATION_KIND: Record<string, string> = { channel: "Sales channel", carrier: "Carrier", accounting: "Accounting", payments: "Payments", roadmap: "Roadmap" };
+const INTEGRATION_KIND: Record<string, string> = { channel: "Sales channel", carrier: "Carrier", accounting: "Accounting", roadmap: "Roadmap" };
 
 /**
  * ⌘K search over every sidebar page except Exports and Strato, and the records
@@ -73,7 +73,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
     () =>
       INTEGRATIONS.map((def) => {
         const live = integrations.find((i) => i.id === def.id);
-        const status = def.kind === "roadmap" || def.kind === "payments" ? "Coming soon" : live?.status === "connected" ? "Connected" : live?.status === "error" ? "Needs attention" : "Not connected";
+        const status = def.kind === "roadmap" ? "Coming soon" : live?.status === "connected" ? "Connected" : live?.status === "error" ? "Needs attention" : "Not connected";
         return { id: def.id, name: def.name, sub: `${status} · ${INTEGRATION_KIND[def.kind] ?? def.kind}` };
       }),
     [integrations],

@@ -11,7 +11,8 @@ export type ID = string;
 // Items (parts, assemblies)
 // ---------------------------------------------------------------------------
 
-export type ItemType = "part" | "assembly";
+/** "part" and "assembly" are built in (assemblies carry a BOM); workspaces add their own types in Settings → Catalogue. */
+export type ItemType = "part" | "assembly" | (string & {});
 export type ItemStatus = "active" | "inactive" | "superseded";
 
 export interface PriceBreak {
@@ -71,6 +72,8 @@ export interface Item {
   bom: BomLine[];
   /** Chip colour for assemblies, so families of builds are easy to tell apart in lists. */
   color?: string;
+  /** Price per customer price group (Settings → Catalogue), keyed by group id. Falls back to the list price. */
+  groupPrices?: Record<string, number>;
 
   externalIds?: {
     shopify?: string;
@@ -169,6 +172,14 @@ export interface ItemSupplier {
   note?: string;
 }
 
+/** A named person at a customer or supplier. The first one is the primary contact. */
+export interface Contact {
+  name: string;
+  role?: string;
+  email?: string;
+  phone?: string;
+}
+
 export interface Supplier {
   id: ID;
   name: string;
@@ -178,6 +189,9 @@ export interface Supplier {
   leadTimeDays?: number;
   terms?: string;
   notes?: string;
+  contacts?: Contact[];
+  /** Custom fields defined in Settings → Catalogue, keyed by field key. */
+  attributes?: Record<string, string>;
   createdAt: string;
 }
 
@@ -272,6 +286,14 @@ export interface Customer {
   address?: Address;
   tags?: string[];
   notes?: string;
+  contacts?: Contact[];
+  /** Price group id from Settings → Catalogue; order lines use the item's price for this group. */
+  priceGroupId?: string;
+  /** Percentage off every line for this customer, applied after the group price. */
+  discountPct?: number;
+  taxExempt?: boolean;
+  /** Custom fields defined in Settings → Catalogue, keyed by field key. */
+  attributes?: Record<string, string>;
   /** Where the record came from (manual, import, an order that named them, a channel). */
   source?: "manual" | "import" | "order" | "shopify" | "woocommerce";
   createdAt: string;
@@ -585,7 +607,7 @@ export interface ActivityEvent {
   createdAt: string;
 }
 
-export type IntegrationId = "shopify" | "woocommerce" | "quickbooks" | "square" | "shippo" | "easypost" | "evalon";
+export type IntegrationId = "shopify" | "woocommerce" | "quickbooks" | "square" | "shippo" | "easypost";
 
 export interface IntegrationSettings {
   /** Pull products and variants in as items (channels). */
@@ -694,7 +716,30 @@ export interface WorkspaceSettings {
   scanning?: ScanningSettings;
   quoting?: QuotingSettings;
   billing?: WorkspaceBilling;
+  catalog?: CatalogSettings;
   updatedAt: string;
+}
+
+export type CustomFieldType = "text" | "number" | "date" | "select";
+
+export interface CustomFieldDef {
+  /** Stable key the value is stored under (attributes[key]). */
+  key: string;
+  label: string;
+  type: CustomFieldType;
+  /** Choices for select fields. */
+  options?: string[];
+}
+
+/** Workspace-defined vocabulary: extra item types, customer price groups and custom fields. */
+export interface CatalogSettings {
+  itemTypes?: Array<{ id: string; label: string }>;
+  priceGroups?: Array<{ id: string; name: string }>;
+  customFields?: {
+    items?: CustomFieldDef[];
+    customers?: CustomFieldDef[];
+    suppliers?: CustomFieldDef[];
+  };
 }
 
 export interface ShippingSettings {

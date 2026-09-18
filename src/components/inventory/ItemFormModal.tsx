@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 import type { Item } from "@/lib/types";
 import { createItems, updateItem } from "@/lib/inventory";
-import { useCollection, useItems, useStore } from "@/lib/store/provider";
+import { useCollection, useItems, useSettings, useStore } from "@/lib/store/provider";
+import { customFieldsFor, itemTypeOptions } from "@/lib/catalog";
+import { CustomFieldsEditor } from "@/components/fields";
 import { useCurrentUser } from "@/lib/auth";
 import { Button, Combobox, FormGrid, Modal, Select, TextArea, TextField, useToast } from "@/components/ui";
 
@@ -14,6 +16,7 @@ interface FormState {
   name: string;
   type: Item["type"];
   color: string;
+  attributes: Record<string, string>;
   category: string;
   unit: string;
   status: Item["status"];
@@ -42,6 +45,7 @@ function fromItem(item?: Item | null, defaults?: Partial<Item>): FormState {
     name: src?.name ?? "",
     type: src?.type ?? "part",
     color: src?.color ?? "",
+    attributes: { ...(src?.attributes ?? {}) },
     category: src?.category ?? "",
     unit: src?.unit ?? "ea",
     status: src?.status ?? "active",
@@ -88,6 +92,9 @@ function ItemForm({ open, onClose, item, defaults, onSaved }: ItemFormModalProps
   const items = useItems();
   const suppliers = useCollection("suppliers");
   const [f, setF] = useState<FormState>(() => fromItem(item, defaults));
+  const settings = useSettings();
+  const typeOptions = itemTypeOptions(settings);
+  const customFields = customFieldsFor(settings, "items");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const editing = !!item;
@@ -116,7 +123,7 @@ function ItemForm({ open, onClose, item, defaults, onSaved }: ItemFormModalProps
     weight: numErr(f.weight),
   };
   const invalid = Object.values(errors).some(Boolean);
-  const clearsBom = editing && !!item && item.type === "assembly" && f.type === "part" && item.bom.length > 0;
+  const clearsBom = editing && !!item && item.type === "assembly" && f.type !== "assembly" && item.bom.length > 0;
 
   const submit = async () => {
     if (!f.sku.trim() || !f.name.trim()) return setError("SKU and name are required");
@@ -128,6 +135,7 @@ function ItemForm({ open, onClose, item, defaults, onSaved }: ItemFormModalProps
       name: f.name.trim(),
       type: f.type,
       color: f.type === "assembly" && f.color ? f.color : undefined,
+      attributes: Object.fromEntries(Object.entries(f.attributes).filter(([, v]) => v.trim())),
       category: f.category.trim() || undefined,
       unit: f.unit.trim() || "ea",
       status: f.status,
@@ -190,7 +198,7 @@ function ItemForm({ open, onClose, item, defaults, onSaved }: ItemFormModalProps
             <TextField label="Name" value={f.name} onChange={set("name")} placeholder="1590B aluminium enclosure, raw" />
           </div>
           <div className="flex flex-col gap-2">
-            <Select label="Type" value={f.type} onChange={set("type")} options={[{ value: "part", label: "Part" }, { value: "assembly", label: "Assembly (has a BOM)" }]} help={clearsBom ? `Switching to a part removes its ${item!.bom.length}-line BOM` : undefined} />
+            <Select label="Type" value={f.type} onChange={set("type")} options={typeOptions.some((o) => o.value === f.type) ? typeOptions : [...typeOptions, { value: f.type, label: f.type }]} help={clearsBom ? `Switching away from assembly removes its ${item!.bom.length}-line BOM` : undefined} />
             {f.type === "assembly" && (
               <div className="flex items-center gap-1.5">
                 <span className="mr-1 text-[12px] text-text-secondary">Chip colour</span>
@@ -242,6 +250,7 @@ function ItemForm({ open, onClose, item, defaults, onSaved }: ItemFormModalProps
           {!editing && <TextField label="Opening quantity" hint="(optional)" type="number" step="any" min={0} value={f.openingQty} onChange={set("openingQty")} help="Recorded as an opening count in the ledger" error={errors.openingQty} />}
         </FormGrid>
         <TextArea label="Description" hint="(optional)" value={f.description} onChange={set("description")} rows={2} />
+        <CustomFieldsEditor defs={customFields} values={f.attributes} onChange={(attributes) => setF((cur) => ({ ...cur, attributes }))} />
         {error && <p className="text-[12.5px] text-critical">{error}</p>}
       </div>
     </Modal>

@@ -13,6 +13,11 @@ export interface CustomerInput {
   address?: Customer["address"];
   tags?: string[];
   notes?: string;
+  contacts?: Customer["contacts"];
+  priceGroupId?: string;
+  discountPct?: number;
+  taxExempt?: boolean;
+  attributes?: Record<string, string>;
   source?: Customer["source"];
 }
 
@@ -47,12 +52,26 @@ export async function saveCustomer(store: Store, actor: Actor, input: CustomerIn
     address: input.address?.street1?.trim() ? input.address : undefined,
     tags: input.tags?.map((t) => t.trim()).filter(Boolean),
     notes: input.notes?.trim() || undefined,
+    contacts: (() => {
+      const list = (input.contacts ?? existing?.contacts ?? []).map((c) => ({ name: c.name.trim(), role: c.role?.trim() || undefined, email: c.email?.trim() || undefined, phone: c.phone?.trim() || undefined })).filter((c) => c.name || c.email || c.phone);
+      return list.length ? list : undefined;
+    })(),
+    priceGroupId: input.priceGroupId ?? existing?.priceGroupId,
+    discountPct: input.discountPct !== undefined && Number.isFinite(input.discountPct) && input.discountPct > 0 ? input.discountPct : input.discountPct === undefined ? existing?.discountPct : undefined,
+    taxExempt: input.taxExempt ?? existing?.taxExempt ?? undefined,
+    attributes: (() => {
+      const src = input.attributes ?? existing?.attributes ?? {};
+      const out: Record<string, string> = {};
+      for (const [k, v] of Object.entries(src)) if (v?.trim()) out[k] = v.trim();
+      return Object.keys(out).length ? out : undefined;
+    })(),
     source: existing?.source ?? input.source ?? "manual",
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
     createdBy: existing?.createdBy ?? actor.id,
   };
   if (!customer.tags?.length) delete customer.tags;
+  for (const k of ["contacts", "priceGroupId", "discountPct", "taxExempt", "attributes"] as const) if (customer[k] === undefined) delete customer[k];
   await store.put("customers", customer);
   return customer;
 }

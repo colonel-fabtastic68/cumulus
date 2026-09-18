@@ -119,6 +119,22 @@ export function priceForQty(item: Item, qty: number): number {
   return price;
 }
 
+/**
+ * The price a particular customer pays for a quantity: their price group's
+ * price when the item has one, else the list/sale price with volume breaks,
+ * then the customer's discount.
+ */
+export function priceForCustomer(item: Item, qty: number, customer?: { priceGroupId?: string; discountPct?: number } | null): number {
+  let price = priceForQty(item, qty);
+  const group = customer?.priceGroupId ? item.groupPrices?.[customer.priceGroupId] : undefined;
+  if (group !== undefined && group > 0) {
+    price = group;
+    for (const b of [...(item.priceBreaks ?? [])].sort((a, b) => a.minQty - b.minQty)) if (qty >= b.minQty) price = Math.min(price, b.price);
+  }
+  if (customer?.discountPct) price = round(price * (1 - customer.discountPct / 100), 2);
+  return price;
+}
+
 export function marginPct(item: Item, price = item.price): number {
   if (!price) return 0;
   return round(((price - item.unitCost) / price) * 100, 1);

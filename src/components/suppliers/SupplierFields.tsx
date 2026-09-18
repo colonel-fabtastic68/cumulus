@@ -2,6 +2,9 @@
 
 import { useId } from "react";
 import { FormGrid, TextArea, TextField } from "@/components/ui";
+import { useSettings } from "@/lib/store/provider";
+import { customFieldsFor } from "@/lib/catalog";
+import { ContactsEditor, CustomFieldsEditor } from "@/components/fields";
 import { TERMS_SUGGESTIONS, type SupplierDraft } from "./supplierUtils";
 
 interface SupplierFieldsProps {
@@ -14,6 +17,8 @@ interface SupplierFieldsProps {
 /** The supplier form body, shared by the create modal and the edit drawer. */
 export function SupplierFields({ draft, onChange, disabled, autoFocus }: SupplierFieldsProps) {
   const termsListId = useId();
+  const settings = useSettings();
+  const fieldDefs = customFieldsFor(settings, "suppliers");
   return (
     <div className="flex flex-col gap-3">
       <TextField label="Name" value={draft.name} onChange={(e) => onChange({ name: e.target.value })} placeholder="Mouser Electronics" autoFocus={autoFocus} disabled={disabled} />
@@ -41,6 +46,8 @@ export function SupplierFields({ draft, onChange, disabled, autoFocus }: Supplie
           </datalist>
         </div>
       </FormGrid>
+      <ContactsEditor contacts={draft.contacts} onChange={(contacts) => onChange({ contacts })} disabled={disabled} />
+      <CustomFieldsEditor defs={fieldDefs} values={draft.attributes} onChange={(attributes) => onChange({ attributes })} disabled={disabled} />
       <TextArea label="Notes" hint="(optional)" value={draft.notes} onChange={(e) => onChange({ notes: e.target.value })} rows={3} placeholder="Minimum order $50. Ask for Dana in sales for volume pricing." disabled={disabled} />
     </div>
   );

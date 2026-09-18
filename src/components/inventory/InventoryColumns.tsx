@@ -8,6 +8,8 @@ import { itemBinAt } from "@/lib/locations";
 import { formatMoney, formatNumber, formatQty, formatRelative } from "@/lib/format";
 import { clamp, cn } from "@/lib/utils";
 import { Badge, StatusBadge, type Column } from "@/components/ui";
+import { useSettings } from "@/lib/store/provider";
+import { customFieldsFor } from "@/lib/catalog";
 
 /** On-hand quantity with a "Low" flag and a tiny min/max level bar. */
 /** Red below min, amber between min and max, green at max or above (or at/above min when no max is set). */
@@ -70,6 +72,9 @@ function optionalNumber(n?: number): string {
 }
 
 export function useInventoryColumns({ currency, supplierName, location }: { currency: string; supplierName: (id?: string) => string | undefined; location?: ColumnLocation }): Column<Item>[] {
+  const settings = useSettings();
+  const customTypes = settings.catalog?.itemTypes;
+  const customFields = customFieldsFor(settings, "items");
   return useMemo<Column<Item>[]>(
     () => [
       {
@@ -118,7 +123,7 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
               Assembly
             </span>
           ) : (
-            <Badge tone={i.type === "assembly" ? "info" : "default"}>{i.type === "assembly" ? "Assembly" : "Part"}</Badge>
+            <Badge tone={i.type === "assembly" ? "info" : "default"}>{i.type === "assembly" ? "Assembly" : i.type === "part" ? "Part" : (customTypes?.find((t) => t.id === i.type)?.label ?? i.type)}</Badge>
           ),
       },
       {
@@ -218,7 +223,18 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
         sortValue: (i) => i.updatedAt,
         render: (i) => <span className="whitespace-nowrap text-text-secondary">{formatRelative(i.updatedAt)}</span>,
       },
+      // Custom fields from Settings → Catalogue, one column each (hidden by default in fit mode via low priority).
+      ...customFields.map<Column<Item>>((f) => ({
+        key: `attr:${f.key}`,
+        header: f.label,
+        minWidth: 90,
+        maxWidth: 160,
+        priority: 1,
+        align: f.type === "number" ? "right" : "left",
+        sortValue: (i) => (f.type === "number" ? Number(i.attributes?.[f.key] ?? "") || null : (i.attributes?.[f.key] ?? "")),
+        render: (i) => (i.attributes?.[f.key] ? <span className="block truncate">{i.attributes[f.key]}</span> : <span className="text-text-tertiary">—</span>),
+      })),
     ],
-    [currency, supplierName, location],
+    [currency, supplierName, location, customTypes, customFields],
   );
 }

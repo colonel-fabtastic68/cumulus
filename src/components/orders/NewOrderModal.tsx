@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { BookmarkPlus, MapPin, Plus, Trash2 } from "lucide-react";
 import type { Address, Item, OrderSource, OrderTemplate, SalesOrder } from "@/lib/types";
-import { createOrder, InventoryError, priceForQty } from "@/lib/inventory";
+import { createOrder, InventoryError, priceForCustomer } from "@/lib/inventory";
 import { useCollection, useSettings, useStore } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
 import { formatMoney, formatQty } from "@/lib/format";
@@ -67,7 +67,7 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
     const fromTemplate = template.lines.flatMap((l) => {
       const item = allItems.find((i) => i.id === l.itemId);
       if (!item) return [];
-      const price = l.unitPrice ?? priceForQty(item, l.qty);
+      const price = l.unitPrice ?? priceForCustomer(item, l.qty, null);
       return [{ key: newId("ln"), item, qty: String(l.qty), unitPrice: price === undefined ? "" : String(price), priceTouched: l.unitPrice !== undefined }];
     });
     return fromTemplate.length ? fromTemplate : [newLine()];
@@ -100,6 +100,9 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
 
   // Suggestions: customer records first, then names seen on past orders that have no record yet.
   const customers = useMemo(() => uniq([...customerRecords.map((c) => c.name.trim()), ...orders.map((o) => o.customer.trim())].filter(Boolean)).sort((a, b) => a.localeCompare(b)), [customerRecords, orders]);
+  // The matched customer record drives pricing (group price, discount) for every line.
+  const customerRecord = useMemo(() => findCustomer(customerRecords, { name: customer, email: customerEmail }), [customerRecords, customer, customerEmail]);
+  const priceFor = (item: Item, qty: number) => priceForCustomer(item, qty, customerRecord);
   // Picking a known customer fills in what the record knows.
   const onCustomerChange = (value: string) => {
     setCustomer(value);
@@ -119,13 +122,13 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
   const setItem = (key: string, item: Item | null) =>
     patchLine(key, (l) => {
       const qty = Math.max(1, Number(l.qty) || 1);
-      return { ...l, item, unitPrice: item ? String(priceForQty(item, qty)) : "", priceTouched: false };
+      return { ...l, item, unitPrice: item ? String(priceFor(item, qty)) : "", priceTouched: false };
     });
 
   const setQty = (key: string, qty: string) =>
     patchLine(key, (l) => {
       const n = Number(qty);
-      const unitPrice = l.item && !l.priceTouched && Number.isFinite(n) && n > 0 ? String(priceForQty(l.item, n)) : l.unitPrice;
+      const unitPrice = l.item && !l.priceTouched && Number.isFinite(n) && n > 0 ? String(priceFor(l.item, n)) : l.unitPrice;
       return { ...l, qty, unitPrice };
     });
 

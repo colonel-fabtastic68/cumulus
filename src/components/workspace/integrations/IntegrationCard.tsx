@@ -39,14 +39,14 @@ export function IntegrationCard({ def, integration, onSetUp }: { def: Integratio
             <span className="block truncate" title={where}>
               Saved: <span className="font-mono text-[11.5px] text-text-secondary">{where}</span>
             </span>
-          ) : def.kind === "roadmap" || def.kind === "payments" ? (
+          ) : def.kind === "roadmap" ? (
             <span>{def.stage === "in_progress" ? "Being built" : "Live sync on the roadmap"}</span>
           ) : (
             <span>Not connected</span>
           )}
         </div>
-        <Button size="sm" variant={connected || def.kind === "roadmap" || def.kind === "payments" ? "secondary" : "primary"} icon={connected || def.kind === "roadmap" || def.kind === "payments" ? <Settings2 /> : <Plug />} onClick={onSetUp}>
-          {connected ? "Manage" : def.kind === "roadmap" || def.kind === "payments" ? "Set up" : "Connect"}
+        <Button size="sm" variant={connected || def.kind === "roadmap" ? "secondary" : "primary"} icon={connected || def.kind === "roadmap" ? <Settings2 /> : <Plug />} onClick={onSetUp}>
+          {connected ? "Manage" : def.kind === "roadmap" ? "Set up" : "Connect"}
         </Button>
       </div>
     </div>

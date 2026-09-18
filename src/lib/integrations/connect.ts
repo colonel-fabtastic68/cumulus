@@ -13,7 +13,7 @@ export interface ConnectBody {
   settings?: IntegrationSettings;
 }
 
-const NAMES: Record<IntegrationId, string> = { shopify: "Shopify", woocommerce: "WooCommerce", quickbooks: "QuickBooks", square: "Square", shippo: "Shippo", easypost: "EasyPost", evalon: "Evalon" };
+const NAMES: Record<IntegrationId, string> = { shopify: "Shopify", woocommerce: "WooCommerce", quickbooks: "QuickBooks", square: "Square", shippo: "Shippo", easypost: "EasyPost" };
 
 function clean(v: unknown): string {
   return typeof v === "string" ? v.trim() : "";
