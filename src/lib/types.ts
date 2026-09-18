@@ -69,6 +69,8 @@ export interface Item {
 
   /** Bill of materials. Only meaningful for assemblies. */
   bom: BomLine[];
+  /** Chip colour for assemblies, so families of builds are easy to tell apart in lists. */
+  color?: string;
 
   externalIds?: {
     shopify?: string;
@@ -192,7 +194,9 @@ export interface Receipt {
   supplierId?: ID;
   /** Vendor reference or PO number. */
   reference?: string;
-  status: "draft" | "received";
+  status: "draft" | "received" | "voided";
+  voidedAt?: string;
+  voidReason?: string;
   /** Effective receiving date (can be back-dated). */
   receivedAt: string;
   lines: ReceiptLine[];

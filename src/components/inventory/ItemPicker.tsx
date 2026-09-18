@@ -1,5 +1,7 @@
 "use client";
 
+import { crossRefText } from "@/lib/scan";
+
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import type { Item } from "@/lib/types";
@@ -34,8 +36,9 @@ export function ItemPicker({ value, onChange, label, placeholder = "Search SKU o
   const candidates = useMemo(() => {
     const ex = new Set(exclude ?? []);
     let rows = items.filter((i) => !ex.has(i.id) && (filter ? filter(i) : i.status === "active"));
-    if (q.trim()) rows = rows.filter((i) => matches(q, i.sku, i.name, i.category, i.barcode));
-    return rows.sort((a, b) => a.sku.localeCompare(b.sku)).slice(0, 8);
+    if (q.trim()) rows = rows.filter((i) => matches(q, i.sku, i.name, i.category, i.barcode, crossRefText(i)));
+    // Every match is listed (the list scrolls); typing narrows it.
+    return rows.sort((a, b) => a.sku.localeCompare(b.sku)).slice(0, 200);
   }, [items, q, filter, exclude]);
 
   useEffect(() => {

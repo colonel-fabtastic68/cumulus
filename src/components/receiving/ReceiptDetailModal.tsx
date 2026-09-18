@@ -5,7 +5,12 @@ import type { Receipt } from "@/lib/types";
 import { useSettings } from "@/lib/store/provider";
 import { formatDate, formatDateTime, formatMoney, formatNumber, formatQty, formatRelative, pluralize } from "@/lib/format";
 import { sum } from "@/lib/utils";
-import { Badge, Button, DescriptionList, Modal, SimpleTable, StatusBadge } from "@/components/ui";
+import { Badge, Button, ConfirmDialog, DescriptionList, Modal, SimpleTable, StatusBadge, useToast } from "@/components/ui";
+import { Ban } from "lucide-react";
+import { useState } from "react";
+import { voidReceipt } from "@/lib/inventory";
+import { canWrite, useCurrentUser } from "@/lib/auth";
+import { useStore } from "@/lib/store/provider";
 import { isBackDated, receiptTotal, type ReceiptLookups } from "./receiptUtils";
 
 interface ReceiptDetailModalProps {
@@ -22,6 +27,24 @@ export function ReceiptDetailModal({ receipt, lookups, onClose }: ReceiptDetailM
 
 function ReceiptDetail({ receipt, lookups, onClose }: { receipt: Receipt; lookups: ReceiptLookups; onClose: () => void }) {
   const { currency } = useSettings();
+  const store = useStore();
+  const user = useCurrentUser();
+  const toast = useToast();
+  const [confirmVoid, setConfirmVoid] = useState(false);
+  const [voiding, setVoiding] = useState(false);
+  const doVoid = async () => {
+    setVoiding(true);
+    try {
+      await voidReceipt(store, user, receipt.id);
+      toast(`${receipt.number} voided; stock adjusted back out`, "success");
+      setConfirmVoid(false);
+      onClose();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), "critical");
+    } finally {
+      setVoiding(false);
+    }
+  };
   const supplier = receipt.supplierId ? lookups.suppliersById.get(receipt.supplierId) : undefined;
   const recordedBy = lookups.membersById.get(receipt.createdBy);
   const total = receiptTotal(receipt);
@@ -47,10 +70,25 @@ function ReceiptDetail({ receipt, lookups, onClose }: { receipt: Receipt; lookup
             {pluralize(receipt.lines.length, "line")} · {formatNumber(units)} units · Total{" "}
             <span className="font-semibold text-text tabular">{formatMoney(total, currency)}</span>
           </div>
+          {canWrite(user) && receipt.status === "received" && (
+            <Button icon={<Ban />} className="text-critical" onClick={() => setConfirmVoid(true)}>
+              Void receipt
+            </Button>
+          )}
           <Button onClick={onClose}>Close</Button>
         </>
       }
     >
+      <ConfirmDialog
+        open={confirmVoid}
+        onClose={() => setConfirmVoid(false)}
+        onConfirm={() => void doVoid()}
+        destructive
+        loading={voiding}
+        title={`Void ${receipt.number}?`}
+        confirmLabel="Void receipt"
+        message={<>Every line&apos;s quantity is adjusted back out of stock at the location it went into, and the receipt stays on record as voided. Use this for receipts entered in error; goods actually returned to a supplier should be written off instead.</>}
+      />
       <div className="flex flex-col gap-4">
         <div className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
           <DescriptionList

@@ -649,6 +649,25 @@ export interface ReceiveInput {
 }
 
 /** Factor 7: receiving, with back-dating that keeps today's totals correct. */
+/**
+ * Undoes a receipt that was entered in error: each line's quantity comes back
+ * out as an adjustment at the location it went into, and the receipt stays on
+ * record as voided so the audit trail is intact.
+ */
+export async function voidReceipt(store: Store, actor: Actor, receiptId: string, reason?: string): Promise<void> {
+  const receipt = await store.get("receipts", receiptId);
+  if (!receipt) throw new InventoryError("Receipt not found");
+  if (receipt.status === "voided") throw new InventoryError(`${receipt.number} is already voided`);
+  const movements = (await store.list("movements")).filter((m) => m.refType === "receipt" && m.refId === receipt.id && m.type === "receipt");
+  const inputs: AdjustInput[] = (movements.length ? movements.map((m) => ({ itemId: m.itemId, qtyDelta: -m.qty, locationId: m.locationId })) : receipt.lines.map((l) => ({ itemId: l.itemId, qtyDelta: -l.qty }))).map((a) => ({ ...a, type: "adjustment" as const, reason: `Voided ${receipt.number}${reason ? `: ${reason}` : ""}` }));
+  await adjustStock(store, actor, inputs);
+  const now = nowIso();
+  await store.batch([
+    { op: "patch", collection: "receipts", id: receipt.id, patch: { status: "voided", voidedAt: now, voidReason: reason?.trim() || undefined } },
+    activityOp(actor, "stock.adjusted", `Voided ${receipt.number}${reason ? `: ${reason}` : ""}`, { entityType: "receipt", entityId: receipt.id }),
+  ]);
+}
+
 export async function receiveStock(store: Store, actor: Actor, input: ReceiveInput): Promise<Receipt> {
   if (input.lines.length === 0) throw new InventoryError("A receipt needs at least one line");
   const items = await store.list("items");
@@ -769,6 +788,8 @@ export async function buildAssembly(store: Store, actor: Actor, input: BuildInpu
 
 export interface OrderInput {
   customer: string;
+  /** Your own order number instead of the next SO-xxxx; must be unused. */
+  number?: string;
   source?: SalesOrder["source"];
   note?: string;
   lines: Array<{ itemId: string; qty: number; unitPrice?: number }>;
@@ -785,7 +806,16 @@ export async function createOrder(store: Store, actor: Actor, input: OrderInput)
   if (input.lines.length === 0) throw new InventoryError("An order needs at least one line");
   const items = await store.list("items");
   const byId = new Map(items.map((i) => [i.id, i]));
-  const { number, ops } = await nextNumber(store, "order");
+  const custom = input.number?.trim();
+  let number: string;
+  let ops: WriteOp[] = [];
+  if (custom) {
+    const clash = (await store.list("orders")).find((o) => o.number.toLowerCase() === custom.toLowerCase());
+    if (clash) throw new InventoryError(`Order number ${custom} is already used by an order for ${clash.customer}`);
+    number = custom;
+  } else {
+    ({ number, ops } = await nextNumber(store, "order"));
+  }
   const order: SalesOrder = {
     id: newId("so"),
     number,

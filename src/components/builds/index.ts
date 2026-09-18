@@ -4,3 +4,4 @@ export * from "./AssembliesTable";
 export * from "./BuildHistoryTable";
 export * from "./BuildDetailModal";
 export * from "./ExportBomMenu";
+export * from "./CopyBomModal";

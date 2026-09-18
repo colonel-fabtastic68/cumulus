@@ -8,7 +8,7 @@ import { canWrite, useCurrentUser } from "@/lib/auth";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { Button, Page, QueryParamEffect } from "@/components/ui";
 import { BuildModal } from "@/components/inventory";
-import { AssembliesTable, BuildDetailModal, BuildHistoryTable, BuildStats, isBuildableAssembly } from "@/components/builds";
+import { AssembliesTable, BuildDetailModal, BuildHistoryTable, BuildStats, CopyBomModal, isBuildableAssembly } from "@/components/builds";
 
 export default function BuildsPage() {
   const items = useItems();
@@ -21,6 +21,7 @@ export default function BuildsPage() {
   /** null = closed; { assembly: null } = open with no preset assembly. */
   const [buildTarget, setBuildTarget] = useState<{ assembly: Item | null } | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [copySource, setCopySource] = useState<Item | null>(null);
 
   const assemblies = useMemo(() => items.filter(isBuildableAssembly), [items]);
   const selected = useMemo(() => (selectedId ? (builds.find((b) => b.id === selectedId) ?? null) : null), [builds, selectedId]);
@@ -56,7 +57,8 @@ export default function BuildsPage() {
       </Suspense>
       <div className="flex flex-col gap-4">
         <BuildStats builds={builds} items={items} />
-        <AssembliesTable items={items} assemblies={assemblies} canWrite={writable} onBuild={openBuild} />
+        <AssembliesTable items={items} assemblies={assemblies} canWrite={writable} onBuild={openBuild} onCopyBom={setCopySource} />
+        <CopyBomModal source={copySource} onClose={() => setCopySource(null)} />
         <BuildHistoryTable builds={builds} onSelect={(b) => setSelectedId(b.id)} onNew={writable ? () => openBuild(null) : undefined} />
       </div>
 

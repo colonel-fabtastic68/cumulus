@@ -7,6 +7,7 @@ import { receiveStock } from "@/lib/inventory";
 import { useDefaultLocation, useLocations } from "@/lib/locations";
 import { findItemByCode } from "@/lib/scan";
 import { ScanField } from "@/components/scan";
+import { ItemPicker } from "@/components/inventory";
 import { useCollection, useItems, useSettings, useStore } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
 import { formatMoney, formatNumber, fromDateInput, pluralize, toDateInput } from "@/lib/format";
@@ -92,7 +93,10 @@ function ReceiveForm({ open, onClose, onReceived }: ReceiveDrawerProps) {
   const onScan = (code: string) => {
     const match = findItemByCode(items, code);
     if (!match) return toast(`No item matches ${code}`, "critical");
-    const item = match.item;
+    addItem(match.item);
+  };
+  /** A picked or scanned item: one more unit on its line, or a new line. */
+  const addItem = (item: Item) => {
     setLines((ls) => {
       const existing = ls.find((l) => l.item?.id === item.id);
       if (existing) return ls.map((l) => (l === existing ? { ...l, qty: String((Number(l.qty) || 0) + 1) } : l));
@@ -218,7 +222,10 @@ function ReceiveForm({ open, onClose, onReceived }: ReceiveDrawerProps) {
           </div>
           <div className="flex flex-col gap-2">
             <div className="px-3 pt-3">
-              <ScanField label="Scan to add" placeholder="Scan a barcode or type a SKU and press Enter" onScan={onScan} />
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <ScanField label="Scan to add" placeholder="Scan a barcode or type a SKU and press Enter" onScan={onScan} />
+                <ItemPicker label="Or find an item" placeholder="Search SKU, name or cross-reference" value={null} onChange={(item) => item && addItem(item)} />
+              </div>
             </div>
             {lines.map((line) => (
               <ReceiveLineRow

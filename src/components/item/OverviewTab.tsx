@@ -2,12 +2,16 @@
 
 import Link from "next/link";
 import type { Item, Member, StockMovement, Supplier } from "@/lib/types";
-import { formatDate, formatPercent, formatRelative, pluralize } from "@/lib/format";
+import { formatDate, formatMoney, formatPercent, formatRelative, pluralize } from "@/lib/format";
 import { Badge, DescriptionList } from "@/components/ui";
+import { useSettings } from "@/lib/store/provider";
+import { Tile } from "./Tile";
 import { MovementSparkline } from "./MovementSparkline";
 import { supplierHref } from "./utils";
 
 export function OverviewTab({ item, supplier, movements, membersById }: { item: Item; supplier?: Supplier; movements: StockMovement[]; membersById: Map<string, Member> }) {
+  const { currency } = useSettings();
+  const margin = item.price > 0 ? (item.price - item.unitCost) / item.price : null;
   const updatedBy = item.updatedBy ? membersById.get(item.updatedBy)?.name : undefined;
   const leadTime = item.leadTimeDays ?? supplier?.leadTimeDays;
 
@@ -88,6 +92,11 @@ export function OverviewTab({ item, supplier, movements, membersById }: { item: 
 
   return (
     <div className="grid grid-cols-1 gap-6 @3xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-3 gap-3 rounded-[var(--radius)] border border-border bg-surface-subdued p-3 @3xl:col-span-2">
+        <Tile label="Cost" value={formatMoney(item.unitCost, currency)} hint="standard cost" />
+        <Tile label="Price" value={item.price > 0 ? formatMoney(item.price, currency) : "—"} hint={item.salePrice ? `sale ${formatMoney(item.salePrice, currency)}` : "list price"} />
+        <Tile label="Margin" value={margin === null ? "—" : formatPercent(margin * 100)} hint={margin === null ? "set a price" : `${formatMoney(item.price - item.unitCost, currency)} per unit`} tone={margin === null ? "default" : margin < 0 ? "critical" : margin < 0.2 ? "warning" : "success"} />
+      </div>
       <div className="min-w-0">
         <h4 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">Details</h4>
         <DescriptionList rows={rows} />

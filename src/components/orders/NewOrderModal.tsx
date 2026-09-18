@@ -73,6 +73,7 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
     return fromTemplate.length ? fromTemplate : [newLine()];
   });
   const [note, setNote] = useState(template?.note ?? "");
+  const [orderNumber, setOrderNumber] = useState("");
   const [templateModal, setTemplateModal] = useState(false);
   const [templateName, setTemplateName] = useState(template?.name ?? "");
   const [templateNote, setTemplateNote] = useState(template?.description ?? "");
@@ -158,6 +159,7 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
       const address = shipTo.street1.trim() ? { ...shipTo, name: shipTo.name?.trim() || customer.trim() || undefined, country: shipTo.country.trim().toUpperCase() || "US" } : undefined;
       const order = await createOrder(store, user, {
         customer: customer.trim(),
+        number: orderNumber.trim() || undefined,
         customerEmail: customerEmail.trim() || undefined,
         shipTo: address,
         source,
@@ -216,6 +218,9 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
             </datalist>
           </div>
           <Select label="Source" value={source} onChange={(e) => setSource(e.target.value as OrderSource)} options={SOURCE_OPTIONS} />
+        </FormGrid>
+        <FormGrid cols={3}>
+          <TextField label="Order number" hint="(optional)" value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} placeholder="Next SO number" help="Leave blank for the next SO-xxxx, or type your own (a customer PO, a web order id)." />
         </FormGrid>
         <FormGrid cols={3}>
           <div className="sm:col-span-2">

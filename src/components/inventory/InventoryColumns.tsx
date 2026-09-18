@@ -10,25 +10,36 @@ import { clamp, cn } from "@/lib/utils";
 import { Badge, StatusBadge, type Column } from "@/components/ui";
 
 /** On-hand quantity with a "Low" flag and a tiny min/max level bar. */
+/** Red below min, amber between min and max, green at max or above (or at/above min when no max is set). */
+export function stockLevelTone(item: Item): "critical" | "warning" | "success" | "default" {
+  if (item.minQty === undefined && item.maxQty === undefined) return "default";
+  if (item.minQty !== undefined && item.onHand < item.minQty) return "critical";
+  if (item.maxQty !== undefined && item.maxQty > 0) return item.onHand >= item.maxQty ? "success" : "warning";
+  return "success";
+}
+
 export function StockLevelCell({ item }: { item: Item }) {
   const low = isLowStock(item);
+  const tone = stockLevelTone(item);
   const hasMin = item.minQty !== undefined;
   const cap = item.maxQty !== undefined && item.maxQty > 0 ? item.maxQty : hasMin ? Math.max(1, item.minQty! * 2) : 0;
   const pct = cap > 0 ? clamp((item.onHand / cap) * 100, 0, 100) : 0;
   const minPct = cap > 0 && hasMin ? clamp((item.minQty! / cap) * 100, 0, 100) : 0;
+  const bar = { critical: "bg-critical-fill", warning: "bg-warning", success: "bg-success", default: "bg-success" }[tone];
+  const text = { critical: "text-critical", warning: "text-warning", success: "text-success", default: "text-text" }[tone];
   return (
     <div className="flex flex-col items-end gap-1">
       <div className="flex items-center justify-end gap-1.5">
         {low && <Badge tone="warning">Low</Badge>}
-        <span className={cn("font-medium", low ? "text-warning" : "text-text")}>{formatQty(item.onHand, item.unit)}</span>
+        <span className={cn("font-medium", text)}>{formatQty(item.onHand, item.unit)}</span>
       </div>
-      {hasMin && (
+      {(hasMin || item.maxQty !== undefined) && (
         <div
           className="relative h-1 w-16 overflow-hidden rounded-full bg-surface-hover"
-          title={`Min ${formatNumber(item.minQty!)}${item.maxQty !== undefined ? ` · Max ${formatNumber(item.maxQty)}` : ""}`}
+          title={`${hasMin ? `Min ${formatNumber(item.minQty!)}` : ""}${item.maxQty !== undefined ? `${hasMin ? " · " : ""}Max ${formatNumber(item.maxQty)}` : ""} · ${tone === "critical" ? "below min" : tone === "warning" ? "between min and max" : "at max or above"}`}
           aria-hidden
         >
-          <div className={cn("h-full rounded-full", low ? "bg-warning" : "bg-success")} style={{ width: `${pct}%` }} />
+          <div className={cn("h-full rounded-full", bar)} style={{ width: `${pct}%` }} />
           {minPct > 0 && minPct < 100 && <div className="absolute inset-y-0 w-px bg-border-strong" style={{ left: `${minPct}%` }} />}
         </div>
       )}
@@ -101,7 +112,14 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
         maxWidth: 104,
         priority: 6,
         sortValue: (i) => i.type,
-        render: (i) => <Badge tone={i.type === "assembly" ? "info" : "default"}>{i.type === "assembly" ? "Assembly" : "Part"}</Badge>,
+        render: (i) =>
+          i.type === "assembly" && i.color ? (
+            <span className="inline-flex h-5 items-center rounded-full px-2 text-[11.5px] font-medium text-white" style={{ background: i.color }}>
+              Assembly
+            </span>
+          ) : (
+            <Badge tone={i.type === "assembly" ? "info" : "default"}>{i.type === "assembly" ? "Assembly" : "Part"}</Badge>
+          ),
       },
       {
         key: "onHand",

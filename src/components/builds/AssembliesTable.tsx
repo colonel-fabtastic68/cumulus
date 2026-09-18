@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Hammer, Layers } from "lucide-react";
+import { Copy, Hammer, Layers } from "lucide-react";
 import type { Item } from "@/lib/types";
 import { buildableQty, isLowStock } from "@/lib/inventory";
 import { formatNumber, formatQty } from "@/lib/format";
@@ -17,9 +17,10 @@ interface AssembliesTableProps {
   assemblies: Item[];
   canWrite: boolean;
   onBuild: (assembly: Item) => void;
+  onCopyBom?: (assembly: Item) => void;
 }
 
-export function AssembliesTable({ items, assemblies, canWrite, onBuild }: AssembliesTableProps) {
+export function AssembliesTable({ items, assemblies, canWrite, onBuild, onCopyBom }: AssembliesTableProps) {
   const [q, setQ] = useState("");
 
   const buildable = useMemo(() => new Map(assemblies.map((a) => [a.id, buildableQty(items, a)])), [items, assemblies]);
@@ -102,10 +103,15 @@ export function AssembliesTable({ items, assemblies, canWrite, onBuild }: Assemb
         key: "actions",
         header: "",
         align: "right",
-        width: "210px",
+        width: "290px",
         render: (a) => (
           <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
             <ExportBomMenu assembly={a} items={items} label="Export" />
+            {canWrite && onCopyBom && (
+              <Button size="sm" icon={<Copy />} onClick={() => onCopyBom(a)} title="Copy this BOM onto another item, or duplicate the assembly">
+                Copy
+              </Button>
+            )}
             {canWrite && (
               <Button
                 size="sm"
@@ -120,7 +126,7 @@ export function AssembliesTable({ items, assemblies, canWrite, onBuild }: Assemb
         ),
       },
     ],
-    [buildable, canWrite, onBuild, items],
+    [buildable, canWrite, onBuild, onCopyBom, items],
   );
 
   const lowCount = assemblies.filter(isLowStock).length;

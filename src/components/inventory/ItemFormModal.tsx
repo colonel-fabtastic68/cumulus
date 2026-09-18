@@ -7,10 +7,13 @@ import { useCollection, useItems, useStore } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
 import { Button, Combobox, FormGrid, Modal, Select, TextArea, TextField, useToast } from "@/components/ui";
 
+const ASSEMBLY_COLORS = ["#1f5f8b", "#0f7b5f", "#b45309", "#8e1f0b", "#6d28d9", "#0e7490", "#475569"];
+
 interface FormState {
   sku: string;
   name: string;
   type: Item["type"];
+  color: string;
   category: string;
   unit: string;
   status: Item["status"];
@@ -38,6 +41,7 @@ function fromItem(item?: Item | null, defaults?: Partial<Item>): FormState {
     sku: src?.sku ?? "",
     name: src?.name ?? "",
     type: src?.type ?? "part",
+    color: src?.color ?? "",
     category: src?.category ?? "",
     unit: src?.unit ?? "ea",
     status: src?.status ?? "active",
@@ -123,6 +127,7 @@ function ItemForm({ open, onClose, item, defaults, onSaved }: ItemFormModalProps
       sku: f.sku.trim().toUpperCase(),
       name: f.name.trim(),
       type: f.type,
+      color: f.type === "assembly" && f.color ? f.color : undefined,
       category: f.category.trim() || undefined,
       unit: f.unit.trim() || "ea",
       status: f.status,
@@ -184,7 +189,17 @@ function ItemForm({ open, onClose, item, defaults, onSaved }: ItemFormModalProps
           <div className="sm:col-span-2">
             <TextField label="Name" value={f.name} onChange={set("name")} placeholder="1590B aluminium enclosure, raw" />
           </div>
-          <Select label="Type" value={f.type} onChange={set("type")} options={[{ value: "part", label: "Part" }, { value: "assembly", label: "Assembly (has a BOM)" }]} help={clearsBom ? `Switching to a part removes its ${item!.bom.length}-line BOM` : undefined} />
+          <div className="flex flex-col gap-2">
+            <Select label="Type" value={f.type} onChange={set("type")} options={[{ value: "part", label: "Part" }, { value: "assembly", label: "Assembly (has a BOM)" }]} help={clearsBom ? `Switching to a part removes its ${item!.bom.length}-line BOM` : undefined} />
+            {f.type === "assembly" && (
+              <div className="flex items-center gap-1.5">
+                <span className="mr-1 text-[12px] text-text-secondary">Chip colour</span>
+                {ASSEMBLY_COLORS.map((c) => (
+                  <button key={c} type="button" aria-label={`Colour ${c}`} aria-pressed={f.color === c} onClick={() => setF((cur) => ({ ...cur, color: cur.color === c ? "" : c }))} className={`h-5 w-5 rounded-full border-2 ${f.color === c ? "border-text" : "border-transparent"}`} style={{ background: c }} />
+                ))}
+              </div>
+            )}
+          </div>
           <Combobox
             label="Category"
             value={f.category}
