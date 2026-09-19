@@ -2,7 +2,7 @@
 
 import { useEffect, type ReactNode } from "react";
 import { useSettings } from "@/lib/store/provider";
-import { useCurrentUser } from "@/lib/auth";
+import { useAuth, useCurrentUser } from "@/lib/auth";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { Banner, Page, Section } from "@/components/ui";
 import {
@@ -35,6 +35,7 @@ function Row({ id, children }: { id: string; children: ReactNode }) {
 export default function SettingsPage() {
   const settings = useSettings();
   const user = useCurrentUser();
+  const { mode } = useAuth();
   const { setPageContext } = useAgent();
   const canManage = canManageTeam(user);
   const readOnly = !canManage;
@@ -91,9 +92,12 @@ export default function SettingsPage() {
         <Row id="billing">
           <BillingSection settings={settings} />
         </Row>
-        <Row id="data">
-          <DataSection settings={settings} canManage={canManage} />
-        </Row>
+        {/* Hosted workspaces: backup, reset and clear live on the admin dashboard. Local mode keeps them here (there is no admin). */}
+        {mode !== "firestore" && (
+          <Row id="data">
+            <DataSection settings={settings} canManage={canManage} />
+          </Row>
+        )}
         <Row id="about">
           <AboutSection />
         </Row>

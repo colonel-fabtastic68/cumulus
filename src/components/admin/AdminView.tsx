@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
+import { Download, Eraser, RefreshCw, RotateCcw, ShieldCheck, Trash2, Upload } from "lucide-react";
+import { useRef } from "react";
 import { Badge, Banner, Button, Checkbox, CloudMark, ConfirmDialog, DescriptionList, Skeleton, Stat, Table, useToast, type Column } from "@/components/ui";
 import { AccountApiError, accountFetch } from "@/lib/account-fetch";
 import { APP_HOME, signInHref } from "@/lib/auth-routes";
@@ -183,7 +184,7 @@ function Overview({ data, open, onOpen, selected, onChanged }: { data: AdminOver
       <section>
         <Heading title="Workspaces" hint="Click a row for members, connections and plan." />
         <Table rows={data.workspaces} columns={workspaceColumns} rowKey={(w) => w.id} onRowClick={(w) => onOpen(w.id)} rowClassName={(w) => (w.id === open ? "bg-surface-selected" : "")} defaultSort={{ key: "created", dir: "desc" }} dense emptyState="No workspaces yet." />
-        {selected && <WorkspaceDetail w={selected} />}
+        {selected && <WorkspaceDetail w={selected} onChanged={onChanged} />}
       </section>
 
       <section>
@@ -234,7 +235,58 @@ function Heading({ title, hint }: { title: string; hint: string }) {
   );
 }
 
-function WorkspaceDetail({ w }: { w: AdminWorkspace }) {
+function WorkspaceDetail({ w, onChanged }: { w: AdminWorkspace; onChanged: () => void }) {
+  const session = useSession();
+  const toast = useToast();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [pending, setPending] = useState<null | { kind: "reset" | "clear" } | { kind: "import"; snapshot: unknown; name: string }>(null);
+  const [busy, setBusy] = useState<"export" | "run" | null>(null);
+
+  const exportJson = async () => {
+    if (!session.app) return;
+    setBusy("export");
+    try {
+      const { getFirebaseAuth } = await import("@/lib/store/firestore");
+      const token = await getFirebaseAuth(session.app).currentUser?.getIdToken();
+      const res = await fetch(`/api/admin/workspaces/${w.id}/data`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { error?: string } | null)?.error ?? `Export failed (${res.status})`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `cumulusos-${w.name.replace(/[^\w.-]+/g, "-")}-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), "critical");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const onFile = async (file: File) => {
+    try {
+      setPending({ kind: "import", snapshot: JSON.parse(await file.text()), name: file.name });
+    } catch {
+      toast("That file is not valid JSON.", "critical");
+    }
+  };
+
+  const run = async () => {
+    if (!pending || !session.app) return;
+    setBusy("run");
+    try {
+      const r = await accountFetch<{ summary: string }>(session.app, `/api/admin/workspaces/${w.id}/data`, pending.kind === "import" ? { action: "import", snapshot: pending.snapshot } : { action: pending.kind });
+      toast(`${w.name}: ${r.summary}`, "success");
+      setPending(null);
+      onChanged();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), "critical");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const memberColumns: Column<AdminWorkspace["members"][number]>[] = [
     { key: "name", header: "Member", render: (m) => <span className="font-medium text-text">{m.name}</span>, sortValue: (m) => m.name },
     { key: "email", header: "Email", render: (m) => <span className="text-text-secondary">{m.email}</span>, sortValue: (m) => m.email },
@@ -255,6 +307,35 @@ function WorkspaceDetail({ w }: { w: AdminWorkspace }) {
             { label: "Connections", value: w.integrations.length ? w.integrations.map((i) => `${i.id}: ${i.status}${i.lastSyncAt ? ` (synced ${formatRelative(i.lastSyncAt)})` : ""}`).join(" · ") : "None" },
             { label: "Data", value: `${w.counts.items} items · ${w.counts.orders} orders` },
           ]}
+        />
+        <div className="mt-4 border-t border-border pt-3">
+          <div className="text-[12.5px] font-semibold text-text">Data</div>
+          <p className="mt-0.5 text-[12px] text-text-secondary">Backup, restore, reset to the demo, or clear. Real members keep their seats; the plan is untouched.</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <Button size="sm" icon={<Download />} onClick={() => void exportJson()} loading={busy === "export"} disabled={busy !== null}>
+              Export JSON
+            </Button>
+            <Button size="sm" icon={<Upload />} onClick={() => fileRef.current?.click()} disabled={busy !== null}>
+              Import JSON
+            </Button>
+            <input ref={fileRef} type="file" accept="application/json,.json" className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void onFile(f); }} />
+            <Button size="sm" icon={<RotateCcw />} onClick={() => setPending({ kind: "reset" })} disabled={busy !== null}>
+              Reset demo data
+            </Button>
+            <Button size="sm" icon={<Eraser />} className="text-critical" onClick={() => setPending({ kind: "clear" })} disabled={busy !== null}>
+              Clear workspace
+            </Button>
+          </div>
+        </div>
+        <ConfirmDialog
+          open={!!pending}
+          onClose={() => (busy ? undefined : setPending(null))}
+          onConfirm={() => void run()}
+          destructive
+          loading={busy === "run"}
+          title={pending?.kind === "import" ? `Replace ${w.name} with ${pending.name}?` : pending?.kind === "reset" ? `Reset ${w.name} to the demo?` : `Clear ${w.name}?`}
+          confirmLabel={pending?.kind === "import" ? "Replace workspace" : pending?.kind === "reset" ? "Reset to demo" : "Clear workspace"}
+          message={pending?.kind === "import" ? <>Every collection is replaced with the file&apos;s contents. Real members keep their seats.</> : pending?.kind === "reset" ? <>Everything is replaced with Halcyon Audio and six months of history. Real members keep their seats; company name and plan stay.</> : <>Every item, order, receipt, build and record is deleted. Members, settings and the plan stay.</>}
         />
       </div>
     </div>
