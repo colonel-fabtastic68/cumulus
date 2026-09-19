@@ -2,19 +2,19 @@ import type { Metadata } from "next";
 import { LegalList, LegalPage, LegalSection } from "@/components/marketing/LegalPage";
 
 export const metadata: Metadata = {
-  title: "End user licence agreement · cumulusOS",
-  description: "The licence under which cumulusOS is made available to the people and companies who use it.",
+  title: "End user license agreement · cumulusOS",
+  description: "The license under which cumulusOS is made available to the people and companies who use it.",
 };
 
 export default function EulaPage() {
   return (
     <LegalPage
-      title="End user licence agreement"
+      title="End user license agreement"
       updated="16 September 2026"
       intro="This agreement is between cumulusOS and the person or company using the software. It sets out what you may do with cumulusOS, what we keep, and what happens if things go wrong. It sits alongside our terms of service, which cover accounts and subscriptions, and our privacy policy, which covers personal data."
     >
-      <LegalSection heading="Licence">
-        <p>While your subscription is active and you follow this agreement, we grant you a personal, non-exclusive, non-transferable right to use cumulusOS as a hosted service, for your own business. Everyone you invite to your workspace is covered by the same licence, and you are responsible for what they do with it.</p>
+      <LegalSection heading="License">
+        <p>While your subscription is active and you follow this agreement, we grant you a personal, non-exclusive, non-transferable right to use cumulusOS as a hosted service, for your own business. Everyone you invite to your workspace is covered by the same license, and you are responsible for what they do with it.</p>
       </LegalSection>
 
       <LegalSection heading="What you may not do">
@@ -38,7 +38,7 @@ export default function EulaPage() {
       </LegalSection>
 
       <LegalSection heading="Connected services">
-        <p>cumulusOS can connect to services you already use, including QuickBooks Online, Shopify, WooCommerce and shipping carriers. When you authorise a connection, you permit us to read and write the data that connection needs, on your behalf and at your direction. Those services are run by their own providers under their own terms, and we are not responsible for their availability or for the accuracy of data they return.</p>
+        <p>cumulusOS can connect to services you already use, including QuickBooks Online, Shopify, WooCommerce and shipping carriers. When you authorize a connection, you permit us to read and write the data that connection needs, on your behalf and at your direction. Those services are run by their own providers under their own terms, and we are not responsible for their availability or for the accuracy of data they return.</p>
       </LegalSection>
 
       <LegalSection heading="Automated suggestions">
@@ -50,7 +50,7 @@ export default function EulaPage() {
       </LegalSection>
 
       <LegalSection heading="Term and termination">
-        <p>This licence runs while you use cumulusOS. It ends when your subscription ends, when you stop using the service, or if we end it because this agreement has been broken. On termination your right to use the software stops; export your data first, and we will give you a reasonable chance to do so.</p>
+        <p>This license runs while you use cumulusOS. It ends when your subscription ends, when you stop using the service, or if we end it because this agreement has been broken. On termination your right to use the software stops; export your data first, and we will give you a reasonable chance to do so.</p>
       </LegalSection>
 
       <LegalSection heading="Warranties and liability">

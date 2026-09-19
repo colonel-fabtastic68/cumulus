@@ -9,7 +9,7 @@ import type { Table } from "./formats";
  */
 
 const typeLabel = (i: Item) => (i.type === "assembly" ? "BOM" : "Part");
-const groupOf = (i: Item) => i.category?.trim() || "Uncategorised";
+const groupOf = (i: Item) => i.category?.trim() || "Uncategorized";
 
 export function bomTables(assembly: Item, items: Item[]): { components: Table; exploded: Table; summary: Table } {
   const byId = new Map(items.map((i) => [i.id, i]));

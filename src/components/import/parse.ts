@@ -17,7 +17,7 @@ function cellToString(v: unknown): string {
   return String(v);
 }
 
-/** Normalise a Papa result into headers + string rows, dropping blank columns and rows. */
+/** Normalize a Papa result into headers + string rows, dropping blank columns and rows. */
 export function toParsedSource(name: string, results: Papa.ParseResult<RawRow>): ParsedSource {
   const headers = uniq((results.meta.fields ?? []).map((h) => h.trim()).filter((h) => h && h !== "__parsed_extra"));
   const rows = results.data

@@ -5,7 +5,7 @@ export const maxDuration = 60;
 
 /**
  * Turns a plain-language request into quote lines using only the workspace's
- * own catalogue, which the client sends along (no server-side data access,
+ * own catalog, which the client sends along (no server-side data access,
  * like the chat route). The client then prices the lines from the items.
  */
 const catalogItem = z.object({ sku: z.string(), name: z.string(), category: z.string().optional(), type: z.string().optional(), unit: z.string().optional(), price: z.number(), unitCost: z.number(), onHand: z.number(), bom: z.array(z.object({ sku: z.string(), qty: z.number() })).optional() });
@@ -24,11 +24,11 @@ const draftSchema = z.object({
   lines: z.array(
     z.object({
       kind: z.enum(["item", "labor", "other"]),
-      sku: z.string().optional().describe("Exact SKU from the catalogue for item lines"),
+      sku: z.string().optional().describe("Exact SKU from the catalog for item lines"),
       description: z.string().describe("Line description shown to the customer"),
       qty: z.number().optional().describe("Quantity for item/other lines"),
-      hours: z.number().optional().describe("Hours for labour lines"),
-      unitPrice: z.number().optional().describe("Only when the request states a price; otherwise leave unset so the catalogue price applies"),
+      hours: z.number().optional().describe("Hours for labor lines"),
+      unitPrice: z.number().optional().describe("Only when the request states a price; otherwise leave unset so the catalog price applies"),
       reason: z.string().optional().describe("Why this line is included, one clause"),
     }),
   ),
@@ -48,8 +48,8 @@ export async function POST(req: Request) {
   try {
     const draft = await structured({
       schema: draftSchema,
-      system: `You draft sales quotes for an inventory business. Use ONLY SKUs from the catalogue; never invent items. Match the request to catalogue items by name, category or purpose. When the request asks for something the catalogue does not have, add an "other" line with a description and no price rather than guessing a SKU. Labour is charged at ${input.laborRate} ${input.currency} per hour; add labour lines when work is implied (assembly, installation, setup, testing) and estimate hours sensibly. Do not set unitPrice unless the request states a price; the catalogue price is applied afterwards. Keep descriptions short and customer-facing. Currency: ${input.currency}.`,
-      prompt: `Request:\n${input.prompt}\n\nCatalogue (SKU | name | category | price | cost | on hand):\n${catalog || "(empty)"}`,
+      system: `You draft sales quotes for an inventory business. Use ONLY SKUs from the catalog; never invent items. Match the request to catalog items by name, category or purpose. When the request asks for something the catalog does not have, add an "other" line with a description and no price rather than guessing a SKU. Labor is charged at ${input.laborRate} ${input.currency} per hour; add labor lines when work is implied (assembly, installation, setup, testing) and estimate hours sensibly. Do not set unitPrice unless the request states a price; the catalog price is applied afterwards. Keep descriptions short and customer-facing. Currency: ${input.currency}.`,
+      prompt: `Request:\n${input.prompt}\n\nCatalog (SKU | name | category | price | cost | on hand):\n${catalog || "(empty)"}`,
     });
     return Response.json(draft);
   } catch (e) {

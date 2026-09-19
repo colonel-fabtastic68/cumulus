@@ -59,7 +59,7 @@ export function seedSettings(): WorkspaceSettings {
       {
         id: "auto_lowstock",
         name: "Daily low-stock digest",
-        description: "Summarise every item below its minimum and draft reorder quantities using lead times.",
+        description: "Summarize every item below its minimum and draft reorder quantities using lead times.",
         prompt: "Review all items below minimum quantity. For each, recommend a reorder quantity that brings it to max, grouped by supplier, and flag anything with a lead time over 14 days.",
         schedule: "daily",
         enabled: true,
@@ -108,10 +108,10 @@ const SUPPLIERS: Supplier[] = [
 
 const ITEM_SEEDS: ItemSeed[] = [
   // Enclosures & finishing
-  { sku: "ENC-125B-RAW", name: "1590B aluminium enclosure, raw", type: "part", category: "Enclosures", unitCost: 4.85, price: 9.5, minQty: 100, maxQty: 400, leadTimeDays: 10, supplierId: "sup_hammond", supplierSku: "1590B", location: "A-01", opening: 260, demand: 28 },
+  { sku: "ENC-125B-RAW", name: "1590B aluminum enclosure, raw", type: "part", category: "Enclosures", unitCost: 4.85, price: 9.5, minQty: 100, maxQty: 400, leadTimeDays: 10, supplierId: "sup_hammond", supplierSku: "1590B", location: "A-01", opening: 260, demand: 28 },
   { sku: "ENC-125B-PC-BLK", name: "1590B enclosure, powder coat black", type: "part", category: "Enclosures", unitCost: 7.4, price: 14, minQty: 60, maxQty: 250, leadTimeDays: 14, supplierId: "sup_hammond", location: "A-02", opening: 140, demand: 14 },
   { sku: "ENC-125B-PC-WHT", name: "1590B enclosure, powder coat white", type: "part", category: "Enclosures", unitCost: 7.4, price: 14, minQty: 40, maxQty: 200, leadTimeDays: 14, supplierId: "sup_hammond", location: "A-02", opening: 90, demand: 8 },
-  { sku: "ENC-1590BB-RAW", name: "1590BB aluminium enclosure, raw", type: "part", category: "Enclosures", unitCost: 6.9, price: 13, minQty: 40, maxQty: 160, leadTimeDays: 10, supplierId: "sup_hammond", supplierSku: "1590BB", location: "A-03", opening: 70, demand: 6 },
+  { sku: "ENC-1590BB-RAW", name: "1590BB aluminum enclosure, raw", type: "part", category: "Enclosures", unitCost: 6.9, price: 13, minQty: 40, maxQty: 160, leadTimeDays: 10, supplierId: "sup_hammond", supplierSku: "1590BB", location: "A-03", opening: 70, demand: 6 },
   { sku: "SCR-M3-6-BLK", name: "M3 x 6mm black screw", type: "part", category: "Hardware", unit: "ea", unitCost: 0.04, price: 0.1, minQty: 2000, maxQty: 8000, leadTimeDays: 4, supplierId: "sup_mouser", location: "H-11", opening: 5200, demand: 220 },
   { sku: "FT-RUBBER-12", name: "Rubber foot, 12mm adhesive", type: "part", category: "Hardware", unitCost: 0.09, price: 0.25, minQty: 800, maxQty: 4000, leadTimeDays: 3, supplierId: "sup_uline", location: "H-12", opening: 2600, demand: 110 },
 
@@ -193,7 +193,7 @@ const ITEM_SEEDS: ItemSeed[] = [
     ],
   },
   {
-    sku: "FG-FZ1-RAW", name: "Halcyon Fuzz, raw aluminium", type: "assembly", category: "Finished goods", unitCost: 0, price: 179, minQty: 6, maxQty: 30, location: "F-02", opening: 9, demand: 3, tags: ["shopify"],
+    sku: "FG-FZ1-RAW", name: "Halcyon Fuzz, raw aluminum", type: "assembly", category: "Finished goods", unitCost: 0, price: 179, minQty: 6, maxQty: 30, location: "F-02", opening: 9, demand: 3, tags: ["shopify"],
     bom: [
       { sku: "SA-FZ1-PCBA", qty: 1 }, { sku: "ENC-125B-RAW", qty: 1 }, { sku: "SCR-M3-6-BLK", qty: 4 }, { sku: "FT-RUBBER-12", qty: 4 }, { sku: "SW-3PDT-BLU", qty: 1 }, { sku: "JK-6.35-MONO", qty: 2 }, { sku: "JK-DC-2.1", qty: 1 }, { sku: "LED-5MM-RED", qty: 1 },
       { sku: "KNB-DAVIES-1510-BLK", qty: 2 }, { sku: "WIRE-24-BLK", qty: 1.2, wastePct: 10 }, { sku: "WIRE-24-RED", qty: 1.2, wastePct: 10 }, { sku: "PKG-BOX-PEDAL", qty: 1 }, { sku: "PKG-INSERT-FOAM", qty: 1 }, { sku: "PKG-STICKER", qty: 2 },

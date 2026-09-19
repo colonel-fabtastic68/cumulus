@@ -217,7 +217,7 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
       const [items, suppliers, orders, rmas, settings, movements, integrations] = await Promise.all([store.list("items"), store.list("suppliers"), store.list("orders"), store.list("rmas"), store.list("settings"), store.list("movements"), store.list("integrations")]);
       const cats: Record<string, { items: number; value: number }> = {};
       for (const i of items) {
-        const c = i.category ?? "Uncategorised";
+        const c = i.category ?? "Uncategorized";
         cats[c] ??= { items: 0, value: 0 };
         cats[c].items++;
         cats[c].value = round(cats[c].value + i.onHand * i.unitCost);
@@ -362,7 +362,7 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
         case "valuation": {
           const cats: Record<string, { items: number; units: number; value: number }> = {};
           for (const i of items) {
-            const c = i.category ?? "Uncategorised";
+            const c = i.category ?? "Uncategorized";
             cats[c] ??= { items: 0, units: 0, value: 0 };
             cats[c].items++;
             cats[c].units = round(cats[c].units + i.onHand);

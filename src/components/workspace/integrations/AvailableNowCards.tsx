@@ -11,7 +11,7 @@ Platform: (which system do you want connected?)
 What should sync: (products, stock levels, orders, costs...)
 Why it matters: (what you do by hand today)
 
-Please acknowledge the request and summarise it back so it is on record in this conversation.`;
+Please acknowledge the request and summarize it back so it is on record in this conversation.`;
 
 function FeatureCard({ icon, title, badge, description, action }: { icon: ReactNode; title: string; badge?: ReactNode; description: string; action: ReactNode }) {
   return (

@@ -203,7 +203,7 @@ export function agentSuggestions({ items, movements, lots, openOrders, lowCount,
   out.push(oldest ? `Show the oldest batches on the shelf. ${oldest.item.sku} has been sitting for ${oldest.oldestDays} days.` : "Show the oldest batches on the shelf");
 
   out.push("Project next month's demand for finished goods using seasonality");
-  out.push("Summarise inventory health for this week in three bullet points");
+  out.push("Summarize inventory health for this week in three bullet points");
 
   return out.slice(0, 4);
 }

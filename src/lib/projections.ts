@@ -124,7 +124,7 @@ function linearTrend(points: Array<[number, number]>): { slope: number; intercep
 
 export function scopeItems(items: Item[], scope: ProjectionScope): Item[] {
   if (scope.kind === "sku") return items.filter((i) => i.id === scope.itemId);
-  if (scope.kind === "category") return items.filter((i) => (i.category ?? "Uncategorised") === scope.category);
+  if (scope.kind === "category") return items.filter((i) => (i.category ?? "Uncategorized") === scope.category);
   return items.filter((i) => i.status === "active");
 }
 

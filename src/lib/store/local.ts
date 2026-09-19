@@ -9,7 +9,7 @@ type Listener = (rows: unknown[]) => void;
 /**
  * Zero-setup store backed by localStorage.
  * Cross-tab changes are broadcast with BroadcastChannel, so opening two tabs
- * demonstrates the collaborative, real-time behaviour without a backend.
+ * demonstrates the collaborative, real-time behavior without a backend.
  */
 export class LocalStore implements Store {
   readonly kind = "local" as const;

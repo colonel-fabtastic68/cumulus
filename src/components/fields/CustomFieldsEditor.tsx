@@ -3,7 +3,7 @@
 import type { CustomFieldDef } from "@/lib/types";
 import { FormGrid, Select, TextField } from "@/components/ui";
 
-/** Inputs for the custom fields a workspace defined for this kind of record (Settings → Catalogue). */
+/** Inputs for the custom fields a workspace defined for this kind of record (Settings → Catalog). */
 export function CustomFieldsEditor({ defs, values, onChange, disabled }: { defs: CustomFieldDef[]; values: Record<string, string>; onChange: (next: Record<string, string>) => void; disabled?: boolean }) {
   if (defs.length === 0) return null;
   const set = (key: string, v: string) => onChange({ ...values, [key]: v });

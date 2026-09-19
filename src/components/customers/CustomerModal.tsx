@@ -90,7 +90,7 @@ function Form({ customer, onClose, onSaved }: { customer?: Customer | null; onCl
         </div>
         <ContactsEditor contacts={contacts} onChange={setContacts} />
         <FormGrid cols={3}>
-          <Select label="Price group" value={priceGroupId} onChange={(e) => setPriceGroupId(e.target.value)} options={[{ value: "", label: groups.length ? "List price" : "None defined (Settings → Catalogue)" }, ...groups.map((g) => ({ value: g.id, label: g.name }))]} help="Items priced for this group use that price on orders." />
+          <Select label="Price group" value={priceGroupId} onChange={(e) => setPriceGroupId(e.target.value)} options={[{ value: "", label: groups.length ? "List price" : "None defined (Settings → Catalog)" }, ...groups.map((g) => ({ value: g.id, label: g.name }))]} help="Items priced for this group use that price on orders." />
           <TextField label="Discount %" hint="(optional)" type="number" min={0} max={100} step="any" value={discountPct} onChange={(e) => setDiscountPct(e.target.value)} help="Off every line, after the group price." />
           <div className="flex items-end pb-1">
             <Toggle label="Tax exempt" help="No sales tax on orders." checked={taxExempt} onChange={setTaxExempt} size="sm" />

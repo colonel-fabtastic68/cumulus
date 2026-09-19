@@ -252,9 +252,9 @@ function EventModal({ state, onClose, writable }: { state: { event?: CalendarEve
 
           {writable && (
             <div className="flex items-center gap-2">
-              <span className="text-[12.5px] font-medium text-text">Colour</span>
+              <span className="text-[12.5px] font-medium text-text">Color</span>
               {EVENT_COLORS.map((c) => (
-                <button key={c} type="button" aria-label={`Colour ${c}`} aria-pressed={color === c} onClick={() => setColor(c)} className={cn("h-6 w-6 rounded-full border-2", color === c ? "border-text" : "border-transparent")} style={{ background: c }} />
+                <button key={c} type="button" aria-label={`Color ${c}`} aria-pressed={color === c} onClick={() => setColor(c)} className={cn("h-6 w-6 rounded-full border-2", color === c ? "border-text" : "border-transparent")} style={{ background: c }} />
               ))}
             </div>
           )}

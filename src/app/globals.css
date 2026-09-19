@@ -2,10 +2,10 @@
 
 /*
  * cumulusOS design tokens — flat, white and off-white, soft radii, quiet borders.
- * Modelled on Shopify Polaris (web) but intentionally lighter.
+ * Modeled on Shopify Polaris (web) but intentionally lighter.
  */
 :root {
-  /* Polaris colour tokens (admin, light) */
+  /* Polaris color tokens (admin, light) */
   --bg: #f1f1f1;                 /* color-bg */
   --surface: #ffffff;            /* color-bg-surface */
   --surface-subdued: #f7f7f7;    /* color-bg-surface-secondary */
@@ -147,7 +147,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Default border colour for `border` utilities; layered so colour utilities like border-transparent can override it. */
+/* Default border color for `border` utilities; layered so color utilities like border-transparent can override it. */
 @layer base {
   * {
     border-color: var(--border);

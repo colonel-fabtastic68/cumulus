@@ -45,7 +45,7 @@ export default function QuotesPage() {
   return (
     <Page
       title="Quotes"
-      subtitle="Priced offers built from your items, labour rate and margins. Strato drafts them from a sentence."
+      subtitle="Priced offers built from your items, labor rate and margins. Strato drafts them from a sentence."
       primaryAction={
         writable ? (
           <Button variant="primary" icon={<Plus />} onClick={() => setEditor({ open: true, id: null })}>
@@ -93,7 +93,7 @@ export default function QuotesPage() {
           <Stat label="Open quotes" value={formatNumber(open.length)} hint={formatMoney(openValue, settings.currency)} icon={<FileText />} />
           <Stat label="Accepted this month" value={formatNumber(acceptedThisMonth.length)} hint={formatMoney(acceptedThisMonth.reduce((a, q) => a + quoteTotals(q).total, 0), settings.currency)} />
           <Stat label="Win rate" value={winRate === null ? "—" : `${winRate}%`} hint={decided.length ? `${decided.length} decided` : "No decisions yet"} />
-          <Stat label="Labour rate" value={formatMoney(settings.quoting?.laborRate ?? 0, settings.currency)} hint={settings.quoting?.laborRate ? "per hour · Settings → Quoting" : "Set it under Settings → Quoting"} href="/settings" />
+          <Stat label="Labor rate" value={formatMoney(settings.quoting?.laborRate ?? 0, settings.currency)} hint={settings.quoting?.laborRate ? "per hour · Settings → Quoting" : "Set it under Settings → Quoting"} href="/settings" />
         </div>
         <QuotesTable quotes={quotes} currency={settings.currency} onSelect={(q: Quote) => setEditor({ open: true, id: q.id })} onNew={writable ? () => setEditor({ open: true, id: null }) : undefined} />
       </div>

@@ -5,7 +5,7 @@
  * Providers, so nothing needs the NEXT_PUBLIC_ prefix and changes on Vercel take
  * effect on the next deploy regardless of build cache.
  *
- * The Firebase web API key identifies the project rather than authorising
+ * The Firebase web API key identifies the project rather than authorizing
  * access (security comes from Firestore rules and Auth), so sending it to the
  * browser is expected.
  */

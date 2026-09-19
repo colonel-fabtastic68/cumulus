@@ -213,7 +213,7 @@ function Stat({ label, value, hint, tone }: { label: string; value: string; hint
 }
 
 const ROWS = [
-  { sku: "ENC-125B-RAW", name: "1590B aluminium enclosure, raw", category: "Enclosures", onHand: "260", min: "100", price: "$10.45", proposed: true, status: "Active" },
+  { sku: "ENC-125B-RAW", name: "1590B aluminum enclosure, raw", category: "Enclosures", onHand: "260", min: "100", price: "$10.45", proposed: true, status: "Active" },
   { sku: "SW-3PDT-BLU", name: "3PDT footswitch, blue", category: "Electronics", onHand: "320", min: "150", price: "$4.95", proposed: true, status: "Active" },
   { sku: "POT-A100K-16", name: "Potentiometer A100K 16mm", category: "Electronics", onHand: "720", min: "300", price: "$1.98", proposed: true, status: "Active" },
   { sku: "JK-DC-2.1", name: "DC power jack 2.1mm", category: "Electronics", onHand: "92", min: "200", price: "$1.50", proposed: false, status: "Low stock" },
@@ -332,7 +332,7 @@ function ReceivingView() {
             <tr>
               <td>
                 <div className="font-mono text-[12px]">ENC-125B-RAW</div>
-                <div className="text-[12px] text-text-secondary">1590B aluminium enclosure, raw</div>
+                <div className="text-[12px] text-text-secondary">1590B aluminum enclosure, raw</div>
               </td>
               <td className="text-right tabular">200</td>
               <td className="text-right tabular">$4.85</td>
@@ -341,7 +341,7 @@ function ReceivingView() {
             <tr>
               <td>
                 <div className="font-mono text-[12px]">ENC-1590BB-RAW</div>
-                <div className="text-[12px] text-text-secondary">1590BB aluminium enclosure, raw</div>
+                <div className="text-[12px] text-text-secondary">1590BB aluminum enclosure, raw</div>
               </td>
               <td className="text-right tabular">60</td>
               <td className="text-right tabular">$6.90</td>

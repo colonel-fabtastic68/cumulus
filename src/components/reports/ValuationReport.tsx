@@ -11,9 +11,9 @@ import { csvFilename, downloadCsv } from "./csv";
 import { AskAgentButton, ExportCsvButton, ReportEmpty, ReportHeader, ReportSubheader, ShareBar, SkuLink } from "./shared";
 
 const TOP_N = 15;
-const UNCATEGORISED = "Uncategorised";
+const UNCATEGORIZED = "Uncategorized";
 const AGENT_PROMPT =
-  "Summarise where inventory value is concentrated by category and by SKU, then suggest three concrete ways to reduce working capital without risking stock-outs on finished goods.";
+  "Summarize where inventory value is concentrated by category and by SKU, then suggest three concrete ways to reduce working capital without risking stock-outs on finished goods.";
 
 interface ValuedItem {
   item: Item;
@@ -54,7 +54,7 @@ export function ValuationReport() {
   const byCategory = useMemo<CategoryRow[]>(() => {
     const map = new Map<string, CategoryRow>();
     for (const v of valued) {
-      const key = v.item.category?.trim() || UNCATEGORISED;
+      const key = v.item.category?.trim() || UNCATEGORIZED;
       let row = map.get(key);
       if (!row) {
         row = { category: key, items: 0, units: 0, value: 0, share: 0 };
@@ -93,7 +93,7 @@ export function ValuationReport() {
         ),
         sortValue: (r) => r.item.name,
       },
-      { key: "category", header: "Category", hideBelow: "md", render: (r) => r.item.category ?? <span className="text-text-tertiary">{UNCATEGORISED}</span>, sortValue: (r) => r.item.category ?? "" },
+      { key: "category", header: "Category", hideBelow: "md", render: (r) => r.item.category ?? <span className="text-text-tertiary">{UNCATEGORIZED}</span>, sortValue: (r) => r.item.category ?? "" },
       { key: "onHand", header: "On hand", align: "right", render: (r) => formatQty(r.item.onHand, r.item.unit), sortValue: (r) => r.item.onHand },
       { key: "unitCost", header: "Unit cost", align: "right", hideBelow: "sm", render: (r) => formatMoney(r.item.unitCost, currency), sortValue: (r) => r.item.unitCost },
       { key: "value", header: "Value", align: "right", render: (r) => <span className="font-medium text-text">{formatMoney(r.value, currency)}</span>, sortValue: (r) => r.value },

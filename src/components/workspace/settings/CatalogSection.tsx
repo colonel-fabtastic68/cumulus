@@ -40,7 +40,7 @@ export function CatalogSection({ settings, readOnly }: { settings: WorkspaceSett
           customFields: { items: clean(fields.items), customers: clean(fields.customers), suppliers: clean(fields.suppliers) },
         },
       });
-      toast("Catalogue settings saved", "success");
+      toast("Catalog settings saved", "success");
     } catch (e) {
       toast(e instanceof Error ? e.message : "Could not save", "critical");
     } finally {
@@ -105,7 +105,7 @@ export function CatalogSection({ settings, readOnly }: { settings: WorkspaceSett
       {!readOnly && (
         <div>
           <Button variant="primary" onClick={() => void save()} loading={saving}>
-            Save catalogue settings
+            Save catalog settings
           </Button>
         </div>
       )}

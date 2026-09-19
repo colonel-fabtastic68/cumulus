@@ -2,7 +2,7 @@
  * cumulusOS domain model.
  *
  * Every record has a string `id`. Dates are ISO-8601 strings so records
- * serialise cleanly to localStorage and Firestore alike.
+ * serialize cleanly to localStorage and Firestore alike.
  */
 
 export type ID = string;
@@ -11,7 +11,7 @@ export type ID = string;
 // Items (parts, assemblies)
 // ---------------------------------------------------------------------------
 
-/** "part" and "assembly" are built in (assemblies carry a BOM); workspaces add their own types in Settings → Catalogue. */
+/** "part" and "assembly" are built in (assemblies carry a BOM); workspaces add their own types in Settings → Catalog. */
 export type ItemType = "part" | "assembly" | (string & {});
 export type ItemStatus = "active" | "inactive" | "superseded";
 
@@ -70,9 +70,9 @@ export interface Item {
 
   /** Bill of materials. Only meaningful for assemblies. */
   bom: BomLine[];
-  /** Chip colour for assemblies, so families of builds are easy to tell apart in lists. */
+  /** Chip color for assemblies, so families of builds are easy to tell apart in lists. */
   color?: string;
-  /** Price per customer price group (Settings → Catalogue), keyed by group id. Falls back to the list price. */
+  /** Price per customer price group (Settings → Catalog), keyed by group id. Falls back to the list price. */
   groupPrices?: Record<string, number>;
 
   externalIds?: {
@@ -190,7 +190,7 @@ export interface Supplier {
   terms?: string;
   notes?: string;
   contacts?: Contact[];
-  /** Custom fields defined in Settings → Catalogue, keyed by field key. */
+  /** Custom fields defined in Settings → Catalog, keyed by field key. */
   attributes?: Record<string, string>;
   createdAt: string;
 }
@@ -287,12 +287,12 @@ export interface Customer {
   tags?: string[];
   notes?: string;
   contacts?: Contact[];
-  /** Price group id from Settings → Catalogue; order lines use the item's price for this group. */
+  /** Price group id from Settings → Catalog; order lines use the item's price for this group. */
   priceGroupId?: string;
   /** Percentage off every line for this customer, applied after the group price. */
   discountPct?: number;
   taxExempt?: boolean;
-  /** Custom fields defined in Settings → Catalogue, keyed by field key. */
+  /** Custom fields defined in Settings → Catalog, keyed by field key. */
   attributes?: Record<string, string>;
   /** Where the record came from (manual, import, an order that named them, a channel). */
   source?: "manual" | "import" | "order" | "shopify" | "woocommerce";
@@ -488,7 +488,7 @@ export interface Member {
   name: string;
   email: string;
   role: MemberRole;
-  /** Hex colour used for the avatar. */
+  /** Hex color used for the avatar. */
   color: string;
   status: "active" | "invited";
   /** Signed in anonymously (Firestore mode). */
@@ -777,10 +777,10 @@ export interface QuoteLine {
   itemId?: ID;
   description: string;
   qty: number;
-  /** Unit for the quantity: the item's unit, "h" for labour, free text otherwise. */
+  /** Unit for the quantity: the item's unit, "h" for labor, free text otherwise. */
   unit?: string;
   unitPrice: number;
-  /** What the line costs the business per unit, for margin. Item cost, labour cost rate, or supplier price. */
+  /** What the line costs the business per unit, for margin. Item cost, labor cost rate, or supplier price. */
   unitCost?: number;
   discountPct?: number;
   note?: string;
@@ -827,9 +827,9 @@ export interface QuoteTemplate {
 }
 
 export interface QuotingSettings {
-  /** What an hour of labour is charged at. */
+  /** What an hour of labor is charged at. */
   laborRate: number;
-  /** What an hour of labour costs the business, for margin. */
+  /** What an hour of labor costs the business, for margin. */
   laborCost?: number;
   /** Target margin used when an item has no list price. */
   defaultMarginPct?: number;
@@ -843,7 +843,7 @@ export interface QuotingSettings {
 export interface AgentSession {
   id: ID;
   title: string;
-  /** Serialised AI SDK UIMessage[] */
+  /** Serialized AI SDK UIMessage[] */
   messages: unknown[];
   createdBy: string;
   createdByName: string;

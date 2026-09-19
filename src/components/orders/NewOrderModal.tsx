@@ -178,7 +178,7 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
       onClose();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (shipNow && e instanceof InventoryError && /^Cannot fulfil/i.test(msg)) {
+      if (shipNow && e instanceof InventoryError && /^Cannot fulfill/i.test(msg)) {
         // The order was saved but could not ship (stock short). Leave it open rather than lose it.
         toast(`Order created but not shipped. ${msg}`, "critical");
         onClose();

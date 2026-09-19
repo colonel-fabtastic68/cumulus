@@ -1,7 +1,7 @@
 import type { IntegrationId, IntegrationSettings } from "@/lib/types";
 
 /**
- * Catalogue of connections. Channels (Factor 40) and carriers (Factor 41) are
+ * Catalog of connections. Channels (Factor 40) and carriers (Factor 41) are
  * live: credentials go to the server, which verifies them with the platform
  * and keeps them in a subcollection browsers cannot read. The rest are on the
  * roadmap and fall back to CSV import.
@@ -77,7 +77,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     export: {
       steps: ["In Shopify admin open Products and click Export", "Choose All products and Plain CSV file", "Upload the file on the Import page"],
       headers: ["Handle", "Title", "Vendor", "Type", "Tags", "Variant SKU", "Variant Inventory Qty", "Variant Price", "Cost per item", "Variant Barcode"],
-      note: "Recognised automatically: Variant SKU, Title, Variant Inventory Qty, Variant Price, Cost per item, Vendor, Type, Tags and Variant Barcode.",
+      note: "Recognized automatically: Variant SKU, Title, Variant Inventory Qty, Variant Price, Cost per item, Vendor, Type, Tags and Variant Barcode.",
     },
   },
   {
@@ -110,7 +110,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     export: {
       steps: ["In WordPress open Products and click Export", "Keep all columns selected and generate the CSV", "Upload the file on the Import page"],
       headers: ["SKU", "Name", "Stock", "Regular price", "Categories", "Tags", "Low stock amount", "Short description", "GTIN, UPC, EAN, or ISBN"],
-      note: "Recognised automatically: SKU, Name, Stock, Regular price, Low stock amount, Categories, Tags, Short description and GTIN.",
+      note: "Recognized automatically: SKU, Name, Stock, Regular price, Low stock amount, Categories, Tags, Short description and GTIN.",
     },
   },
   {
@@ -150,7 +150,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     export: {
       steps: ["In QuickBooks Online open Sales → Products and services", "Use the export icon above the list to download an Excel file, then save it as CSV", "Upload the file on the Import page"],
       headers: ["Product/Service Name", "SKU", "Type", "Sales description", "Sales price/rate", "Purchase cost", "Quantity on hand", "Reorder point"],
-      note: "SKU, Quantity on hand, Purchase cost and Reorder point are recognised; map Product/Service Name to Name and Sales price/rate to Price in the wizard, or let the AI mapper suggest it.",
+      note: "SKU, Quantity on hand, Purchase cost and Reorder point are recognized; map Product/Service Name to Name and Sales price/rate to Price in the wizard, or let the AI mapper suggest it.",
     },
   },
   {
@@ -163,7 +163,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     export: {
       steps: ["In Square Dashboard open Items & orders → Items", "Choose Actions → Export library and download the CSV", "Upload the file on the Import page"],
       headers: ["Item Name", "SKU", "Description", "Category", "Price", "Current Quantity <Location>", "Stock Alert Count <Location>"],
-      note: "SKU, Item Name, Description, Category and Price are recognised; map Current Quantity to Quantity and Stock Alert Count to Min qty in the wizard.",
+      note: "SKU, Item Name, Description, Category and Price are recognized; map Current Quantity to Quantity and Stock Alert Count to Min qty in the wizard.",
     },
   },
 ];

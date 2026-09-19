@@ -17,7 +17,7 @@ const POLICIES: Array<{ value: RelievePolicy; title: string; description: string
   },
   {
     value: "on_fulfill",
-    title: "Relieve on fulfilment",
+    title: "Relieve on fulfillment",
     description: "If the assembly is not on the shelf when an order ships, its components are relieved at that point instead.",
   },
 ];

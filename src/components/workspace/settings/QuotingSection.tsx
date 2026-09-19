@@ -6,7 +6,7 @@ import { DEFAULT_QUOTING } from "@/lib/quotes";
 import { Button, FormGrid, TextArea, TextField, useToast } from "@/components/ui";
 import { useSaveSettings } from "./useSaveSettings";
 
-/** Labour rate, margins and terms that every quote starts from. */
+/** Labor rate, margins and terms that every quote starts from. */
 export function QuotingSection({ settings, readOnly }: { settings: WorkspaceSettings; readOnly: boolean }) {
   const saveSettings = useSaveSettings();
   const toast = useToast();
@@ -35,8 +35,8 @@ export function QuotingSection({ settings, readOnly }: { settings: WorkspaceSett
   return (
     <div className="flex flex-col gap-4">
       <FormGrid cols={3}>
-        <TextField label={`Labour rate (${settings.currency}/h)`} type="number" min={0} step="any" value={laborRate} onChange={(e) => setLaborRate(e.target.value)} help="What an hour is charged at on quotes." disabled={readOnly} />
-        <TextField label={`Labour cost (${settings.currency}/h)`} hint="(optional)" type="number" min={0} step="any" value={laborCost} onChange={(e) => setLaborCost(e.target.value)} help="What an hour costs you, for margin." disabled={readOnly} />
+        <TextField label={`Labor rate (${settings.currency}/h)`} type="number" min={0} step="any" value={laborRate} onChange={(e) => setLaborRate(e.target.value)} help="What an hour is charged at on quotes." disabled={readOnly} />
+        <TextField label={`Labor cost (${settings.currency}/h)`} hint="(optional)" type="number" min={0} step="any" value={laborCost} onChange={(e) => setLaborCost(e.target.value)} help="What an hour costs you, for margin." disabled={readOnly} />
         <TextField label="Default margin %" hint="(optional)" type="number" min={0} max={99} step="any" value={marginPct} onChange={(e) => setMarginPct(e.target.value)} help="Used to price items that have no list price." disabled={readOnly} />
         <TextField label="Tax %" hint="(optional)" type="number" min={0} step="any" value={taxPct} onChange={(e) => setTaxPct(e.target.value)} disabled={readOnly} />
         <TextField label="Quotes valid for (days)" type="number" min={1} value={validDays} onChange={(e) => setValidDays(e.target.value)} disabled={readOnly} />

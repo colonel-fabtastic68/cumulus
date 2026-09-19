@@ -182,7 +182,7 @@ export interface ShopifyRef {
   inventoryItemId?: string;
 }
 
-/** Finds variants by SKU without paging the whole catalogue. */
+/** Finds variants by SKU without paging the whole catalog. */
 export async function findVariantsBySku(creds: ShopifyCreds, skus: string[]): Promise<Map<string, ShopifyRef>> {
   const out = new Map<string, ShopifyRef>();
   for (let i = 0; i < skus.length; i += 25) {

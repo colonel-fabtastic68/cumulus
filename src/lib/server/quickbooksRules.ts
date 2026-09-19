@@ -1,13 +1,13 @@
 /**
  * Pure decisions for the QuickBooks OAuth connection: when a token needs
- * refreshing, whether an authorisation state is still valid, and how Intuit's
+ * refreshing, whether an authorization state is still valid, and how Intuit's
  * OAuth errors map to what we tell the customer. Kept free of I/O so it can be
  * unit-tested without Firestore or Intuit.
  */
 
 /** Intuit access tokens last 3600 s; refresh this long before the edge so an in-flight call never lands on a dead token. */
 export const ACCESS_REFRESH_MARGIN_MS = 5 * 60_000;
-/** An authorisation attempt (the `state` we hand Intuit) is honoured for this long. */
+/** An authorization attempt (the `state` we hand Intuit) is honored for this long. */
 export const STATE_TTL_MS = 10 * 60_000;
 
 export interface TokenTimes {

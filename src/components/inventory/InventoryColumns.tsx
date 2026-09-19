@@ -223,7 +223,7 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
         sortValue: (i) => i.updatedAt,
         render: (i) => <span className="whitespace-nowrap text-text-secondary">{formatRelative(i.updatedAt)}</span>,
       },
-      // Custom fields from Settings → Catalogue, one column each (hidden by default in fit mode via low priority).
+      // Custom fields from Settings → Catalog, one column each (hidden by default in fit mode via low priority).
       ...customFields.map<Column<Item>>((f) => ({
         key: `attr:${f.key}`,
         header: f.label,

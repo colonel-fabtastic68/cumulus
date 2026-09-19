@@ -196,7 +196,7 @@ export function ShelfLifeReport() {
       ),
     );
 
-  const agentPrompt = `Suggest sale prices for stock that has been on the shelf for more than ${olderThan} days. Keep at least 30% margin over unit cost, prioritise the oldest and highest-value batches, and explain the reasoning per SKU.`;
+  const agentPrompt = `Suggest sale prices for stock that has been on the shelf for more than ${olderThan} days. Keep at least 30% margin over unit cost, prioritize the oldest and highest-value batches, and explain the reasoning per SKU.`;
 
   return (
     <div className="flex flex-col gap-4">

@@ -29,7 +29,7 @@ const HEADER = [
   "Updated",
 ];
 
-/** Serialise items as CSV (RFC 4180 line endings, quoted where needed). */
+/** Serialize items as CSV (RFC 4180 line endings, quoted where needed). */
 export function itemsToCsv(items: Item[], supplierName: (id?: string) => string | undefined): string {
   const lines = items.map((i) =>
     [

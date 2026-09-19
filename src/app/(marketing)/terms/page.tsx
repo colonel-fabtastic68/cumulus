@@ -54,7 +54,7 @@ export default function TermsPage() {
       </LegalSection>
 
       <LegalSection heading="Connected services">
-        <p>When you connect a store, carrier or accounting tool, you authorise us to exchange data with it on your behalf. Those services have their own terms, and we are not responsible for what they do or for outages on their side.</p>
+        <p>When you connect a store, carrier or accounting tool, you authorize us to exchange data with it on your behalf. Those services have their own terms, and we are not responsible for what they do or for outages on their side.</p>
       </LegalSection>
 
       <LegalSection heading="Availability">

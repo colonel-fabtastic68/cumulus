@@ -28,7 +28,7 @@ export async function GET(req: Request) {
     if (denied) throw new HttpError(400, denied === "access_denied" ? "QuickBooks access was not granted." : `QuickBooks reported: ${denied}`);
     const code = params.get("code") ?? "";
     const realmId = params.get("realmId") ?? "";
-    if (!code || !/^\d{1,32}$/.test(realmId)) throw new HttpError(400, "QuickBooks did not send back an authorisation code and company.");
+    if (!code || !/^\d{1,32}$/.test(realmId)) throw new HttpError(400, "QuickBooks did not send back an authorization code and company.");
 
     const ctx = systemContext(issued.workspaceId, sa);
     const member = await db.doc(`workspaces/${issued.workspaceId}/members/${issued.uid}`).get();

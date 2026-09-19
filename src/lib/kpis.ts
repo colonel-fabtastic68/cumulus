@@ -136,7 +136,7 @@ export function kpiReport(items: Item[], movements: StockMovement[], orders: Sal
     row.endingValue = acc.endingQty * acc.unitCost;
     if (item.status === "active" && item.onHand <= 0 && acc.unitsUsed > 0) itemsOutOfStock++;
     if (row.unitsUsed > 0 || row.avgInventoryValue > 0 || row.endingValue > 0) skus.push(finish(row, days));
-    const catKey = item.category?.trim() || "Uncategorised";
+    const catKey = item.category?.trim() || "Uncategorized";
     const cat = categories.get(catKey) ?? emptyRow(catKey, catKey);
     for (const target of [cat, company]) {
       target.unitsUsed += row.unitsUsed;

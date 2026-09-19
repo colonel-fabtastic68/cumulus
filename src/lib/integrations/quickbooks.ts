@@ -87,7 +87,7 @@ export async function discover(environment: QboEnvironment): Promise<Discovery> 
   }
 }
 
-// ---- authorisation ------------------------------------------------------------------
+// ---- authorization ------------------------------------------------------------------
 
 export function redirectUri(base: string): string {
   return `${base}/api/integrations/quickbooks/callback`;
@@ -156,7 +156,7 @@ function basicAuth(config: QboConfig): string {
   return `Basic ${Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64")}`;
 }
 
-/** Turns the authorisation code into the secrets we keep for this workspace. */
+/** Turns the authorization code into the secrets we keep for this workspace. */
 export async function exchangeCode(config: QboConfig, code: string, base: string, realmId: string): Promise<Secrets> {
   const t = await tokenRequest(config, { grant_type: "authorization_code", code, redirect_uri: redirectUri(base) });
   return tokenSecrets(t, realmId, config.environment);

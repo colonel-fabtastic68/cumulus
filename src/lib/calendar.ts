@@ -24,7 +24,7 @@ export interface MonthCell {
   today: boolean;
 }
 
-/** Six rows of seven days, weeks starting on Sunday, padded with the neighbouring months. */
+/** Six rows of seven days, weeks starting on Sunday, padded with the neighboring months. */
 export function monthGrid(year: number, month: number, today = dateKey(new Date())): MonthCell[][] {
   const first = new Date(year, month, 1);
   const start = new Date(first);

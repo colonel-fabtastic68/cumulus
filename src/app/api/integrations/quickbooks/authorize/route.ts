@@ -3,7 +3,7 @@ import { appUrl, authenticate, jsonError } from "@/lib/integrations/server";
 
 export const maxDuration = 30;
 
-/** Starts the OAuth 2.0 flow: stores a single-use state for this workspace and returns Intuit's authorisation URL. */
+/** Starts the OAuth 2.0 flow: stores a single-use state for this workspace and returns Intuit's authorization URL. */
 export async function POST(req: Request) {
   try {
     const config = requireQuickbooksConfig();

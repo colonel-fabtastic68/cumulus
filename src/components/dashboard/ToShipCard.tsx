@@ -100,7 +100,7 @@ export function ToShipCard({ orders, itemsById }: { orders: SalesOrder[]; itemsB
         render: (o) =>
           writable ? (
             <Button size="sm" icon={<PackageCheck />} loading={busyId === o.id} disabled={busyId !== null && busyId !== o.id} onClick={() => setConfirmTarget(o)}>
-              Fulfil
+              Fulfill
             </Button>
           ) : null,
       },

@@ -16,7 +16,7 @@ import { QuoteStatusBadge } from "./QuotesTable";
 
 const KIND_OPTIONS: Array<{ value: QuoteLineKind; label: string }> = [
   { value: "item", label: "Item" },
-  { value: "labor", label: "Labour" },
+  { value: "labor", label: "Labor" },
   { value: "other", label: "Other" },
 ];
 
@@ -84,7 +84,7 @@ function Editor({ quote, template, onClose, onSaved }: Omit<QuoteEditorProps, "o
   const setQty = (id: string, qty: number) => {
     const line = lines.find((l) => l.id === id);
     const item = line?.itemId ? byId.get(line.itemId) : undefined;
-    // Quantity breaks: re-price item lines from the catalogue unless the price was typed by hand.
+    // Quantity breaks: re-price item lines from the catalog unless the price was typed by hand.
     patch(id, { qty, ...(item && line && line.unitPrice === itemLine(item, line.qty, quoting).unitPrice ? { unitPrice: itemLine(item, qty, quoting).unitPrice } : {}) });
   };
 
@@ -223,7 +223,7 @@ function Editor({ quote, template, onClose, onSaved }: Omit<QuoteEditorProps, "o
           {quote?.orderId && <Badge tone="success">Order raised</Badge>}
         </span>
       }
-      subtitle={quote ? `${quote.customer} · created ${quote.createdAt.slice(0, 10)}` : template ? `From template “${template.name}”. Change quantities, add a customer, and create.` : "Describe the job for Strato, or add lines by hand. Prices come from your items and labour rate."}
+      subtitle={quote ? `${quote.customer} · created ${quote.createdAt.slice(0, 10)}` : template ? `From template “${template.name}”. Change quantities, add a customer, and create.` : "Describe the job for Strato, or add lines by hand. Prices come from your items and labor rate."}
       headerActions={
         <div className="flex items-center gap-1">
           <IconButton size="sm" variant="plain" aria-label="Save these lines as a template" icon={<BookmarkPlus />} onClick={() => setTemplateModal(true)} disabled={lines.length === 0} />
@@ -276,7 +276,7 @@ function Editor({ quote, template, onClose, onSaved }: Omit<QuoteEditorProps, "o
               <Button size="sm" variant="primary" icon={<Sparkles />} onClick={() => void draftWithStrato()} loading={drafting} disabled={!prompt.trim()}>
                 {lines.length ? "Add lines from this" : "Draft lines"}
               </Button>
-              <span className="text-[11.5px] text-text-tertiary">Uses only your items and the labour rate from Settings ({formatMoney(quoting.laborRate, currency)}/h).</span>
+              <span className="text-[11.5px] text-text-tertiary">Uses only your items and the labor rate from Settings ({formatMoney(quoting.laborRate, currency)}/h).</span>
             </div>
             {draftNote && (
               <Banner tone={draftNote.tone} className="mt-2">
@@ -305,7 +305,7 @@ function Editor({ quote, template, onClose, onSaved }: Omit<QuoteEditorProps, "o
                   Item
                 </Button>
                 <Button size="sm" variant="plain" icon={<Plus />} onClick={() => addLine("labor")}>
-                  Labour
+                  Labor
                 </Button>
                 <Button size="sm" variant="plain" icon={<Plus />} onClick={() => addLine("other")}>
                   Other
@@ -416,7 +416,7 @@ function Editor({ quote, template, onClose, onSaved }: Omit<QuoteEditorProps, "o
           <p className="text-[12px] text-text-tertiary">{pluralize(lines.length, "line")} will be saved.</p>
         </div>
       </Modal>
-      <ConfirmDialog open={confirm === "accept"} onClose={() => setConfirm(null)} title={`Mark ${quote?.number ?? "this quote"} accepted?`} confirmLabel="Accept and create order" onConfirm={() => void transition("accepted", true)} loading={busy === "accepted"} message={<>A sales order is created for the {lines.filter((l) => l.kind === "item").length} item line{lines.filter((l) => l.kind === "item").length === 1 ? "" : "s"} at the quoted prices ({formatMoney(round(lines.filter((l) => l.kind === "item").reduce((a, l) => a + lineTotal(l), 0)), currency)}). Labour and extras are noted on the order.</>} />
+      <ConfirmDialog open={confirm === "accept"} onClose={() => setConfirm(null)} title={`Mark ${quote?.number ?? "this quote"} accepted?`} confirmLabel="Accept and create order" onConfirm={() => void transition("accepted", true)} loading={busy === "accepted"} message={<>A sales order is created for the {lines.filter((l) => l.kind === "item").length} item line{lines.filter((l) => l.kind === "item").length === 1 ? "" : "s"} at the quoted prices ({formatMoney(round(lines.filter((l) => l.kind === "item").reduce((a, l) => a + lineTotal(l), 0)), currency)}). Labor and extras are noted on the order.</>} />
     </Drawer>
   );
 }

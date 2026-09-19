@@ -15,11 +15,11 @@ export interface ChartChipRow {
 }
 
 /**
- * The hover readout every chart shares: a small chip centred above the hovered
+ * The hover readout every chart shares: a small chip centered above the hovered
  * mark. `x` and `y` are percentages of the positioned parent for the point it
  * sits over; near either edge it shifts inward so it stays on the card. Values
  * lead and series names follow; each row is keyed by a short stroke of the
- * series colour.
+ * series color.
  */
 export function ChartChip({ x, y, title, rows, className }: { x: number; y: number; title: ReactNode; rows: ChartChipRow[]; className?: string }) {
   const shift = x < 22 ? "-14px" : x > 78 ? "calc(-100% + 14px)" : "-50%";

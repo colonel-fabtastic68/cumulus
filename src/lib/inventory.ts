@@ -110,7 +110,7 @@ export function inventoryValue(items: Item[]): number {
   return round(sum(items.map((i) => i.onHand * i.unitCost)));
 }
 
-/** Effective unit price for a quantity, honouring sale price and quantity breaks. */
+/** Effective unit price for a quantity, honoring sale price and quantity breaks. */
 export function priceForQty(item: Item, qty: number): number {
   let price = item.salePrice !== undefined && item.salePrice < item.price ? item.salePrice : item.price;
   for (const b of [...(item.priceBreaks ?? [])].sort((a, b) => a.minQty - b.minQty)) {
@@ -809,7 +809,7 @@ export interface OrderInput {
   source?: SalesOrder["source"];
   note?: string;
   lines: Array<{ itemId: string; qty: number; unitPrice?: number }>;
-  /** Fulfil immediately. */
+  /** Fulfill immediately. */
   fulfill?: boolean;
   customerEmail?: string;
   shipTo?: Address;

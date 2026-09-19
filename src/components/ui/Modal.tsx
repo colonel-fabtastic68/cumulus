@@ -11,7 +11,7 @@ const dialogStack: string[] = [];
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
- * Shared dialog behaviour: register on the stack, close on Escape when
+ * Shared dialog behavior: register on the stack, close on Escape when
  * topmost, move focus inside on open, trap Tab, and restore focus on close.
  */
 function useDialog(open: boolean, onClose: () => void, containerRef: React.RefObject<HTMLDivElement | null>, lockScroll: boolean) {

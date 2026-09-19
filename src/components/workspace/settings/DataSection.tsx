@@ -27,7 +27,7 @@ const FIREBASE_VARS = [
 type PendingAction = { kind: "import"; snapshot: WorkspaceSnapshot; fileName: string } | { kind: "reset" } | { kind: "clear" } | null;
 
 /** Turn parsed JSON into a full snapshot: every collection present, unknown keys dropped. */
-function normaliseSnapshot(raw: Record<string, unknown>): WorkspaceSnapshot {
+function normalizeSnapshot(raw: Record<string, unknown>): WorkspaceSnapshot {
   const out = {} as Record<string, unknown[]>;
   for (const c of COLLECTIONS) {
     const rows = raw[c];
@@ -44,7 +44,7 @@ function keepTeam(snapshot: WorkspaceSnapshot, current: Member[]): WorkspaceSnap
   return { ...snapshot, members: [...snapshot.members, ...extra] };
 }
 
-function summarise(s: WorkspaceSnapshot): string {
+function summarize(s: WorkspaceSnapshot): string {
   const parts = [
     `${formatNumber(s.items.length)} items`,
     `${formatNumber(s.movements.length)} movements`,
@@ -100,7 +100,7 @@ export function DataSection({ settings, canManage }: { settings: WorkspaceSettin
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("That file is not a cumulusOS export (expected a JSON object).");
       const raw = parsed as Record<string, unknown>;
       if (!Array.isArray(raw.items)) throw new Error("That file is not a cumulusOS export (no items array).");
-      let snapshot = normaliseSnapshot(raw);
+      let snapshot = normalizeSnapshot(raw);
       // Never import a workspace nobody can sign in to, and keep settings sane.
       snapshot = keepTeam(snapshot, snapshot.members.length === 0 ? members : []);
       if (snapshot.settings.length === 0) snapshot = { ...snapshot, settings: [settings] };
@@ -116,7 +116,7 @@ export function DataSection({ settings, canManage }: { settings: WorkspaceSettin
     try {
       if (pending.kind === "import") {
         await store.replaceAll(pending.snapshot);
-        toast(`Imported ${pending.fileName}: ${summarise(pending.snapshot)}`, "success");
+        toast(`Imported ${pending.fileName}: ${summarize(pending.snapshot)}`, "success");
       } else if (pending.kind === "reset") {
         await store.replaceAll(mode === "firestore" ? keepTeam(buildSeed(), members) : buildSeed());
         toast("Demo data restored", "success");
@@ -223,7 +223,7 @@ export function DataSection({ settings, canManage }: { settings: WorkspaceSettin
         message={
           pending?.kind === "import" ? (
             <>
-              <span className="font-medium text-text">{pending.fileName}</span> contains {summarise(pending.snapshot)}. Everything currently in the workspace will be replaced. Export first if you want a copy of what is here now.
+              <span className="font-medium text-text">{pending.fileName}</span> contains {summarize(pending.snapshot)}. Everything currently in the workspace will be replaced. Export first if you want a copy of what is here now.
             </>
           ) : null
         }

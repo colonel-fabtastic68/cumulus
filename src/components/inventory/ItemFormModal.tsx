@@ -195,15 +195,15 @@ function ItemForm({ open, onClose, item, defaults, onSaved }: ItemFormModalProps
         <FormGrid cols={3}>
           <TextField label="SKU" value={f.sku} onChange={set("sku")} placeholder="ENC-125B-RAW" autoFocus={!editing} className="font-mono uppercase" />
           <div className="sm:col-span-2">
-            <TextField label="Name" value={f.name} onChange={set("name")} placeholder="1590B aluminium enclosure, raw" />
+            <TextField label="Name" value={f.name} onChange={set("name")} placeholder="1590B aluminum enclosure, raw" />
           </div>
           <div className="flex flex-col gap-2">
             <Select label="Type" value={f.type} onChange={set("type")} options={typeOptions.some((o) => o.value === f.type) ? typeOptions : [...typeOptions, { value: f.type, label: f.type }]} help={clearsBom ? `Switching away from assembly removes its ${item!.bom.length}-line BOM` : undefined} />
             {f.type === "assembly" && (
               <div className="flex items-center gap-1.5">
-                <span className="mr-1 text-[12px] text-text-secondary">Chip colour</span>
+                <span className="mr-1 text-[12px] text-text-secondary">Chip color</span>
                 {ASSEMBLY_COLORS.map((c) => (
-                  <button key={c} type="button" aria-label={`Colour ${c}`} aria-pressed={f.color === c} onClick={() => setF((cur) => ({ ...cur, color: cur.color === c ? "" : c }))} className={`h-5 w-5 rounded-full border-2 ${f.color === c ? "border-text" : "border-transparent"}`} style={{ background: c }} />
+                  <button key={c} type="button" aria-label={`Color ${c}`} aria-pressed={f.color === c} onClick={() => setF((cur) => ({ ...cur, color: cur.color === c ? "" : c }))} className={`h-5 w-5 rounded-full border-2 ${f.color === c ? "border-text" : "border-transparent"}`} style={{ background: c }} />
                 ))}
               </div>
             )}

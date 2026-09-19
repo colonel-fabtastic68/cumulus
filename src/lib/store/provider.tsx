@@ -9,7 +9,7 @@ import type { Store } from "./types";
 interface StoreContextValue {
   store: Store;
   ready: boolean;
-  /** Set when the backend failed to initialise (Firestore mode). */
+  /** Set when the backend failed to initialize (Firestore mode). */
   error: string | null;
 }
 

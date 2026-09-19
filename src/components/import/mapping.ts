@@ -10,7 +10,7 @@ export function normalizeHeader(header: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Platform exports. Keys are normalised headers.
+// Platform exports. Keys are normalized headers.
 // ---------------------------------------------------------------------------
 
 const SHOPIFY: Record<string, MappingTarget> = {
@@ -83,7 +83,7 @@ const WOOCOMMERCE: Record<string, MappingTarget> = {
 };
 
 // ---------------------------------------------------------------------------
-// Generic synonyms. Normalised phrases; matched exactly first, then as a
+// Generic synonyms. Normalized phrases; matched exactly first, then as a
 // whole-word phrase inside the header ("Qty on hand" contains "on hand").
 // ---------------------------------------------------------------------------
 

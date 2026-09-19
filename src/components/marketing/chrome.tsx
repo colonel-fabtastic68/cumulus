@@ -68,7 +68,7 @@ export function MarketingFooter() {
             Terms of service
           </Link>
           <Link href="/eula" className="hover:text-text">
-            Licence agreement
+            License agreement
           </Link>
         </nav>
       </div>

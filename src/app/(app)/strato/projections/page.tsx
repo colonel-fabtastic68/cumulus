@@ -31,7 +31,7 @@ export default function ProjectionsPage() {
     setPageContext({ page: "Projections", selectedSkus: item ? [item.sku] : undefined });
   }, [setPageContext, item]);
 
-  const categories = useMemo(() => Array.from(new Set(items.map((i) => i.category ?? "Uncategorised"))).sort(), [items]);
+  const categories = useMemo(() => Array.from(new Set(items.map((i) => i.category ?? "Uncategorized"))).sort(), [items]);
   const scope = useMemo<ProjectionScope>(() => (scopeKind === "sku" && item ? { kind: "sku", itemId: item.id } : scopeKind === "category" && category ? { kind: "category", category } : { kind: "company" }), [scopeKind, item, category]);
   const result = useMemo(() => project(items, movements, scope, scenario), [items, movements, scope, scenario]);
   const s = result.summary;

@@ -1,6 +1,6 @@
 import type { CatalogSettings, CustomFieldDef, ItemType, WorkspaceSettings } from "@/lib/types";
 
-/** Workspace vocabulary helpers (Settings → Catalogue). */
+/** Workspace vocabulary helpers (Settings → Catalog). */
 
 export const BUILT_IN_ITEM_TYPES: Array<{ id: ItemType; label: string }> = [
   { id: "part", label: "Part" },

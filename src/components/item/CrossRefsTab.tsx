@@ -12,7 +12,7 @@ import { Badge, Banner, Button, EmptyState, FormGrid, IconButton, Select, Simple
 export const CROSS_REF_KINDS: Array<{ value: CrossRefKind; label: string; hint: string }> = [
   { value: "oem", label: "OEM number", hint: "The original manufacturer's part number" },
   { value: "aftermarket", label: "Aftermarket equivalent", hint: "An interchangeable part from another maker" },
-  { value: "competitor", label: "Competitor number", hint: "What a rival catalogue calls it" },
+  { value: "competitor", label: "Competitor number", hint: "What a rival catalog calls it" },
   { value: "supplier", label: "Supplier number", hint: "The number a vendor uses on quotes and invoices" },
   { value: "alias", label: "Nickname / colloquial", hint: "What counter staff and customers call it" },
 ];

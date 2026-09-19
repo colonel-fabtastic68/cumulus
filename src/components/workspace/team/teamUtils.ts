@@ -1,6 +1,6 @@
 import type { Member, MemberRole } from "@/lib/types";
 
-/** Small palette for new avatars. Matches the colours used by the seed and Firebase sign-up. */
+/** Small palette for new avatars. Matches the colors used by the seed and Firebase sign-up. */
 export const MEMBER_COLORS = ["#1f5f8b", "#7a3e9d", "#2e7d4f", "#b5541c", "#8b1f4f", "#3e6b9d", "#5c7a1f"];
 
 export const ROLE_OPTIONS: Array<{ value: MemberRole; label: string }> = [
@@ -26,7 +26,7 @@ export function canManageTeam(member: Pick<Member, "role">): boolean {
   return member.role === "owner" || member.role === "admin";
 }
 
-/** Pick the palette colour used least by the current members. */
+/** Pick the palette color used least by the current members. */
 export function pickMemberColor(members: Array<Pick<Member, "color">>): string {
   const counts = new Map<string, number>(MEMBER_COLORS.map((c) => [c, 0]));
   for (const m of members) if (counts.has(m.color)) counts.set(m.color, (counts.get(m.color) ?? 0) + 1);

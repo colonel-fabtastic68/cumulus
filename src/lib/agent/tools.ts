@@ -263,7 +263,7 @@ export const TOOL_LABELS: Record<AgentToolName, string> = {
   updateBom: "Update BOM",
   deactivateItems: "Deactivate items",
   createOrder: "Create order",
-  fulfillOrders: "Fulfil orders",
+  fulfillOrders: "Fulfill orders",
   createRma: "Create RMA",
   resolveRma: "Resolve RMA",
   upsertSupplier: "Save supplier",

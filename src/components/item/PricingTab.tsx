@@ -172,7 +172,7 @@ function PricingEditor({ item, currency, canEdit }: { item: Item; currency: stri
   );
 }
 
-/** One price per customer price group (Settings → Catalogue). Blank means the list price applies. */
+/** One price per customer price group (Settings → Catalog). Blank means the list price applies. */
 function GroupPrices({ item, canEdit }: { item: Item; canEdit: boolean }) {
   const settings = useSettings();
   const store = useStore();

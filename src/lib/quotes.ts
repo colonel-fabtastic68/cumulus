@@ -4,7 +4,7 @@ import { activityOp, createOrder, nextNumber, priceForQty, type Actor } from "@/
 import { newId, nowIso, round, sum } from "@/lib/utils";
 
 /**
- * Quotes: priced offers built from the workspace's own items, labour and
+ * Quotes: priced offers built from the workspace's own items, labor and
  * extras. Totals are computed, never stored, so a quote always adds up.
  */
 
@@ -56,7 +56,7 @@ export function itemLine(item: Item, qty: number, quoting: QuotingSettings): Quo
   return newQuoteLine({ kind: "item", itemId: item.id, description: `${item.sku} · ${item.name}`, qty, unit: item.unit, unitPrice: price, unitCost: item.unitCost });
 }
 
-export function laborLine(hours: number, quoting: QuotingSettings, description = "Labour"): QuoteLine {
+export function laborLine(hours: number, quoting: QuotingSettings, description = "Labor"): QuoteLine {
   return newQuoteLine({ kind: "labor", description, qty: hours, unit: "h", unitPrice: quoting.laborRate, unitCost: quoting.laborCost ?? 0 });
 }
 
@@ -68,7 +68,7 @@ export interface QuoteDraft {
   lines: Array<{ kind: "item" | "labor" | "other"; sku?: string; description?: string; qty?: number; hours?: number; unitPrice?: number }>;
 }
 
-/** Turns a draft into real lines: SKUs become item lines at their prices, hours become labour, the rest is kept as typed. */
+/** Turns a draft into real lines: SKUs become item lines at their prices, hours become labor, the rest is kept as typed. */
 export function linesFromDraft(draft: QuoteDraft, items: Item[], quoting: QuotingSettings): { lines: QuoteLine[]; unresolved: string[] } {
   const bySku = new Map(items.map((i) => [i.sku.toUpperCase(), i]));
   const lines: QuoteLine[] = [];
@@ -85,7 +85,7 @@ export function linesFromDraft(draft: QuoteDraft, items: Item[], quoting: Quotin
       if (d.unitPrice !== undefined && d.unitPrice > 0) line.unitPrice = d.unitPrice;
       lines.push(line);
     } else if (d.kind === "labor") {
-      const line = laborLine(Math.max(0, d.hours ?? d.qty ?? 1), quoting, d.description || "Labour");
+      const line = laborLine(Math.max(0, d.hours ?? d.qty ?? 1), quoting, d.description || "Labor");
       if (d.unitPrice !== undefined && d.unitPrice > 0) line.unitPrice = d.unitPrice;
       lines.push(line);
     } else {
@@ -166,7 +166,7 @@ export async function setQuoteStatus(store: Store, actor: Actor, id: string, sta
   return { quote: { ...quote, ...patch }, order };
 }
 
-/** A sales order for the quote's item lines at the quoted prices. Labour and extras are noted on the order. */
+/** A sales order for the quote's item lines at the quoted prices. Labor and extras are noted on the order. */
 export async function orderFromQuote(store: Store, actor: Actor, quote: Quote): Promise<SalesOrder> {
   const lines = quote.lines.filter((l) => l.kind === "item" && l.itemId && l.qty > 0).map((l) => ({ itemId: l.itemId!, qty: l.qty, unitPrice: round(l.unitPrice * (1 - (l.discountPct ?? 0) / 100)) }));
   if (lines.length === 0) throw new Error("The quote has no item lines to turn into an order");

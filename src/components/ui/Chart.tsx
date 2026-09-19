@@ -14,7 +14,7 @@ import { ChartChip, type ChartChipRow } from "./ChartChip";
 export interface ChartSeries {
   key: string;
   label: string;
-  /** CSS colour (a token works: "var(--accent)"). */
+  /** CSS color (a token works: "var(--accent)"). */
   color: string;
   /** Values by x index; null leaves a gap. */
   values: Array<number | null>;

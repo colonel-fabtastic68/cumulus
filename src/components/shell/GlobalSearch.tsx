@@ -18,11 +18,11 @@ const EXCLUDED = ["/exports", "/strato"];
 /** Words a page answers to besides its label. */
 const PAGE_KEYWORDS: Record<string, string> = {
   "/home": "dashboard overview today",
-  "/inventory": "items parts stock sku catalogue",
+  "/inventory": "items parts stock sku catalog",
   "/receiving": "receipts deliveries receive purchase",
   "/transfers": "move stock between locations in transit",
   "/builds": "bill of materials assemblies builds",
-  "/orders": "sales customers shipments ship fulfil",
+  "/orders": "sales customers shipments ship fulfill",
   "/rmas": "rma returns inspections write-offs",
   "/suppliers": "vendors purchasing",
   "/reports": "kpi valuation dead stock seasonality",

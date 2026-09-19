@@ -28,8 +28,8 @@ function niceScale(max: number, tickCount = 4): { top: number; step: number } {
   if (max <= 0) return { top: tickCount, step: 1 };
   const raw = max / tickCount;
   const magnitude = Math.pow(10, Math.floor(Math.log10(raw)));
-  const normalised = raw / magnitude;
-  const step = (normalised <= 1 ? 1 : normalised <= 2 ? 2 : normalised <= 5 ? 5 : 10) * magnitude;
+  const normalized = raw / magnitude;
+  const step = (normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10) * magnitude;
   return { top: Math.ceil(max / step) * step, step };
 }
 
@@ -37,7 +37,7 @@ const W = 760;
 const H = 250;
 const PAD = { top: 12, right: 12, bottom: 30, left: 46 };
 
-/** Grouped bar chart drawn with inline SVG so it inherits theme colours from CSS variables. */
+/** Grouped bar chart drawn with inline SVG so it inherits theme colors from CSS variables. */
 export function SeasonalityChart({ data, label }: { data: SeasonalityPoint[]; label: string }) {
   const [hover, setHover] = useState<number | null>(null);
   const plotW = W - PAD.left - PAD.right;

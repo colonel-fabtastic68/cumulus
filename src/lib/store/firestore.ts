@@ -73,7 +73,7 @@ export function getDb(app: FirebaseApp): Firestore {
       experimentalAutoDetectLongPolling: true,
     });
   } catch {
-    // Already initialised without these settings (or persistence unavailable): keep going without the disk cache.
+    // Already initialized without these settings (or persistence unavailable): keep going without the disk cache.
     db = getFirestore(app);
   }
   dbs.set(app, db);
