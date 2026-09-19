@@ -45,6 +45,7 @@ export default function IntegrationsPage() {
   const channels = INTEGRATIONS.filter((d) => d.kind === "channel");
   const carriers = INTEGRATIONS.filter((d) => d.kind === "carrier");
   const accounting = INTEGRATIONS.filter((d) => d.kind === "accounting");
+  const pos = INTEGRATIONS.filter((d) => d.kind === "pos");
   const roadmap = INTEGRATIONS.filter((d) => d.kind === "roadmap");
 
   return (
@@ -73,6 +74,15 @@ export default function IntegrationsPage() {
           <SectionHeading title="Shipping carriers" description="Connect one aggregator and every carrier on that account shows up when you ship an order: rates, labels and tracking." />
           <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2">
             {carriers.map((def) => (
+              <IntegrationCard key={def.id} def={def} integration={byId.get(def.id)} onSetUp={() => setSetupId(def.id)} />
+            ))}
+          </div>
+        </section>
+
+        <section>
+          <SectionHeading title="Point of sale" description="Item libraries and in-store counts, so what sells over the counter is the same catalog as here." />
+          <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2">
+            {pos.map((def) => (
               <IntegrationCard key={def.id} def={def} integration={byId.get(def.id)} onSetUp={() => setSetupId(def.id)} />
             ))}
           </div>

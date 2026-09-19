@@ -6,7 +6,7 @@ import type { IntegrationId, IntegrationSettings } from "@/lib/types";
  * and keeps them in a subcollection browsers cannot read. The rest are on the
  * roadmap and fall back to CSV import.
  */
-export type IntegrationKind = "channel" | "carrier" | "accounting" | "roadmap";
+export type IntegrationKind = "channel" | "carrier" | "accounting" | "pos" | "roadmap";
 
 export interface CredentialField {
   key: string;
@@ -152,10 +152,16 @@ export const INTEGRATIONS: IntegrationDef[] = [
   {
     id: "square",
     name: "Square",
-    kind: "roadmap",
-    description: "Sync the Square item library and per-location counts, and record point-of-sale and online sales as orders that relieve stock.",
-    fields: [{ key: "location", label: "Location name", placeholder: "Main Street store", help: "The Square location this workspace should mirror. Saved for later; nothing is contacted." }],
-    setup: { steps: [] },
+    kind: "pos",
+    stage: "in_progress",
+    oauth: true,
+    description: "The Square item library comes in as items by SKU with prices and categories, and in-stock counts across your locations can seed opening quantities.",
+    fields: [],
+    settings: [
+      { key: "syncProducts", label: "Pull the item library in", help: "Create or update items by SKU on every sync and in the nightly pass.", default: true },
+      { key: "takeStockOnFirstSync", label: "Take Square counts for new items", help: "Items that do not exist here yet arrive with Square's in-stock count as the opening quantity. Existing counts are never changed by a pull.", default: false },
+    ],
+    setup: { steps: ["Press Connect to Square and sign in to your Square account", "Approve the access cumulusOS asks for (items, inventory, orders, locations)", "You come straight back here, connected; press Sync now to pull the item library in"], docsUrl: "https://squareup.com/help/us/en/article/5106-manage-your-item-library" },
     export: {
       steps: ["In Square Dashboard open Items & orders → Items", "Choose Actions → Export library and download the CSV", "Upload the file on the Import page"],
       headers: ["Item Name", "SKU", "Description", "Category", "Price", "Current Quantity <Location>", "Stock Alert Count <Location>"],

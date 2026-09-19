@@ -3,6 +3,7 @@ import type { Integration } from "@/lib/types";
 import { CARRIERS, isCarrier } from "@/lib/integrations/carriers";
 import { isChannel, runChannelSync } from "@/lib/integrations/channelSync";
 import { runQuickbooksSync } from "@/lib/integrations/quickbooksSync";
+import { runSquareSync } from "@/lib/integrations/squareSync";
 import { readSecrets, requireServiceAccount, systemContext } from "@/lib/integrations/server";
 import { applyTracking } from "@/lib/integrations/tracking";
 import { adminApp } from "@/lib/mcp/adminStore";
@@ -38,6 +39,9 @@ export async function GET(req: Request) {
       try {
         if (isChannel(integration.id)) {
           const result = await runChannelSync(ctx, integration, secrets, {});
+          report.push({ workspace: wsRef.id, integration: integration.id, outcome: result.summary });
+        } else if (integration.id === "square" && integration.settings?.syncProducts !== false) {
+          const result = await runSquareSync(ctx, integration, secrets);
           report.push({ workspace: wsRef.id, integration: integration.id, outcome: result.summary });
         } else if (integration.id === "quickbooks" && integration.settings?.syncProducts !== false) {
           const result = await runQuickbooksSync(ctx, integration, secrets);

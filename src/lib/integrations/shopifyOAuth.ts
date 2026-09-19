@@ -42,9 +42,25 @@ export function shopifyRedirectUri(base: string): string {
   return `${base}/api/integrations/shopify/callback`;
 }
 
+/** A custom storefront domain (nothingshirts.com) resolves to its .myshopify.com handle, which Shopify declares in the page. */
+export async function resolveShopHandle(input: string): Promise<string> {
+  const raw = input.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  if (!raw) throw new HttpError(400, "Enter the store's address.");
+  if (raw.endsWith(".myshopify.com") || !raw.includes(".")) return normalizeShop(raw);
+  try {
+    const res = await fetch(`https://${raw}/`, { headers: { "User-Agent": USER_AGENT, Accept: "text/html" }, redirect: "follow", signal: AbortSignal.timeout(10_000) });
+    const html = await res.text();
+    const m = /Shopify\.shop\s*=\s*"([a-z0-9-]+\.myshopify\.com)"/i.exec(html) ?? /([a-z0-9-]+\.myshopify\.com)/i.exec(html);
+    if (m) return normalizeShop(m[1]!);
+  } catch {
+    // Fall through to the clear error below.
+  }
+  throw new HttpError(400, `${raw} does not look like a Shopify store. Enter the .myshopify.com address (the part after /store/ in your admin URL).`);
+}
+
 /** Stores a single-use state for this workspace and returns the store's consent URL. */
 export async function beginShopifyAuthorization(ctx: Pick<ServerContext, "db" | "workspaceId" | "actor">, shopInput: string, base: string, config = requireShopifyAppConfig()): Promise<{ url: string; shop: string }> {
-  const shop = normalizeShop(shopInput);
+  const shop = await resolveShopHandle(shopInput);
   const state = randomBytes(24).toString("base64url");
   const doc: OAuthState & { shop: string } = { workspaceId: ctx.workspaceId, uid: ctx.actor.id, provider: "shopify", createdAt: new Date().toISOString(), shop };
   await ctx.db.doc(`${OAUTH_STATES}/${state}`).set(doc);

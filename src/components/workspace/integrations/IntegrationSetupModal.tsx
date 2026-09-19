@@ -207,7 +207,7 @@ function OAuthConnect({ def, integration, onClose }: { def: IntegrationDef; inte
       {error && <Banner tone="critical">{error}</Banner>}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Button variant="plain" size="sm" onClick={() => setManual((v) => !v)}>
-          {manual ? (needsShop ? "Back to Connect to Shopify" : "Hide sandbox token entry") : needsShop ? "Use an Admin API access token instead" : "Sandbox: paste tokens from Intuit's playground instead"}
+          {manual ? (needsShop ? "Back to Connect to Shopify" : "Hide sandbox token entry") : needsShop ? "Use an Admin API access token instead" : def.id === "quickbooks" ? "Sandbox: paste tokens from Intuit's playground instead" : ""}
         </Button>
         <Button variant="primary" icon={<ExternalLink />} onClick={() => void start()} loading={busy && !manual} disabled={needsShop && !shop.trim()}>
           Connect to {def.name.replace(/ Online$/, "")}
@@ -281,7 +281,7 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
     run("reconnect", async () => {
       const res = await api<{ integration: Integration }>(`/api/integrations/${def.id}/connect`, { credentials: {}, settings });
       const hooks = res.integration.webhooks?.length ?? 0;
-      if (def.oauth) return `Reconnected · ${res.integration.config?.companyName ?? def.name} still grants access`;
+      if (def.oauth) return `Reconnected · ${res.integration.config?.companyName ?? res.integration.config?.businessName ?? res.integration.config?.shopName ?? def.name} still grants access`;
       return res.integration.lastError ? `Reconnected with a warning: ${res.integration.lastError}` : `Reconnected · ${hooks} webhook${hooks === 1 ? "" : "s"} registered`;
     });
 
@@ -306,20 +306,22 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
   if (integration.config?.siteUrl) rows.push({ label: "Site", value: <span className="font-mono text-[12px]">{integration.config.siteUrl}</span> });
   if (integration.config?.shopName || integration.config?.siteName) rows.push({ label: "Name", value: integration.config.shopName ?? integration.config.siteName });
   if (integration.config?.companyName) rows.push({ label: "Company", value: integration.config.companyName });
+  if (integration.config?.businessName) rows.push({ label: "Business", value: integration.config.businessName });
+  if (integration.config?.locationNames) rows.push({ label: "Locations", value: integration.config.locationNames });
   if (integration.config?.realmId) rows.push({ label: "Company ID", value: <span className="font-mono text-[12px]">{integration.config.realmId}</span> });
   if (integration.config?.environment) rows.push({ label: "Environment", value: <Badge tone={integration.config.environment === "sandbox" ? "attention" : "success"}>{integration.config.environment === "sandbox" ? "Sandbox" : "Production"}</Badge> });
   if (integration.config?.account) rows.push({ label: "Account", value: integration.config.account });
   if (integration.config?.mode) rows.push({ label: "Key", value: <Badge tone={integration.config.mode === "test" ? "attention" : "success"}>{integration.config.mode === "test" ? "Test" : "Live"}</Badge> });
   if (integration.config?.currency) rows.push({ label: "Currency", value: integration.config.currency });
   rows.push({ label: "Connected", value: integration.connectedAt ? <span title={formatDateTime(integration.connectedAt)}>{formatRelative(integration.connectedAt)}</span> : "—" });
-  if (def.kind === "channel" || def.kind === "accounting") rows.push({ label: "Last sync", value: integration.lastSyncAt ? <span title={formatDateTime(integration.lastSyncAt)}>{formatRelative(integration.lastSyncAt)}{integration.lastSyncSummary ? ` · ${integration.lastSyncSummary}` : ""}</span> : <span className="text-text-tertiary">Not yet</span> });
-  if (def.kind !== "accounting") rows.push({ label: "Webhooks", value: integration.webhooks?.length ? `${integration.webhooks.length} registered (${integration.webhooks.map((w) => w.topic).join(", ")})` : <span className="text-text-tertiary">None</span> });
+  if (def.kind === "channel" || def.kind === "accounting" || def.kind === "pos") rows.push({ label: "Last sync", value: integration.lastSyncAt ? <span title={formatDateTime(integration.lastSyncAt)}>{formatRelative(integration.lastSyncAt)}{integration.lastSyncSummary ? ` · ${integration.lastSyncSummary}` : ""}</span> : <span className="text-text-tertiary">Not yet</span> });
+  if (def.kind !== "accounting" && def.kind !== "pos") rows.push({ label: "Webhooks", value: integration.webhooks?.length ? `${integration.webhooks.length} registered (${integration.webhooks.map((w) => w.topic).join(", ")})` : <span className="text-text-tertiary">None</span> });
 
   return (
     <>
       <DescriptionList rows={rows} />
       {message && <Banner tone={message.tone}>{message.text}</Banner>}
-      {(def.kind === "channel" || def.kind === "accounting") && (
+      {(def.kind === "channel" || def.kind === "accounting" || def.kind === "pos") && (
         <div className="flex flex-wrap gap-2">
           <Button variant="primary" icon={<RefreshCw />} onClick={() => void sync()} loading={busy === "sync"} disabled={busy !== null}>
             Sync now

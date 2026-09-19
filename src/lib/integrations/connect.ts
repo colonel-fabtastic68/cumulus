@@ -5,6 +5,7 @@ import { CARRIERS, isCarrier } from "./carriers";
 import { isChannel } from "./channelSync";
 import { HttpError, appUrl, deleteSecrets, newToken, readSecrets, writeSecrets, type Secrets, type ServerContext } from "./server";
 import * as qbo from "./quickbooks";
+import * as square from "./square";
 import * as shopify from "./shopify";
 import * as woo from "./woocommerce";
 
@@ -25,6 +26,7 @@ function clean(v: unknown): string {
  */
 export async function connectIntegration(ctx: ServerContext, req: Request, id: IntegrationId, body: ConnectBody): Promise<Integration> {
   if (id === "quickbooks") return reconnectQuickbooks(ctx, body);
+  if (id === "square") return reconnectSquare(ctx, body);
   if (!isChannel(id) && !isCarrier(id)) throw new HttpError(501, `${NAMES[id]} is on the roadmap; use the CSV export for now.`);
   const creds = body.credentials ?? {};
   const existing = await ctx.store.get("integrations", id);
@@ -150,6 +152,28 @@ async function reconnectQuickbooks(ctx: ServerContext, body: ConnectBody): Promi
   return doc;
 }
 
+/** Square connects through OAuth (see /api/integrations/square/authorize); "connect" re-checks the stored tokens and saves settings. */
+async function reconnectSquare(ctx: ServerContext, body: ConnectBody): Promise<Integration> {
+  const existing = await ctx.store.get("integrations", "square");
+  const { merchant, locations, secrets } = await square.verifySquareConnection(ctx);
+  const now = nowIso();
+  const active = locations.filter((l) => l.status !== "INACTIVE");
+  const doc: Integration = {
+    id: "square",
+    status: "connected",
+    config: { ...(existing?.config ?? {}), merchantId: merchant.id, businessName: merchant.business_name ?? merchant.id, environment: secrets.environment ?? "sandbox", locationIds: active.map((l) => l.id).join(","), locationNames: active.map((l) => l.name ?? l.id).join(", ") },
+    settings: { ...(existing?.settings ?? {}), ...(body.settings ?? {}) },
+    connectedAt: existing?.connectedAt ?? now,
+    connectedBy: existing?.connectedBy ?? ctx.actor.id,
+    lastSyncAt: existing?.lastSyncAt,
+    lastSyncSummary: existing?.lastSyncSummary,
+    webhooks: [],
+    createdAt: existing?.createdAt ?? now,
+  };
+  await ctx.store.put("integrations", doc);
+  return doc;
+}
+
 async function removeWebhooks(existing: Integration | null, secrets: Secrets | null, id: IntegrationId): Promise<void> {
   if (!existing?.webhooks?.length || !secrets) return;
   for (const hook of existing.webhooks) {
@@ -168,6 +192,10 @@ export async function disconnectIntegration(ctx: ServerContext, id: IntegrationI
   const existing = await ctx.store.get("integrations", id);
   const secrets = await readSecrets(ctx, id);
   await removeWebhooks(existing, secrets, id);
+  if (id === "square" && secrets?.accessToken) {
+    const config = square.squareConfig();
+    if (config) await square.revokeSquare(config, secrets).catch((e) => console.warn("[square] revoke failed:", e instanceof Error ? e.message : e));
+  }
   if (id === "quickbooks" && secrets?.refreshToken) {
     // Best effort: the tokens are deleted here regardless, and Intuit's own expiry finishes the job if revocation fails.
     const config = qbo.quickbooksConfig();

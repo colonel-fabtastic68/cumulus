@@ -43,7 +43,7 @@ const PAGES: SearchPage[] = [
   ...SETTINGS_SECTIONS.map((s) => ({ kind: "Setting" as const, label: s.title, href: `/settings#${s.id}`, sub: s.description, keywords: s.keywords })),
 ];
 
-const INTEGRATION_KIND: Record<string, string> = { channel: "Sales channel", carrier: "Carrier", accounting: "Accounting", roadmap: "Roadmap" };
+const INTEGRATION_KIND: Record<string, string> = { channel: "Sales channel", carrier: "Carrier", accounting: "Accounting", pos: "Point of sale", roadmap: "Roadmap" };
 
 /**
  * ⌘K search over every sidebar page except Exports and Strato, and the records

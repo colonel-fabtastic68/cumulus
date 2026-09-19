@@ -79,6 +79,8 @@ export interface Item {
     shopify?: string;
     woocommerce?: string;
     quickbooks?: string;
+    /** Square catalog variation id. */
+    square?: string;
   };
 
   brand?: string;
