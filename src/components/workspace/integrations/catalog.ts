@@ -47,6 +47,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     name: "Shopify",
     kind: "channel",
     stage: "in_progress",
+    oauth: true,
     description: "Products and variants come in as items keyed by SKU, paid orders become sales orders, and on-hand counts go back to the store so it never oversells.",
     fields: [
       { key: "shop", label: "Store address", placeholder: "your-store.myshopify.com", help: "The .myshopify.com address from Shopify admin." },
@@ -66,13 +67,8 @@ export const INTEGRATIONS: IntegrationDef[] = [
       { key: "acceptStockFromChannel", label: "Accept stock changes from Shopify", help: "Inventory edits in Shopify are recorded as counts here. Off keeps cumulusOS as the source of truth.", default: false },
     ],
     setup: {
-      steps: [
-        "In Shopify admin open Settings → Apps and sales channels → Develop apps, and create an app called cumulusOS",
-        "Under Configure Admin API scopes tick read_products, read_inventory, write_inventory, read_orders, read_locations",
-        "Install the app, then reveal the Admin API access token once and paste it here",
-        "Optional: copy the API secret key from the same page so webhooks are signature-checked",
-      ],
-      docsUrl: "https://help.shopify.com/en/manual/apps/app-types/custom-apps",
+      steps: ["Enter your store's .myshopify.com address and press Connect to Shopify", "Sign in to the store and approve the access cumulusOS asks for (products, inventory, orders, locations)", "You come straight back here, connected, with webhooks registered"],
+      docsUrl: "https://help.shopify.com/en/manual/apps",
     },
     export: {
       steps: ["In Shopify admin open Products and click Export", "Choose All products and Plain CSV file", "Upload the file on the Import page"],

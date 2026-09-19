@@ -171,6 +171,8 @@ function OAuthConnect({ def, integration, onClose }: { def: IntegrationDef; inte
   const [manual, setManual] = useState(false);
   const [realmId, setRealmId] = useState(integration?.config?.realmId ?? "");
   const [refreshToken, setRefreshToken] = useState("");
+  const [shop, setShop] = useState(integration?.config?.shop ?? "");
+  const needsShop = def.id === "shopify";
 
   const paste = async () => {
     setBusy(true);
@@ -190,7 +192,7 @@ function OAuthConnect({ def, integration, onClose }: { def: IntegrationDef; inte
     setBusy(true);
     setError(null);
     try {
-      const res = await api<{ url: string }>(`/api/integrations/${def.id}/authorize`, {});
+      const res = await api<{ url: string }>(`/api/integrations/${def.id}/authorize`, needsShop ? { shop } : {});
       window.location.assign(res.url);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not start the sign-in");
@@ -201,16 +203,18 @@ function OAuthConnect({ def, integration, onClose }: { def: IntegrationDef; inte
   return (
     <>
       <SetupSteps def={def} />
+      {needsShop && <TextField label="Store address" value={shop} onChange={(e) => setShop(e.target.value)} placeholder="your-store.myshopify.com" help="The .myshopify.com address from Shopify admin." autoComplete="off" autoFocus />}
       {error && <Banner tone="critical">{error}</Banner>}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Button variant="plain" size="sm" onClick={() => setManual((v) => !v)}>
-          {manual ? "Hide sandbox token entry" : "Sandbox: paste tokens from Intuit's playground instead"}
+          {manual ? (needsShop ? "Back to Connect to Shopify" : "Hide sandbox token entry") : needsShop ? "Use an Admin API access token instead" : "Sandbox: paste tokens from Intuit's playground instead"}
         </Button>
-        <Button variant="primary" icon={<ExternalLink />} onClick={() => void start()} loading={busy && !manual}>
+        <Button variant="primary" icon={<ExternalLink />} onClick={() => void start()} loading={busy && !manual} disabled={needsShop && !shop.trim()}>
           Connect to {def.name.replace(/ Online$/, "")}
         </Button>
       </div>
-      {manual && (
+      {manual && needsShop && <ConnectForm def={def} integration={integration} onClose={onClose ?? (() => {})} />}
+      {manual && !needsShop && (
         <div className="flex flex-col gap-3 rounded-[var(--radius)] border border-border bg-surface-subdued p-4">
           <p className="text-[12.5px] leading-5 text-text-secondary">For sandbox development keys only. In Intuit&apos;s OAuth 2.0 Playground, get an authorization code for this app, press Get tokens, then copy the refresh token and realm id here. They are kept on the server and refreshed like any other connection.</p>
           <TextField label="Realm (company) ID" placeholder="9341457924087297" value={realmId} onChange={(e) => setRealmId(e.target.value)} autoComplete="off" />

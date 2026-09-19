@@ -109,7 +109,7 @@ export async function beginAuthorization(ctx: Pick<ServerContext, "db" | "worksp
 }
 
 /** Redeems the state Intuit sent back. Each state works once and expires after ten minutes. */
-export async function consumeState(db: Firestore, state: string): Promise<OAuthState> {
+export async function consumeState(db: Firestore, state: string, provider = "quickbooks"): Promise<OAuthState> {
   if (!/^[A-Za-z0-9_-]{16,64}$/.test(state)) throw new HttpError(400, "The QuickBooks sign-in did not come from this app (bad state).");
   const ref = db.doc(`${OAUTH_STATES}/${state}`);
   const found = await db.runTransaction(async (tx) => {
@@ -118,7 +118,7 @@ export async function consumeState(db: Firestore, state: string): Promise<OAuthS
     tx.delete(ref);
     return snap.data() as OAuthState;
   });
-  if (!stateIsValid(found, "quickbooks")) throw new HttpError(400, "The QuickBooks sign-in expired or was already used. Start again from the Integrations page.");
+  if (!stateIsValid(found, provider)) throw new HttpError(400, "The sign-in expired or was already used. Start again from the Integrations page.");
   return found!;
 }
 
