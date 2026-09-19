@@ -276,6 +276,7 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
           pageSize={50}
           lockHeader
           fit
+          layoutKey="inventory"
           columnDividers
           defaultSort={{ key: "sku", dir: "asc" }}
           toolbar={toolbar}

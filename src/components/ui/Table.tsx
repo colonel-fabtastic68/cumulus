@@ -1,11 +1,74 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { flushSync } from "react-dom";
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Columns3, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "./Inputs";
 import { Button } from "./Button";
+
+/** What a person changed about a table: column order, hidden columns and widths. Kept per browser under the layout key. */
+export interface TableLayout {
+  order?: string[];
+  hidden?: string[];
+  widths?: Record<string, number>;
+}
+
+const LAYOUT_EVENT = "cumulus:table-layout";
+
+function readLayoutRaw(key: string): string {
+  try {
+    return localStorage.getItem(`cumulus:table:${key}`) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function writeLayout(key: string, layout: TableLayout) {
+  try {
+    if (!layout.order?.length && !layout.hidden?.length && !Object.keys(layout.widths ?? {}).length) localStorage.removeItem(`cumulus:table:${key}`);
+    else localStorage.setItem(`cumulus:table:${key}`, JSON.stringify(layout));
+  } catch {
+    // Private windows and blocked storage: the layout simply does not persist.
+  }
+  window.dispatchEvent(new Event(LAYOUT_EVENT));
+}
+
+function subscribeLayout(cb: () => void) {
+  window.addEventListener(LAYOUT_EVENT, cb);
+  window.addEventListener("storage", cb);
+  return () => {
+    window.removeEventListener(LAYOUT_EVENT, cb);
+    window.removeEventListener("storage", cb);
+  };
+}
+
+/** The saved layout for a key, kept in sync with storage; the server (and the first client frame) see the default. */
+function useSavedLayout(key: string | undefined): TableLayout {
+  const raw = useSyncExternalStore(subscribeLayout, () => (key ? readLayoutRaw(key) : ""), () => "");
+  return useMemo(() => {
+    if (!raw) return {};
+    try {
+      return JSON.parse(raw) as TableLayout;
+    } catch {
+      return {};
+    }
+  }, [raw]);
+}
+
+/** Applies a saved layout: reorders, drops hidden columns and pins resized ones. */
+function applyLayout<T>(columns: Column<T>[], layout: TableLayout): Column<T>[] {
+  const hidden = new Set(layout.hidden ?? []);
+  const order = layout.order ?? [];
+  const byKey = new Map(columns.map((c) => [c.key, c]));
+  const ordered = [...order.map((k) => byKey.get(k)).filter((c): c is Column<T> => !!c), ...columns.filter((c) => !order.includes(c.key))];
+  return ordered
+    .filter((c) => !hidden.has(c.key))
+    .map((c) => {
+      const w = layout.widths?.[c.key];
+      return w ? { ...c, width: `${w}px`, minWidth: w, maxWidth: w, flex: false } : c;
+    });
+}
 
 export interface Column<T> {
   key: string;
@@ -60,6 +123,8 @@ export interface TableProps<T> {
    * stay on one line, cells truncate, and gutters follow the content width.
    */
   fit?: boolean;
+  /** Lets people show/hide, reorder and resize columns; the layout is remembered in this browser under the key. */
+  layoutKey?: string;
   /** Faint vertical hairlines between columns, for tables with many numeric columns. */
   columnDividers?: boolean;
 }
@@ -103,8 +168,103 @@ function fitColumns<T>(columns: Column<T>[], width: number | null): { cols: Colu
   return { cols, widths };
 }
 
-export function Table<T>({ rows, columns, rowKey, rowLabel, rowClassName, onRowClick, selectable, selected, onSelectedChange, emptyState, pageSize = 50, defaultSort, toolbar, bulkActions, footer, dense, className, stickyHeader = false, lockHeader = false, fit = false, columnDividers = false }: TableProps<T>) {
+export function Table<T>({ rows, columns: allColumns, rowKey, rowLabel, rowClassName, onRowClick, selectable, selected, onSelectedChange, emptyState, pageSize = 50, defaultSort, toolbar, bulkActions, footer, dense, className, stickyHeader = false, lockHeader = false, fit = false, columnDividers = false, layoutKey }: TableProps<T>) {
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(defaultSort ?? null);
+  const layoutState = useSavedLayout(layoutKey);
+  // Reads the stored layout fresh on every change so rapid drags never work from a stale render.
+  const updateLayout = useCallback(
+    (fn: (cur: TableLayout) => TableLayout) => {
+      if (!layoutKey) return;
+      let cur: TableLayout = {};
+      try {
+        cur = JSON.parse(readLayoutRaw(layoutKey) || "{}") as TableLayout;
+      } catch {
+        cur = {};
+      }
+      writeLayout(layoutKey, fn(cur));
+    },
+    [layoutKey],
+  );
+  const columns = useMemo(() => (layoutKey ? applyLayout(allColumns, layoutState) : allColumns), [allColumns, layoutState, layoutKey]);
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const columnsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!columnsOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (columnsRef.current && !columnsRef.current.contains(e.target as Node)) setColumnsOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [columnsOpen]);
+
+  // Drag the right edge of a header to resize that column.
+  const startResize = (key: string, startX: number, startWidth: number) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const onMove = (ev: MouseEvent) => {
+      const w = Math.max(48, Math.round(startWidth + (ev.clientX - startX)));
+      updateLayout((cur) => ({ ...cur, widths: { ...(cur.widths ?? {}), [key]: w } }));
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+    };
+    document.body.style.cursor = "col-resize";
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
+
+  const columnsMenu = layoutKey ? (
+    <div ref={columnsRef} className="relative ml-auto">
+      <Button size="sm" icon={<Columns3 />} onClick={() => setColumnsOpen((o) => !o)} aria-expanded={columnsOpen} aria-haspopup="dialog">
+        Columns
+      </Button>
+      {columnsOpen && (
+        <div role="dialog" aria-label="Choose columns" className="animate-menu absolute right-0 z-[60] mt-1 w-64 rounded-[var(--radius)] bg-surface p-2 shadow-[var(--shadow-pop)]">
+          <div className="mb-1 flex items-center justify-between px-1">
+            <span className="text-[12px] font-semibold text-text">Columns</span>
+            <Button size="sm" variant="plain" icon={<RotateCcw />} onClick={() => updateLayout(() => ({}))}>
+              Reset
+            </Button>
+          </div>
+          <ul className="max-h-[50vh] overflow-y-auto">
+            {(() => {
+              const order = layoutState.order ?? [];
+              const ordered = [...order.map((k) => allColumns.find((c) => c.key === k)).filter((c): c is Column<T> => !!c), ...allColumns.filter((c) => !order.includes(c.key))];
+              const hidden = new Set(layoutState.hidden ?? []);
+              const keys = ordered.map((c) => c.key);
+              const move = (key: string, dir: -1 | 1) => {
+                const i = keys.indexOf(key);
+                const j = i + dir;
+                if (j < 0 || j >= keys.length) return;
+                const next = [...keys];
+                [next[i], next[j]] = [next[j]!, next[i]!];
+                updateLayout((cur) => ({ ...cur, order: next }));
+              };
+              return ordered.map((c, i) => (
+                <li key={c.key} className="flex items-center gap-1 rounded-[6px] px-1 py-0.5 hover:bg-surface-hover">
+                  <Checkbox
+                    checked={!hidden.has(c.key)}
+                    onChange={(on) => updateLayout((cur) => ({ ...cur, hidden: on ? (cur.hidden ?? []).filter((k) => k !== c.key) : [...(cur.hidden ?? []), c.key] }))}
+                    label={<span className="text-[12.5px] text-text">{typeof c.header === "string" && c.header ? c.header : c.key}</span>}
+                    className="min-w-0 flex-1"
+                  />
+                  <button type="button" aria-label="Move up" disabled={i === 0} onClick={() => move(c.key, -1)} className="rounded p-0.5 text-text-tertiary hover:text-text disabled:opacity-30">
+                    <ChevronUp className="h-3.5 w-3.5" />
+                  </button>
+                  <button type="button" aria-label="Move down" disabled={i === ordered.length - 1} onClick={() => move(c.key, 1)} className="rounded p-0.5 text-text-tertiary hover:text-text disabled:opacity-30">
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              ));
+            })()}
+          </ul>
+          <p className="mt-1 px-1 text-[11px] text-text-tertiary">Drag a header&apos;s right edge to resize. Saved in this browser.</p>
+        </div>
+      )}
+    </div>
+  ) : null;
   const [page, setPage] = useState(0);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [fitWidth, setFitWidth] = useState<number | null>(null);
@@ -171,7 +331,7 @@ export function Table<T>({ rows, columns, rowKey, rowLabel, rowClassName, onRowC
 
   return (
     <div className={cn("card", lockHeader ? "overflow-visible" : "overflow-hidden", className)}>
-      {(toolbar || (bulkActions && sel.size > 0)) && (
+      {(toolbar || columnsMenu || (bulkActions && sel.size > 0)) && (
         <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2.5">
           {bulkActions && sel.size > 0 ? (
             <div className="flex flex-wrap items-center gap-2">
@@ -182,7 +342,10 @@ export function Table<T>({ rows, columns, rowKey, rowLabel, rowClassName, onRowC
               </Button>
             </div>
           ) : (
-            toolbar
+            <>
+              {toolbar}
+              {columnsMenu}
+            </>
           )}
         </div>
       )}
@@ -202,8 +365,19 @@ export function Table<T>({ rows, columns, rowKey, rowLabel, rowClassName, onRowC
                     key={c.key}
                     style={{ width: layout ? layout.widths.get(c.key) : c.width }}
                     aria-sort={c.sortValue ? (active ? (sort!.dir === "asc" ? "ascending" : "descending") : "none") : undefined}
-                    className={cn("border-b border-[color:var(--divider)] font-medium", cellPad, fit && "whitespace-nowrap", colLine(i), c.align === "right" && "text-right", c.align === "center" && "text-center", !c.align && "text-left", visibility(c), c.className)}
+                    className={cn("border-b border-[color:var(--divider)] font-medium", layoutKey && "relative", cellPad, fit && "whitespace-nowrap", colLine(i), c.align === "right" && "text-right", c.align === "center" && "text-center", !c.align && "text-left", visibility(c), c.className)}
                   >
+                    {layoutKey && (
+                      <span
+                        role="separator"
+                        aria-orientation="vertical"
+                        aria-label={`Resize ${typeof c.header === "string" ? c.header : c.key}`}
+                        onMouseDown={(e) => startResize(c.key, e.clientX, (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect().width)(e)}
+                        onDoubleClick={() => updateLayout((cur) => { const widths = { ...(cur.widths ?? {}) }; delete widths[c.key]; return { ...cur, widths }; })}
+                        className="absolute inset-y-0 right-0 z-[1] w-2 cursor-col-resize select-none hover:bg-accent/30"
+                        title="Drag to resize; double-click to reset"
+                      />
+                    )}
                     {c.sortValue ? (
                       <button
                         type="button"
