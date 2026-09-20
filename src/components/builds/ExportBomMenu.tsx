@@ -12,7 +12,7 @@ export function ExportBomMenu({ assembly, items, size = "sm", label = "Export BO
   const run = (format: ExportFormat, all: boolean) => {
     if (assembly.bom.length === 0) return toast(`${assembly.sku} has no components yet`, "critical");
     const t = bomTables(assembly, items);
-    const res = exportTables(all ? [t.summary, t.components, t.exploded] : [t.components], format, `bom-${assembly.sku.toLowerCase()}`);
+    const res = exportTables(all ? [t.summary, t.structure, t.components, t.exploded] : [t.structure], format, `bom-${assembly.sku.toLowerCase()}`);
     if (res.note === "blocked") toast("Allow pop-ups to open the print view", "critical");
     else if (res.note === "print") toast("Print view opened. Choose Save as PDF in the dialog.", "success");
     else toast(`Exported the BOM for ${assembly.sku}`, "success");
@@ -26,8 +26,8 @@ export function ExportBomMenu({ assembly, items, size = "sm", label = "Export BO
         </Button>
       }
       items={[
-        { label: "CSV · components grouped by category", onSelect: () => run("csv", false) },
-        { label: "Excel · summary, components, all parts", onSelect: () => run("xlsx", true) },
+        { label: "CSV · structure, sub-assemblies indented", onSelect: () => run("csv", false) },
+        { label: "Excel · summary, structure, by category, all parts", onSelect: () => run("xlsx", true) },
         { label: "Print / PDF", onSelect: () => run("pdf", true) },
         { label: "Markdown", onSelect: () => run("md", true) },
       ]}

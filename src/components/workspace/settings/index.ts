@@ -11,3 +11,4 @@ export * from "./QuotingSection";
 export * from "./BillingSection";
 export * from "./sections";
 export * from "./CatalogSection";
+export * from "./StockAlertsForm";

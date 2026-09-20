@@ -1,5 +1,7 @@
 "use client";
 
+import { useSettings } from "@/lib/store/provider";
+
 import Link from "next/link";
 import { Boxes, Sparkles } from "lucide-react";
 import type { Item, Supplier } from "@/lib/types";
@@ -71,7 +73,8 @@ export function SupplierItemsTable({ supplier, stats, currency, onDraftEmail }: 
 }
 
 function SupplierItemRow({ item, supplier, currency }: { item: Item; supplier: Supplier; currency: string }) {
-  const low = isLowStock(item);
+  const rule = useSettings().stockAlerts;
+  const low = isLowStock(item, rule);
   const reorder = reorderQty(item);
   const usesSupplierLead = item.leadTimeDays === undefined && supplier.leadTimeDays !== undefined;
   return (

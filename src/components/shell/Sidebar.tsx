@@ -22,7 +22,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const items = useCollection("items");
   const orders = useCollection("orders");
   const rmas = useCollection("rmas");
-  const lowCount = items.filter(isLowStock).length;
+  const lowCount = items.filter((i) => isLowStock(i, settings.stockAlerts)).length;
   const openOrders = orders.filter((o) => o.status === "open").length;
   const openRmas = rmas.filter((r) => r.status === "open" || r.status === "inspecting").length;
   const counts: Record<string, number> = { "/inventory": lowCount, "/orders": openOrders, "/rmas": openRmas };

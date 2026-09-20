@@ -721,7 +721,17 @@ export interface WorkspaceSettings {
   catalog?: CatalogSettings;
   /** Order numbers: prefix + the next counter value. A custom number typed on an order moves the counter past it. */
   numbering?: { orderPrefix?: string };
+  /** When an item counts as low stock (the Low chip, the low-stock view, reorder suggestions). */
+  stockAlerts?: StockAlertRule;
   updatedAt: string;
+}
+
+export interface StockAlertRule {
+  /** min: below the item's own min (default). quantity: below a fixed count. percentOfMax: below this % of the item's max (falls back to min when there is no max). */
+  mode: "min" | "quantity" | "percentOfMax";
+  value?: number;
+  /** Optional earlier warning: amber when on hand is within this % above the low line. */
+  warnPct?: number;
 }
 
 export type CustomFieldType = "text" | "number" | "date" | "select";

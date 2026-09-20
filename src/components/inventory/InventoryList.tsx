@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, ArrowLeftRight, Boxes, Download, FileDown, FilterX, Hammer, MoreHorizontal, Pencil, Plus, SlidersHorizontal, Sparkles, Trash2, Upload } from "lucide-react";
+import { Archive, ArrowLeftRight, BellRing, Boxes, Download, FileDown, FilterX, Hammer, MoreHorizontal, Pencil, Plus, SlidersHorizontal, Sparkles, Trash2, Upload } from "lucide-react";
 import type { Item } from "@/lib/types";
 import { deactivateItems, deleteItems, inventoryValue, isLowStock, qtyAt } from "@/lib/inventory";
 import { useDefaultLocation, useLocations } from "@/lib/locations";
@@ -16,6 +16,7 @@ import { Button, Card, ConfirmDialog, EmptyState, IconButton, Menu, Page, Search
 import { AdjustStockModal } from "./AdjustStockModal";
 import { BuildModal } from "./BuildModal";
 import { ItemFormModal } from "./ItemFormModal";
+import { StockAlertsModal } from "./StockAlertsModal";
 import { BulkEditModal } from "./BulkEditModal";
 import { useInventoryColumns } from "./InventoryColumns";
 import { INVENTORY_VIEWS, describeFilters, matchesSearch, matchesView, type InventoryView } from "./inventoryFilters";
@@ -50,6 +51,7 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
 
   const [q, setQ] = useState(initialQuery);
   const [view, setView] = useState<InventoryView>(initialView);
+  const [alertsOpen, setAlertsOpen] = useState(false);
   const [category, setCategory] = useState("");
   const [supplierId, setSupplierId] = useState("");
   const [locationId, setLocationId] = useState("");
@@ -85,12 +87,12 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
   );
   const counts = useMemo(() => {
     const out: Record<InventoryView, number> = { all: 0, active: 0, low: 0, assemblies: 0, inactive: 0 };
-    for (const i of base) for (const v of INVENTORY_VIEWS) if (matchesView(i, v.value)) out[v.value]++;
+    for (const i of base) for (const v of INVENTORY_VIEWS) if (matchesView(i, v.value, settings.stockAlerts)) out[v.value]++;
     return out;
-  }, [base]);
-  const rows = useMemo(() => base.filter((i) => matchesView(i, view)), [base, view]);
+  }, [base, settings.stockAlerts]);
+  const rows = useMemo(() => base.filter((i) => matchesView(i, view, settings.stockAlerts)), [base, view, settings.stockAlerts]);
 
-  const lowCount = useMemo(() => items.filter(isLowStock).length, [items]);
+  const lowCount = useMemo(() => items.filter((i) => isLowStock(i, settings.stockAlerts)).length, [items, settings.stockAlerts]);
   const totalValue = useMemo(() => inventoryValue(items), [items]);
   const viewValue = useMemo(() => inventoryValue(rows), [rows]);
   const filtersActive = q.trim() !== "" || view !== "all" || category !== "" || supplierId !== "" || locationId !== "";
@@ -165,6 +167,7 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
       items={[
         { label: "Export CSV", icon: <FileDown />, onSelect: exportCsv, disabled: rows.length === 0 },
         { label: "Ask Strato about this view", icon: <Sparkles />, onSelect: askAboutView },
+        { label: "Stock alert rule…", icon: <BellRing />, onSelect: () => setAlertsOpen(true) },
       ]}
     />
   );
@@ -297,6 +300,7 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
         />
       )}
 
+      <StockAlertsModal open={alertsOpen} onClose={() => setAlertsOpen(false)} canEdit={writable} />
       <ItemFormModal open={dialog === "new"} onClose={closeDialog} />
       <AdjustStockModal open={dialog === "adjust"} onClose={closeDialog} />
       <BuildModal open={dialog === "build"} onClose={closeDialog} />

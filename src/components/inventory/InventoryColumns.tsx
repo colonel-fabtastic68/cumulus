@@ -3,7 +3,8 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import type { Item } from "@/lib/types";
-import { isLowStock, qtyAt } from "@/lib/inventory";
+import { DEFAULT_STOCK_ALERTS, isLowStock, isNearLowStock, lowStockLine, qtyAt } from "@/lib/inventory";
+import type { StockAlertRule } from "@/lib/types";
 import { itemBinAt } from "@/lib/locations";
 import { formatMoney, formatNumber, formatQty, formatRelative } from "@/lib/format";
 import { clamp, cn } from "@/lib/utils";
@@ -12,17 +13,19 @@ import { useSettings } from "@/lib/store/provider";
 import { customFieldsFor } from "@/lib/catalog";
 
 /** On-hand quantity with a "Low" flag and a tiny min/max level bar. */
-/** Red below min, amber between min and max, green at max or above (or at/above min when no max is set). */
-export function stockLevelTone(item: Item): "critical" | "warning" | "success" | "default" {
-  if (item.minQty === undefined && item.maxQty === undefined) return "default";
-  if (item.minQty !== undefined && item.onHand < item.minQty) return "critical";
+/** Red below the low line (workspace rule), amber within the early-warning band or between min and max, green at max or above. */
+export function stockLevelTone(item: Item, rule: StockAlertRule = DEFAULT_STOCK_ALERTS): "critical" | "warning" | "success" | "default" {
+  const line = lowStockLine(item, rule);
+  if (line === undefined && item.maxQty === undefined) return "default";
+  if (line !== undefined && item.onHand < line) return "critical";
+  if (isNearLowStock(item, rule)) return "warning";
   if (item.maxQty !== undefined && item.maxQty > 0) return item.onHand >= item.maxQty ? "success" : "warning";
   return "success";
 }
 
-export function StockLevelCell({ item }: { item: Item }) {
-  const low = isLowStock(item);
-  const tone = stockLevelTone(item);
+export function StockLevelCell({ item, rule = DEFAULT_STOCK_ALERTS }: { item: Item; rule?: StockAlertRule }) {
+  const low = isLowStock(item, rule);
+  const tone = stockLevelTone(item, rule);
   const hasMin = item.minQty !== undefined;
   const cap = item.maxQty !== undefined && item.maxQty > 0 ? item.maxQty : hasMin ? Math.max(1, item.minQty! * 2) : 0;
   const pct = cap > 0 ? clamp((item.onHand / cap) * 100, 0, 100) : 0;
@@ -75,6 +78,7 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
   const settings = useSettings();
   const customTypes = settings.catalog?.itemTypes;
   const customFields = customFieldsFor(settings, "items");
+  const rule = settings.stockAlerts ?? DEFAULT_STOCK_ALERTS;
   return useMemo<Column<Item>[]>(
     () => [
       {
@@ -133,7 +137,7 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
         maxWidth: location ? 150 : 132,
         align: "right",
         sortValue: (i) => (location ? qtyAt(i, location.id, location.homeId) : i.onHand),
-        render: (i) => (location ? <AtLocationCell item={i} location={location} /> : <StockLevelCell item={i} />),
+        render: (i) => (location ? <AtLocationCell item={i} location={location} /> : <StockLevelCell item={i} rule={rule} />),
       },
       {
         key: "minMax",
@@ -235,6 +239,6 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
         render: (i) => (i.attributes?.[f.key] ? <span className="block truncate">{i.attributes[f.key]}</span> : <span className="text-text-tertiary">—</span>),
       })),
     ],
-    [currency, supplierName, location, customTypes, customFields],
+    [currency, supplierName, location, customTypes, customFields, rule],
   );
 }

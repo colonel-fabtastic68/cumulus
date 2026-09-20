@@ -1,5 +1,6 @@
 "use client";
 
+
 import { useMemo } from "react";
 import type { Item, Lot, StockMovement, WorkspaceSettings } from "@/lib/types";
 import { consumptionRate, isLowStock, reorderQty } from "@/lib/inventory";
@@ -11,7 +12,7 @@ import { weightedAverageCost } from "./utils";
 
 export function StockSummaryCard({ item, movements, lots, settings }: { item: Item; movements: StockMovement[]; lots: Lot[]; settings: WorkspaceSettings }) {
   const currency = settings.currency;
-  const low = isLowStock(item);
+  const low = isLowStock(item, settings.stockAlerts);
   const reorder = reorderQty(item);
 
   const rate = useMemo(() => consumptionRate(movements, 90).get(item.id) ?? 0, [movements, item.id]);

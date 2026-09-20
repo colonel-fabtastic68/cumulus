@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { useUnsavedChanges } from "./useUnsavedChanges";
+import { StockAlertsForm } from "./StockAlertsForm";
+import { DEFAULT_STOCK_ALERTS } from "@/lib/inventory";
+import type { StockAlertRule } from "@/lib/types";
 import type { WorkspaceSettings } from "@/lib/types";
 import { TextField, Toggle, useToast } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -47,18 +50,19 @@ export function InventoryPolicySection({ settings, readOnly }: { settings: Works
   const [trackInUse, setTrackInUse] = useState(settings.trackInUse);
   const [relievePolicy, setRelievePolicy] = useState<RelievePolicy>(settings.relievePolicy);
   const [inactivityDays, setInactivityDays] = useState(String(settings.inactivityDays));
+  const [alerts, setAlerts] = useState<StockAlertRule>(settings.stockAlerts ?? DEFAULT_STOCK_ALERTS);
   const [saving, setSaving] = useState(false);
 
   const days = Number(inactivityDays);
   const daysError = !inactivityDays.trim() || !Number.isInteger(days) || days < 1 ? "Enter a whole number of days (1 or more)" : undefined;
-  const dirty = trackInUse !== settings.trackInUse || relievePolicy !== settings.relievePolicy || days !== settings.inactivityDays;
+  const dirty = trackInUse !== settings.trackInUse || relievePolicy !== settings.relievePolicy || days !== settings.inactivityDays || JSON.stringify(alerts) !== JSON.stringify(settings.stockAlerts ?? DEFAULT_STOCK_ALERTS);
   useUnsavedChanges(dirty);
 
   const save = async () => {
     if (daysError) return;
     setSaving(true);
     try {
-      await saveSettings({ trackInUse, relievePolicy, inactivityDays: days });
+      await saveSettings({ trackInUse, relievePolicy, inactivityDays: days, stockAlerts: alerts });
       toast("Inventory policy saved", "success");
     } catch (e) {
       toast(e instanceof Error ? e.message : "Could not save settings", "critical");
@@ -85,6 +89,11 @@ export function InventoryPolicySection({ settings, readOnly }: { settings: Works
             <PolicyOption key={p.value} option={p} selected={relievePolicy === p.value} disabled={readOnly} onSelect={() => setRelievePolicy(p.value)} />
           ))}
         </div>
+      </div>
+
+      <div>
+        <div className="mb-2 text-[13px] font-semibold text-text">Stock alerts</div>
+        <StockAlertsForm value={alerts} onChange={setAlerts} disabled={readOnly} />
       </div>
 
       <TextField

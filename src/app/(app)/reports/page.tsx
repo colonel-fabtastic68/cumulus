@@ -55,7 +55,7 @@ function ReportsView() {
   const items = useItems();
   const { open: openAgent, setPageContext } = useAgent();
 
-  const lowCount = useMemo(() => items.filter(isLowStock).length, [items]);
+  const lowCount = useMemo(() => items.filter((i) => isLowStock(i, settings.stockAlerts)).length, [items, settings.stockAlerts]);
 
   useEffect(() => {
     const url = new URL(window.location.href);

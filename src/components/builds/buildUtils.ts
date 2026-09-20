@@ -64,7 +64,7 @@ export function computeBuildStats(builds: Build[], items: Item[]): BuildStatsRes
   return {
     unitsBuilt: sum(recent.map((b) => b.qty)),
     buildCount: recent.length,
-    belowMin: assemblies.filter(isLowStock).length,
+    belowMin: assemblies.filter((a) => isLowStock(a)).length,
     assemblyCount: assemblies.length,
   };
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import type { Contact, Item, Member, Supplier, WorkspaceSettings } from "@/lib/types";
+import type { Contact, Item, Member, StockAlertRule, Supplier, WorkspaceSettings } from "@/lib/types";
 import { inventoryValue, isLowStock, reorderQty } from "@/lib/inventory";
 import { formatMoney, formatQty } from "@/lib/format";
 import { itemSupplierLinks, supplierItems } from "@/lib/suppliers";
@@ -108,9 +108,9 @@ export interface SupplierStats {
   value: number;
 }
 
-export function supplierStats(items: Item[], supplierId: string): SupplierStats {
-  const supplied = supplierItems(items, supplierId).sort((a, b) => Number(isLowStock(b)) - Number(isLowStock(a)) || a.sku.localeCompare(b.sku));
-  return { items: supplied, lowItems: supplied.filter(isLowStock), value: inventoryValue(supplied) };
+export function supplierStats(items: Item[], supplierId: string, rule?: StockAlertRule): SupplierStats {
+  const supplied = supplierItems(items, supplierId).sort((a, b) => Number(isLowStock(b, rule)) - Number(isLowStock(a, rule)) || a.sku.localeCompare(b.sku));
+  return { items: supplied, lowItems: supplied.filter((i) => isLowStock(i, rule)), value: inventoryValue(supplied) };
 }
 
 const EMPTY_STATS: SupplierStats = { items: [], lowItems: [], value: 0 };

@@ -3,3 +3,4 @@ export * from "./AdjustStockModal";
 export * from "./BuildModal";
 export * from "./ItemFormModal";
 export * from "./BulkEditModal";
+export * from "./StockAlertsModal";

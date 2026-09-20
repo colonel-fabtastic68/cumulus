@@ -1,5 +1,7 @@
 "use client";
 
+import { useSettings } from "@/lib/store/provider";
+
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Copy, Hammer, Layers } from "lucide-react";
@@ -21,6 +23,7 @@ interface AssembliesTableProps {
 }
 
 export function AssembliesTable({ items, assemblies, canWrite, onBuild, onCopyBom }: AssembliesTableProps) {
+  const rule = useSettings().stockAlerts;
   const [q, setQ] = useState("");
 
   const buildable = useMemo(() => new Map(assemblies.map((a) => [a.id, buildableQty(items, a)])), [items, assemblies]);
@@ -63,7 +66,7 @@ export function AssembliesTable({ items, assemblies, canWrite, onBuild, onCopyBo
       {
         key: "onHand",
         header: "On hand",
-        render: (a) => <span className={cn(isLowStock(a) && "font-medium text-warning")}>{formatQty(a.onHand, a.unit)}</span>,
+        render: (a) => <span className={cn(isLowStock(a, rule) && "font-medium text-warning")}>{formatQty(a.onHand, a.unit)}</span>,
         sortValue: (a) => a.onHand,
         align: "right",
         width: "90px",
@@ -95,8 +98,8 @@ export function AssembliesTable({ items, assemblies, canWrite, onBuild, onCopyBo
       {
         key: "stock",
         header: "Stock",
-        render: (a) => (isLowStock(a) ? <Badge tone="warning">Low stock</Badge> : <Badge tone="success">OK</Badge>),
-        sortValue: (a) => (isLowStock(a) ? 0 : 1),
+        render: (a) => (isLowStock(a, rule) ? <Badge tone="warning">Low stock</Badge> : <Badge tone="success">OK</Badge>),
+        sortValue: (a) => (isLowStock(a, rule) ? 0 : 1),
         width: "100px",
       },
       {
@@ -126,10 +129,10 @@ export function AssembliesTable({ items, assemblies, canWrite, onBuild, onCopyBo
         ),
       },
     ],
-    [buildable, canWrite, onBuild, onCopyBom, items],
+    [buildable, canWrite, onBuild, onCopyBom, items, rule],
   );
 
-  const lowCount = assemblies.filter(isLowStock).length;
+  const lowCount = assemblies.filter((a) => isLowStock(a, rule)).length;
 
   const empty = q.trim() ? (
     <EmptyState icon={<Layers />} title="No assemblies match" description={`Nothing matches “${q.trim()}”. Try a SKU, name or category.`} action={<Button size="sm" onClick={() => setQ("")}>Clear search</Button>} />

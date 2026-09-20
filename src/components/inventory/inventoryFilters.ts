@@ -1,4 +1,4 @@
-import type { Item } from "@/lib/types";
+import type { Item, StockAlertRule } from "@/lib/types";
 import { crossRefText } from "@/lib/scan";
 import { isLowStock } from "@/lib/inventory";
 import { matches } from "@/lib/utils";
@@ -17,12 +17,12 @@ export function isInventoryView(value: string | null | undefined): value is Inve
   return INVENTORY_VIEWS.some((v) => v.value === value);
 }
 
-export function matchesView(item: Item, view: InventoryView): boolean {
+export function matchesView(item: Item, view: InventoryView, rule?: StockAlertRule): boolean {
   switch (view) {
     case "active":
       return item.status === "active";
     case "low":
-      return isLowStock(item);
+      return isLowStock(item, rule);
     case "assemblies":
       return item.type === "assembly";
     case "inactive":

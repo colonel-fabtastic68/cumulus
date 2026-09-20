@@ -86,7 +86,7 @@ export default function ItemDetailPage() {
 
   const writable = canWrite(user);
   const isAssembly = item.type === "assembly";
-  const low = isLowStock(item);
+  const low = isLowStock(item, settings.stockAlerts);
 
   const toggleActive = async () => {
     try {

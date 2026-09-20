@@ -5,7 +5,7 @@
  * Functions that take a `Store` mutate data; the rest are pure and work on
  * arrays so they can be used in the UI, in reports and by Strato alike.
  */
-import type {
+import type { StockAlertRule,
   ActivityEvent,
   ActivityType,
   Address,
@@ -97,8 +97,30 @@ export function findItem(items: Item[], skuOrId: string): Item | undefined {
   return items.find((i) => i.id === key) ?? items.find((i) => i.sku.toUpperCase() === key.toUpperCase());
 }
 
-export function isLowStock(item: Item): boolean {
-  return item.status === "active" && item.minQty !== undefined && item.onHand < item.minQty;
+export const DEFAULT_STOCK_ALERTS: StockAlertRule = { mode: "min" };
+
+/** The count an item is "low" below, under the workspace rule; undefined when the rule has nothing to go on for this item. */
+export function lowStockLine(item: Item, rule: StockAlertRule = DEFAULT_STOCK_ALERTS): number | undefined {
+  if (rule.mode === "quantity") return rule.value !== undefined && rule.value > 0 ? rule.value : undefined;
+  if (rule.mode === "percentOfMax") {
+    if (item.maxQty !== undefined && item.maxQty > 0 && rule.value !== undefined) return (item.maxQty * rule.value) / 100;
+    return item.minQty;
+  }
+  return item.minQty;
+}
+
+export function isLowStock(item: Item, rule: StockAlertRule = DEFAULT_STOCK_ALERTS): boolean {
+  // Point-free use (items.filter(isLowStock)) hands the array index in as `rule`; fall back to the default then.
+  const effective = rule && typeof rule === "object" ? rule : DEFAULT_STOCK_ALERTS;
+  const line = lowStockLine(item, effective);
+  return item.status === "active" && line !== undefined && item.onHand < line;
+}
+
+/** Amber band: at or above the low line but within warnPct of it. */
+export function isNearLowStock(item: Item, rule: StockAlertRule = DEFAULT_STOCK_ALERTS): boolean {
+  const line = lowStockLine(item, rule);
+  if (line === undefined || !rule.warnPct || isLowStock(item, rule)) return false;
+  return item.onHand < line * (1 + rule.warnPct / 100);
 }
 
 export function reorderQty(item: Item): number {
@@ -260,7 +282,7 @@ export interface LowStockRow {
 export function lowStockReport(items: Item[], suppliers: Supplier[], movements: StockMovement[]): LowStockRow[] {
   const rates = consumptionRate(movements, 90);
   return items
-    .filter(isLowStock)
+    .filter((i) => isLowStock(i))
     .map((item) => {
       const rate = rates.get(item.id) ?? 0;
       return {

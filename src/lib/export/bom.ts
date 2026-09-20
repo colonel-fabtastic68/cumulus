@@ -11,7 +11,33 @@ import type { Table } from "./formats";
 const typeLabel = (i: Item) => (i.type === "assembly" ? "BOM" : "Part");
 const groupOf = (i: Item) => i.category?.trim() || "Uncategorized";
 
-export function bomTables(assembly: Item, items: Item[]): { components: Table; exploded: Table; summary: Table } {
+/**
+ * The BOM as a tree: each sub-assembly's parts are listed directly under it,
+ * indented, with quantities per parent and per finished unit.
+ */
+export function bomStructureTable(assembly: Item, items: Item[]): Table {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const rows: Table["rows"] = [];
+  const visit = (asm: Item, mult: number, depth: number, path: Set<string>) => {
+    for (const line of [...asm.bom].sort((a, b) => (byId.get(a.itemId)?.sku ?? "").localeCompare(byId.get(b.itemId)?.sku ?? ""))) {
+      const comp = byId.get(line.itemId);
+      if (!comp) continue;
+      const perUnit = round(line.qty * mult, 4);
+      const isSub = comp.type === "assembly" && comp.bom.length > 0 && !path.has(comp.id);
+      rows.push([depth + 1, `${"    ".repeat(depth)}${comp.sku}`, comp.name, isSub ? "BOM" : typeLabel(comp), line.qty, perUnit, comp.unit, line.wastePct ?? "", comp.unitCost, round(perUnit * comp.unitCost), comp.onHand]);
+      if (isSub) visit(comp, perUnit, depth + 1, new Set([...path, comp.id]));
+    }
+  };
+  visit(assembly, 1, 0, new Set([assembly.id]));
+  return {
+    id: `bom-${assembly.sku.toLowerCase()}-structure`,
+    label: `Structure · ${assembly.sku}`,
+    headers: ["Level", "SKU", "Item", "Type", "Qty per parent", "Qty per unit", "Unit", "Waste %", "Unit cost", "Line cost", "On hand"],
+    rows,
+  };
+}
+
+export function bomTables(assembly: Item, items: Item[]): { structure: Table; components: Table; exploded: Table; summary: Table } {
   const byId = new Map(items.map((i) => [i.id, i]));
   const direct = assembly.bom.map((l) => ({ line: l, item: byId.get(l.itemId) })).filter((x): x is { line: (typeof assembly.bom)[number]; item: Item } => !!x.item);
   const groups = new Map<string, typeof direct>();
@@ -68,5 +94,5 @@ export function bomTables(assembly: Item, items: Item[]): { components: Table; e
       ["Exported", new Date().toISOString()],
     ],
   };
-  return { components, exploded, summary };
+  return { structure: bomStructureTable(assembly, items), components, exploded, summary };
 }

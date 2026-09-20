@@ -6,7 +6,7 @@ import { Mail, MoreHorizontal, Plus, Sparkles, Star, Trash2 } from "lucide-react
 import type { Item, Supplier } from "@/lib/types";
 import { isLowStock, reorderQty } from "@/lib/inventory";
 import { addItemSupplier, itemSupplierLinks, removeItemSupplier, setPrimarySupplier, type SupplierLink } from "@/lib/suppliers";
-import { useStore } from "@/lib/store/provider";
+import { useStore, useSettings } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { formatMoney, pluralize } from "@/lib/format";
@@ -23,7 +23,7 @@ export function SuppliersCard({ item, suppliers, currency, canEdit }: { item: It
   const links = itemSupplierLinks(item);
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
-  const low = isLowStock(item);
+  const low = isLowStock(item, useSettings().stockAlerts);
   const primary = links.find((l) => l.primary);
   const primarySupplier = primary ? byId.get(primary.supplierId) : undefined;
 

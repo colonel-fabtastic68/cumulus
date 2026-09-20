@@ -2,7 +2,7 @@
  * Client-side tool execution. Maps agent tool calls onto inventory services.
  * Everything here runs in the browser against the active store.
  */
-import type { Item, Rma, StockMovement, Supplier } from "@/lib/types";
+import type { Item, Rma, StockAlertRule, StockMovement, Supplier } from "@/lib/types";
 import type { Store } from "@/lib/store/types";
 import {
   adjustStock,
@@ -73,7 +73,7 @@ function applyFilter(items: Item[], filter: Filter | undefined, suppliers: Suppl
     const ids = new Set(suppliers.filter((s) => matches(filter.supplier!, s.name)).map((s) => s.id));
     out = out.filter((i) => itemSupplierLinks(i).some((l) => ids.has(l.supplierId)));
   }
-  if (filter.belowMin) out = out.filter(isLowStock);
+  if (filter.belowMin) out = out.filter((i) => isLowStock(i));
   if (filter.tags?.length) out = out.filter((i) => filter.tags!.some((t) => i.tags.map((x) => x.toLowerCase()).includes(t.toLowerCase())));
   if (filter.location) out = out.filter((i) => matches(filter.location!, i.location));
   if (filter.noMovementDays) {
@@ -84,7 +84,7 @@ function applyFilter(items: Item[], filter: Filter | undefined, suppliers: Suppl
   return out;
 }
 
-function brief(i: Item, suppliers: Supplier[]) {
+function brief(i: Item, suppliers: Supplier[], rule?: StockAlertRule) {
   return {
     sku: i.sku,
     name: i.name,
@@ -103,7 +103,7 @@ function brief(i: Item, suppliers: Supplier[]) {
     otherSuppliers: i.suppliers?.length ? i.suppliers.filter((s) => s.supplierId !== i.supplierId).map((s) => suppliers.find((x) => x.id === s.supplierId)?.name ?? s.supplierId) : undefined,
     location: i.location,
     tags: i.tags.length ? i.tags : undefined,
-    belowMin: isLowStock(i) || undefined,
+    belowMin: isLowStock(i, rule) || undefined,
   };
 }
 
@@ -230,7 +230,7 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
         relievePolicy: settings[0]?.relievePolicy,
         items: { total: items.length, active: items.filter((i) => i.status === "active").length, inactive: items.filter((i) => i.status === "inactive").length, superseded: items.filter((i) => i.status === "superseded").length, assemblies: items.filter((i) => i.type === "assembly").length },
         inventoryValue: inventoryValue(items),
-        belowMin: items.filter(isLowStock).map((i) => i.sku),
+        belowMin: items.filter((i) => isLowStock(i, settings[0]?.stockAlerts)).map((i) => i.sku),
         unitsSoldLast30Days: sold30,
         openOrders: orders.filter((o) => o.status === "open").map((o) => ({ number: o.number, customer: o.customer, lines: o.lines.length })),
         openRmas: rmas.filter((r) => r.status === "open" || r.status === "inspecting").map((r) => ({ number: r.number, customer: r.customer, reason: r.reason })),
@@ -292,16 +292,17 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
       else if (sortBy === "name") rows = [...rows].sort((a, b) => a.name.localeCompare(b.name));
       else rows = [...rows].sort((a, b) => a.sku.localeCompare(b.sku));
       const limit = Math.min(200, Number(input.limit) || 50);
-      return { total: rows.length, returned: Math.min(limit, rows.length), items: rows.slice(0, limit).map((i) => brief(i, suppliers)) };
+      const rule = (await store.list("settings"))[0]?.stockAlerts;
+      return { total: rows.length, returned: Math.min(limit, rows.length), items: rows.slice(0, limit).map((i) => brief(i, suppliers, rule)) };
     }
 
     case "getItem": {
-      const [items, suppliers, movements, lots] = await Promise.all([store.list("items"), store.list("suppliers"), store.list("movements"), store.list("lots")]);
+      const [items, suppliers, movements, lots, settingsRows] = await Promise.all([store.list("items"), store.list("suppliers"), store.list("movements"), store.list("lots"), store.list("settings")]);
       const item = findItem(items, String(input.sku ?? ""));
       if (!item) throw new InventoryError(`Unknown SKU ${input.sku}`);
       const byId = new Map(items.map((i) => [i.id, i]));
       return {
-        ...brief(item, suppliers),
+        ...brief(item, suppliers, settingsRows[0]?.stockAlerts),
         description: item.description,
         barcode: item.barcode,
         crossRefs: item.crossRefs?.map((r) => ({ number: r.number, kind: r.kind, source: r.source })),

@@ -99,7 +99,7 @@ export function AgentChat({ onClose, pending, consumePending, pendingSession, co
   const integrations = useCollection("integrations");
   const sessions = useCollection("agentSessions");
   const autoApprove = settings.agentAutoApprove && canWrite(user);
-  const suggestions = useMemo(() => buildSuggestions(items, items.filter(isLowStock).length, settings.inactivityDays), [items, settings.inactivityDays]);
+  const suggestions = useMemo(() => buildSuggestions(items, items.filter((i) => isLowStock(i, settings.stockAlerts)).length, settings.inactivityDays), [items, settings.inactivityDays, settings.stockAlerts]);
 
   const [sessionId, setSessionId] = useState(() => newId("chat"));
   const [initialMessages, setInitialMessages] = useState<AgentUIMessage[]>([]);

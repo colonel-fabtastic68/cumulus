@@ -5,7 +5,7 @@ import { inventoryValue, isLowStock, reorderQty } from "@/lib/inventory";
 export function buildAgentContext(ws: Pick<WorkspaceSnapshot, "items" | "suppliers" | "orders" | "rmas" | "settings" | "members"> & Partial<Pick<WorkspaceSnapshot, "integrations">>, extra: { page?: string; selectedSkus?: string[] } = {}): string {
   const settings = ws.settings[0];
   const active = ws.items.filter((i) => i.status === "active");
-  const low = ws.items.filter(isLowStock).sort((a, b) => a.onHand / (a.minQty || 1) - b.onHand / (b.minQty || 1));
+  const low = ws.items.filter((i) => isLowStock(i, ws.settings?.[0]?.stockAlerts)).sort((a, b) => a.onHand / (a.minQty || 1) - b.onHand / (b.minQty || 1));
   const cats = new Map<string, number>();
   for (const i of ws.items) cats.set(i.category ?? "Uncategorized", (cats.get(i.category ?? "Uncategorized") ?? 0) + 1);
   const openOrders = ws.orders.filter((o) => o.status === "open");
