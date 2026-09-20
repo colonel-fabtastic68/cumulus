@@ -8,7 +8,7 @@ import { useCollection, useSettings, useStore } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
 import { formatMoney, formatQty } from "@/lib/format";
 import { cn, newId, round, sum, uniq } from "@/lib/utils";
-import { Button, Checkbox, FormGrid, IconButton, Modal, Select, TextArea, TextField, useToast } from "@/components/ui";
+import { Button, Checkbox, Combobox, FormGrid, IconButton, Modal, Select, TextArea, TextField, useToast } from "@/components/ui";
 import { saveOrderTemplate } from "@/lib/orderTemplates";
 import { ensureCustomer, findCustomer } from "@/lib/customers";
 import { ItemPicker } from "@/components/inventory";
@@ -98,8 +98,13 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Suggestions: customer records first, then names seen on past orders that have no record yet.
-  const customers = useMemo(() => uniq([...customerRecords.map((c) => c.name.trim()), ...orders.map((o) => o.customer.trim())].filter(Boolean)).sort((a, b) => a.localeCompare(b)), [customerRecords, orders]);
+  // Suggestions: customer records (searchable by name, company and email) first, then names seen on past orders that have no record yet.
+  const customerOptions = useMemo(() => {
+    const fromRecords = [...customerRecords].sort((a, b) => a.name.localeCompare(b.name)).map((c) => ({ value: c.name, label: c.name, description: [c.company, c.email].filter(Boolean).join(" · ") || undefined }));
+    const seen = new Set(fromRecords.map((o) => o.value.toLowerCase()));
+    const fromOrders = uniq(orders.map((o) => o.customer.trim()).filter((n) => n && !seen.has(n.toLowerCase()))).sort((a, b) => a.localeCompare(b)).map((n) => ({ value: n, label: n, description: "from past orders" }));
+    return [...fromRecords, ...fromOrders];
+  }, [customerRecords, orders]);
   // The matched customer record drives pricing (group price, discount) for every line.
   const customerRecord = useMemo(() => findCustomer(customerRecords, { name: customer, email: customerEmail }), [customerRecords, customer, customerEmail]);
   const priceGroupList = useSettings().catalog?.priceGroups ?? [];
@@ -214,12 +219,15 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
       <div className="flex flex-col gap-4">
         <FormGrid cols={3}>
           <div className="sm:col-span-2">
-            <TextField label="Customer" value={customer} onChange={(e) => onCustomerChange(e.target.value)} list="cumulus-order-customers" placeholder="Sweetwater" autoFocus />
-            <datalist id="cumulus-order-customers">
-              {customers.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
+            <Combobox
+              label="Customer"
+              value={customer}
+              onChange={onCustomerChange}
+              onCreate={onCustomerChange}
+              createLabel={(q) => `Use “${q}” as a new customer`}
+              placeholder="Type a name, company or email; Tab fills it in"
+              options={customerOptions}
+            />
           </div>
           <Select label="Source" value={source} onChange={(e) => setSource(e.target.value as OrderSource)} options={SOURCE_OPTIONS} />
         </FormGrid>

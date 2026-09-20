@@ -5,6 +5,7 @@ import type { WorkspaceSettings } from "@/lib/types";
 import { DEFAULT_QUOTING } from "@/lib/quotes";
 import { Button, FormGrid, TextArea, TextField, useToast } from "@/components/ui";
 import { useSaveSettings } from "./useSaveSettings";
+import { useUnsavedChanges } from "./useUnsavedChanges";
 
 /** Labor rate, margins and terms that every quote starts from. */
 export function QuotingSection({ settings, readOnly }: { settings: WorkspaceSettings; readOnly: boolean }) {
@@ -19,6 +20,8 @@ export function QuotingSection({ settings, readOnly }: { settings: WorkspaceSett
   const [terms, setTerms] = useState(q.terms ?? "");
   const [saving, setSaving] = useState(false);
   const num = (v: string) => (v.trim() === "" ? undefined : Number(v));
+  const dirty = (num(laborRate) ?? 0) !== (q.laborRate || 0) || num(laborCost) !== q.laborCost || num(marginPct) !== q.defaultMarginPct || num(taxPct) !== q.taxPct || (num(validDays) ?? 30) !== q.validDays || terms.trim() !== (q.terms ?? "");
+  useUnsavedChanges(dirty);
 
   const save = async () => {
     setSaving(true);

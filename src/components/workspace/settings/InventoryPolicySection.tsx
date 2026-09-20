@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useUnsavedChanges } from "./useUnsavedChanges";
 import type { WorkspaceSettings } from "@/lib/types";
 import { TextField, Toggle, useToast } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -51,6 +52,7 @@ export function InventoryPolicySection({ settings, readOnly }: { settings: Works
   const days = Number(inactivityDays);
   const daysError = !inactivityDays.trim() || !Number.isInteger(days) || days < 1 ? "Enter a whole number of days (1 or more)" : undefined;
   const dirty = trackInUse !== settings.trackInUse || relievePolicy !== settings.relievePolicy || days !== settings.inactivityDays;
+  useUnsavedChanges(dirty);
 
   const save = async () => {
     if (daysError) return;

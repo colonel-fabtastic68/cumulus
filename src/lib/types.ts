@@ -719,6 +719,8 @@ export interface WorkspaceSettings {
   quoting?: QuotingSettings;
   billing?: WorkspaceBilling;
   catalog?: CatalogSettings;
+  /** Order numbers: prefix + the next counter value. A custom number typed on an order moves the counter past it. */
+  numbering?: { orderPrefix?: string };
   updatedAt: string;
 }
 

@@ -129,7 +129,9 @@ export function Combobox({ value, onChange, options, label, hint, placeholder = 
                 close();
               }
             } else if (e.key === "Tab") {
-              if (open) close();
+              // Typing then Tab fills in the highlighted match (or creates it), so a fast keyboard flow never needs the mouse.
+              if (open && query.trim() && rows > 0) choose(idx);
+              else if (open) close();
             }
           }}
           className={cn(

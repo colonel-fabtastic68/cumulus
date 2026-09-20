@@ -105,6 +105,9 @@ export function ItemPicker({ value, onChange, label, placeholder = "Search SKU o
               } else if (e.key === "Enter") {
                 e.preventDefault();
                 if (candidates[idx]) pick(candidates[idx]);
+              } else if (e.key === "Tab") {
+                // Tab fills in the highlighted item when something has been typed; focus then moves on as usual.
+                if (open && q.trim() && candidates[idx]) pick(candidates[idx]);
               } else if (e.key === "Escape") {
                 if (open) {
                   // Consume it so a surrounding dialog does not close as well.

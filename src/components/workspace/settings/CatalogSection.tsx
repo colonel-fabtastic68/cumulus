@@ -7,6 +7,7 @@ import { emptyCatalog, keyFromLabel } from "@/lib/catalog";
 import { Button, Select, TextField, useToast } from "@/components/ui";
 import { newId } from "@/lib/utils";
 import { useSaveSettings } from "./useSaveSettings";
+import { useUnsavedChanges } from "./useUnsavedChanges";
 
 const FIELD_TYPES = [
   { value: "text", label: "Text" },
@@ -28,6 +29,8 @@ export function CatalogSection({ settings, readOnly }: { settings: WorkspaceSett
     suppliers: (initial.customFields.suppliers ?? []).map((f) => ({ ...f })),
   });
   const [saving, setSaving] = useState(false);
+  const dirty = JSON.stringify({ itemTypes, groups, fields }) !== JSON.stringify({ itemTypes: initial.itemTypes, groups: initial.priceGroups, fields: { items: initial.customFields.items ?? [], customers: initial.customFields.customers ?? [], suppliers: initial.customFields.suppliers ?? [] } });
+  useUnsavedChanges(dirty);
 
   const save = async () => {
     setSaving(true);

@@ -423,11 +423,19 @@ async function loadSettings(store: Store): Promise<WorkspaceSettings> {
 export async function nextNumber(store: Store, kind: keyof WorkspaceSettings["counters"]): Promise<{ number: string; ops: WriteOp[] }> {
   const settings = await loadSettings(store);
   const n = settings.counters[kind] ?? 1001;
-  const prefix = { receipt: "RCV", build: "BLD", order: "SO", rma: "RMA", transfer: "TR", shipment: "SH", quote: "QT" }[kind];
+  const defaults = { receipt: "RCV-", build: "BLD-", order: "SO-", rma: "RMA-", transfer: "TR-", shipment: "SH-", quote: "QT-" };
+  const prefix = kind === "order" && settings.numbering?.orderPrefix !== undefined ? settings.numbering.orderPrefix : defaults[kind];
   const ops: WriteOp[] = [
     { op: "patch", collection: "settings", id: "default", patch: { counters: { ...settings.counters, [kind]: n + 1 }, updatedAt: nowIso() } },
   ];
-  return { number: `${prefix}-${n}`, ops };
+  return { number: `${prefix}${n}`, ops };
+}
+
+/** Splits "WEB-6767" into its prefix and number, or null when the number has no digits at the end. */
+export function splitOrderNumber(value: string): { prefix: string; n: number } | null {
+  const m = /^(.*?)(\d+)$/.exec(value.trim());
+  if (!m) return null;
+  return { prefix: m[1]!, n: Number(m[2]) };
 }
 
 export function activityOp(actor: Actor, type: ActivityType, message: string, extra: Partial<ActivityEvent> = {}): WriteOp {
@@ -826,6 +834,14 @@ export async function createOrder(store: Store, actor: Actor, input: OrderInput)
     const clash = (await store.list("orders")).find((o) => o.number.toLowerCase() === custom.toLowerCase());
     if (clash) throw new InventoryError(`Order number ${custom} is already used by an order for ${clash.customer}`);
     number = custom;
+    // A custom number like 6767 (or WEB-6767) becomes the new sequence: the next automatic order is 6768 with the same prefix.
+    const parts = splitOrderNumber(custom);
+    if (parts) {
+      const settings = await loadSettings(store);
+      const current = settings.counters.order ?? 1001;
+      const prefix = settings.numbering?.orderPrefix ?? "SO-";
+      if (parts.n + 1 > current || parts.prefix !== prefix) ops.push({ op: "patch", collection: "settings", id: "default", patch: { counters: { ...settings.counters, order: Math.max(current, parts.n + 1) }, numbering: { ...(settings.numbering ?? {}), orderPrefix: parts.prefix }, updatedAt: nowIso() } });
+    }
   } else {
     ({ number, ops } = await nextNumber(store, "order"));
   }

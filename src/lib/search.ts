@@ -81,23 +81,41 @@ type Field = string | undefined | null;
 const WORD_BREAK = /[\s\-_/.,:;()#·|]/;
 
 /** How well the fields answer the query; a prefix match on a primary field ranks highest. */
+/**
+ * Scores a record against the query. Every word of the query must appear
+ * somewhere in the record (so "fuzz black" finds the black fuzz pedal); the
+ * score is the sum of per-word scores, with a bonus when the whole phrase
+ * starts a primary field. Zero when any word is missing.
+ */
 function scoreFields(q: string, primary: Field[], secondary: Field[] = []): number {
-  let best = 0;
-  const check = (f: Field, prefixScore: number) => {
-    if (best >= 3) return;
-    const v = (f ?? "").toLowerCase();
-    if (!v) return;
-    if (v.startsWith(q)) {
-      best = Math.max(best, prefixScore);
-      return;
-    }
-    const i = v.indexOf(q);
-    if (i < 0) return;
-    best = Math.max(best, WORD_BREAK.test(v[i - 1]) ? 2 : 1);
+  const words = q.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return 0;
+  const scoreWord = (w: string): number => {
+    let best = 0;
+    const check = (f: Field, prefixScore: number) => {
+      if (best >= 3) return;
+      const v = (f ?? "").toLowerCase();
+      if (!v) return;
+      if (v.startsWith(w)) {
+        best = Math.max(best, prefixScore);
+        return;
+      }
+      const i = v.indexOf(w);
+      if (i < 0) return;
+      best = Math.max(best, i === 0 || WORD_BREAK.test(v[i - 1]!) ? 2 : 1);
+    };
+    for (const f of primary) check(f, 3);
+    for (const f of secondary) check(f, 2);
+    return best;
   };
-  for (const f of primary) check(f, 3);
-  for (const f of secondary) check(f, 2);
-  return best;
+  let total = 0;
+  for (const w of words) {
+    const sc = scoreWord(w);
+    if (sc === 0) return 0;
+    total += sc;
+  }
+  if (words.length > 1 && primary.some((f) => (f ?? "").toLowerCase().startsWith(q))) total += 2;
+  return total;
 }
 
 /** "in_transit" → "In transit". */
@@ -111,7 +129,7 @@ export function humanize(s: string): string {
  * Strato, plus the records behind them. Results come back grouped in
  * SEARCH_KINDS order, best matches first within each group.
  */
-export function searchWorkspace(query: string, src: SearchSource, { perKind = 5, limit = 40 }: SearchOptions = {}): SearchHit[] {
+export function searchWorkspace(query: string, src: SearchSource, { perKind = 8, limit = 60 }: SearchOptions = {}): SearchHit[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
 
