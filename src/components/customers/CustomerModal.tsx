@@ -6,7 +6,7 @@ import { Banner, Button, FormGrid, Modal, Select, TextArea, TextField, Toggle, u
 import { useCurrentUser } from "@/lib/auth";
 import { saveCustomer } from "@/lib/customers";
 import { useSettings, useStore } from "@/lib/store/provider";
-import { customFieldsFor, priceGroups } from "@/lib/catalog";
+import { customFieldsFor, priceGroupLabel, priceGroups } from "@/lib/catalog";
 import { ContactsEditor, CustomFieldsEditor } from "@/components/fields";
 
 const emptyAddress = (): Address => ({ street1: "", city: "", state: "", zip: "", country: "US" });
@@ -90,8 +90,8 @@ function Form({ customer, onClose, onSaved }: { customer?: Customer | null; onCl
         </div>
         <ContactsEditor contacts={contacts} onChange={setContacts} />
         <FormGrid cols={3}>
-          <Select label="Price group" value={priceGroupId} onChange={(e) => setPriceGroupId(e.target.value)} options={[{ value: "", label: groups.length ? "List price" : "None defined (Settings → Catalog)" }, ...groups.map((g) => ({ value: g.id, label: g.name }))]} help="Items priced for this group use that price on orders." />
-          <TextField label="Discount %" hint="(optional)" type="number" min={0} max={100} step="any" value={discountPct} onChange={(e) => setDiscountPct(e.target.value)} help="Off every line, after the group price." />
+          <Select label="Price group" value={priceGroupId} onChange={(e) => setPriceGroupId(e.target.value)} options={[{ value: "", label: groups.length ? "Not set · list price" : "None defined (Settings → Catalog)" }, ...groups.map((g) => ({ value: g.id, label: priceGroupLabel(g, settings.currency) }))]} help="The group's % or $ off applies to every order line." />
+          <TextField label="Extra discount %" hint="(optional)" type="number" min={0} max={100} step="any" value={discountPct} onChange={(e) => setDiscountPct(e.target.value)} help="On top of the group, for this customer only." />
           <div className="flex items-end pb-1">
             <Toggle label="Tax exempt" help="No sales tax on orders." checked={taxExempt} onChange={setTaxExempt} size="sm" />
           </div>

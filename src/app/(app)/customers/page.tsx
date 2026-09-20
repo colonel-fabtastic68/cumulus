@@ -6,9 +6,10 @@ import type { Customer } from "@/lib/types";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { Badge, Button, Page, QueryParamEffect, SearchField, Table, type Column } from "@/components/ui";
 import { canWrite, useCurrentUser } from "@/lib/auth";
-import { customerHistory } from "@/lib/customers";
+import { customerHistory, saveCustomer } from "@/lib/customers";
+import { priceGroupLabel, priceGroups } from "@/lib/catalog";
 import { formatMoney, formatRelative } from "@/lib/format";
-import { useCollection, useSettings } from "@/lib/store/provider";
+import { useCollection, useSettings, useStore } from "@/lib/store/provider";
 import { CustomerDrawer, CustomerModal } from "@/components/customers";
 
 export default function CustomersPage() {
@@ -16,7 +17,10 @@ export default function CustomersPage() {
   const orders = useCollection("orders");
   const rmas = useCollection("rmas");
   const quotes = useCollection("quotes");
-  const { currency } = useSettings();
+  const settings = useSettings();
+  const { currency } = settings;
+  const store = useStore();
+  const groups = priceGroups(settings);
   const user = useCurrentUser();
   const writable = canWrite(user);
   const { setPageContext } = useAgent();
@@ -41,6 +45,31 @@ export default function CustomersPage() {
     { key: "company", header: "Company", render: (r) => <span className="text-text-secondary">{r.c.company ?? "—"}</span>, sortValue: (r) => r.c.company ?? "" },
     { key: "email", header: "Email", render: (r) => <span className="text-text-secondary">{r.c.email ?? "—"}</span>, sortValue: (r) => r.c.email ?? "" },
     { key: "phone", header: "Phone", render: (r) => <span className="text-text-secondary">{r.c.phone ?? "—"}</span> },
+    {
+      key: "priceGroup",
+      header: "Price group",
+      sortValue: (r) => groups.find((g) => g.id === r.c.priceGroupId)?.name ?? "",
+      render: (r) =>
+        writable ? (
+          <span onClick={(e) => e.stopPropagation()}>
+            <select
+              aria-label={`Price group for ${r.c.name}`}
+              value={r.c.priceGroupId ?? ""}
+              onChange={(e) => void saveCustomer(store, user, { ...r.c, priceGroupId: e.target.value || undefined }, r.c.id)}
+              className={`h-7 max-w-[200px] rounded-[var(--radius-sm)] border border-border bg-surface px-2 text-[12.5px] ${r.c.priceGroupId ? "text-text" : "text-critical/70"}`}
+            >
+              <option value="">Not set</option>
+              {groups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {priceGroupLabel(g, currency)}
+                </option>
+              ))}
+            </select>
+          </span>
+        ) : (
+          <span className="text-text-secondary">{groups.find((g) => g.id === r.c.priceGroupId)?.name ?? "—"}</span>
+        ),
+    },
     { key: "orders", header: "Orders", align: "right", render: (r) => r.h.orders.length, sortValue: (r) => r.h.orders.length },
     { key: "revenue", header: "Revenue", align: "right", render: (r) => formatMoney(r.h.revenue, currency), sortValue: (r) => r.h.revenue },
     { key: "last", header: "Last order", render: (r) => <span className="text-text-secondary">{r.h.lastOrderAt ? formatRelative(r.h.lastOrderAt) : "—"}</span>, sortValue: (r) => r.h.lastOrderAt ?? "" },

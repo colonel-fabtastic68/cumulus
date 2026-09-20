@@ -99,8 +99,8 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
         </Label>
       )}
       <div className="relative">
-        <select ref={ref} id={fid} className={cn(fieldBase, "h-8 appearance-none pr-8", error && "border-critical", className)} {...rest}>
-          {placeholder && <option value="">{placeholder}</option>}
+        <select ref={ref} id={fid} className={cn(fieldBase, "h-8 appearance-none pr-8", error && "border-critical", (rest.value === "" || rest.value === undefined) && (placeholder || !options.some((o) => o.value === "")) && "text-critical/70", className)} {...rest}>
+          {(placeholder || !options.some((o) => o.value === "")) && rest.value === "" && <option value="">{placeholder ?? "Not set"}</option>}
           {options.map((o) => (
             <option key={o.value} value={o.value} disabled={o.disabled}>
               {o.label}

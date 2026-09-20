@@ -4,8 +4,7 @@ import { useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import type { Item, PriceBreak } from "@/lib/types";
 import { marginPct, priceForQty, updateItem } from "@/lib/inventory";
-import { useSettings, useStore } from "@/lib/store/provider";
-import { priceGroups } from "@/lib/catalog";
+import { useStore } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
 import { formatMoney, formatPercent } from "@/lib/format";
 import { cn, round } from "@/lib/utils";
@@ -74,8 +73,6 @@ function PricingEditor({ item, currency, canEdit }: { item: Item; currency: stri
         <Tile label="Gross profit / unit" value={formatMoney(round((onSale ? item.salePrice! : item.price) - item.unitCost), currency)} hint={onSale ? "At sale price" : "At list price"} tone={(onSale ? item.salePrice! : item.price) - item.unitCost < 0 ? "critical" : "default"} />
         <Tile label="Price breaks" value={parsed.length} hint={parsed.length ? `From ${parsed[0]!.minQty}+ units` : "None"} />
       </div>
-
-      <GroupPrices item={item} canEdit={canEdit} />
 
       <div>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -167,55 +164,6 @@ function PricingEditor({ item, currency, canEdit }: { item: Item; currency: stri
             <Tile label="Margin" value={formatPercent(marginPct(item, quotePrice), 1)} hint={`${formatMoney(round((quotePrice - item.unitCost) * q), currency)} gross profit`} tone={marginTone(marginPct(item, quotePrice))} />
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-/** One price per customer price group (Settings → Catalog). Blank means the list price applies. */
-function GroupPrices({ item, canEdit }: { item: Item; canEdit: boolean }) {
-  const settings = useSettings();
-  const store = useStore();
-  const user = useCurrentUser();
-  const toast = useToast();
-  const groups = priceGroups(settings);
-  const [draft, setDraft] = useState<Record<string, string>>(() => Object.fromEntries(groups.map((g) => [g.id, item.groupPrices?.[g.id] !== undefined ? String(item.groupPrices[g.id]) : ""])));
-  const [saving, setSaving] = useState(false);
-  if (groups.length === 0) return null;
-  const parsed: Record<string, number> = {};
-  for (const g of groups) {
-    const n = Number(draft[g.id]);
-    if (draft[g.id]?.trim() && Number.isFinite(n) && n >= 0) parsed[g.id] = n;
-  }
-  const dirty = JSON.stringify(parsed) !== JSON.stringify(Object.fromEntries(groups.filter((g) => item.groupPrices?.[g.id] !== undefined).map((g) => [g.id, item.groupPrices![g.id]])));
-  const save = async () => {
-    setSaving(true);
-    try {
-      await updateItem(store, user, item.id, { groupPrices: Object.keys(parsed).length ? parsed : undefined }, "Group prices edited");
-      toast("Group prices saved", "success");
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Could not save", "critical");
-    } finally {
-      setSaving(false);
-    }
-  };
-  return (
-    <div>
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h4 className="text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">Price by customer group</h4>
-          <p className="mt-0.5 text-[12.5px] text-text-secondary">Customers in a group pay this instead of the list price. Quantity breaks still apply on top.</p>
-        </div>
-        {canEdit && dirty && (
-          <Button size="sm" variant="primary" loading={saving} onClick={() => void save()}>
-            Save group prices
-          </Button>
-        )}
-      </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        {groups.map((g) => (
-          <TextField key={g.id} label={g.name} type="number" min={0} step="any" value={draft[g.id] ?? ""} onChange={(e) => setDraft((d) => ({ ...d, [g.id]: e.target.value }))} placeholder={item.price ? String(item.price) : "list"} help={parsed[g.id] !== undefined && item.unitCost ? `${formatPercent(marginPct(item, parsed[g.id]), 1)} margin` : undefined} disabled={!canEdit} />
-        ))}
       </div>
     </div>
   );

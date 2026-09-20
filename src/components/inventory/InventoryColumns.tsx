@@ -160,7 +160,7 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
       },
       {
         key: "price",
-        header: "Price",
+        header: "Retail price",
         minWidth: 78,
         maxWidth: 92,
         priority: 7,

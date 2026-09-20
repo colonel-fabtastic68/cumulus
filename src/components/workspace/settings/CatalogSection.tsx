@@ -36,7 +36,7 @@ export function CatalogSection({ settings, readOnly }: { settings: WorkspaceSett
       await saveSettings({
         catalog: {
           itemTypes: itemTypes.filter((t) => t.label.trim()).map((t) => ({ id: t.id, label: t.label.trim() })),
-          priceGroups: groups.filter((g) => g.name.trim()).map((g) => ({ id: g.id, name: g.name.trim() })),
+          priceGroups: groups.filter((g) => g.name.trim()).map((g) => ({ id: g.id, name: g.name.trim(), kind: g.kind ?? "percent", value: g.value && g.value > 0 ? g.value : undefined })),
           customFields: { items: clean(fields.items), customers: clean(fields.customers), suppliers: clean(fields.suppliers) },
         },
       });
@@ -64,11 +64,13 @@ export function CatalogSection({ settings, readOnly }: { settings: WorkspaceSett
         )}
       </Block>
 
-      <Block title="Customer price groups" hint="Named tiers (non-stocking dealer, stocking dealer, distributor, OEM, international…). Each item can carry a price per group; each customer belongs to one. Volume breaks still apply on top.">
+      <Block title="Customer price groups" hint="Named tiers (non-stocking dealer, stocking dealer, distributor, OEM, international…), each a percentage or a fixed amount off list price. Assign customers to a group on the Customers page; volume breaks still apply first.">
         {groups.map((g, i) => (
-          <div key={g.id} className="flex items-end gap-2">
-            <TextField value={g.name} onChange={(e) => setGroups((l) => l.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} placeholder="Stocking dealer" containerClassName="flex-1" disabled={readOnly} />
-            {!readOnly && <Button size="md" variant="plain" icon={<Trash2 />} aria-label="Remove group" onClick={() => setGroups((l) => l.filter((_, j) => j !== i))} />}
+          <div key={g.id} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_140px_120px_auto] sm:items-end">
+            <TextField label={i === 0 ? "Group" : undefined} value={g.name} onChange={(e) => setGroups((l) => l.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} placeholder="Stocking dealer" disabled={readOnly} />
+            <Select label={i === 0 ? "Discount" : undefined} value={g.kind ?? "percent"} onChange={(e) => setGroups((l) => l.map((x, j) => (j === i ? { ...x, kind: e.target.value as "percent" | "amount" } : x)))} options={[{ value: "percent", label: "% off" }, { value: "amount", label: `${settings.currency} off per unit` }]} disabled={readOnly} />
+            <TextField label={i === 0 ? "Value" : undefined} type="number" min={0} step="any" value={g.value !== undefined ? String(g.value) : ""} onChange={(e) => setGroups((l) => l.map((x, j) => (j === i ? { ...x, value: e.target.value === "" ? undefined : Number(e.target.value) } : x)))} placeholder={g.kind === "amount" ? "5.00" : "15"} disabled={readOnly} />
+            {!readOnly && <Button size="md" variant="plain" icon={<Trash2 />} aria-label="Remove group" onClick={() => setGroups((l) => l.filter((_, j) => j !== i))} className="sm:mb-0.5" />}
           </div>
         ))}
         {!readOnly && (

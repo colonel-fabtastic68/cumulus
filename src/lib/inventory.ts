@@ -120,19 +120,16 @@ export function priceForQty(item: Item, qty: number): number {
 }
 
 /**
- * The price a particular customer pays for a quantity: their price group's
- * price when the item has one, else the list/sale price with volume breaks,
- * then the customer's discount.
+ * The price a particular customer pays for a quantity: list/sale price with
+ * volume breaks, then their price group's % or $ off, then their own
+ * discount. Never below zero.
  */
-export function priceForCustomer(item: Item, qty: number, customer?: { priceGroupId?: string; discountPct?: number } | null): number {
+export function priceForCustomer(item: Item, qty: number, customer?: { priceGroupId?: string; discountPct?: number } | null, groups: Array<{ id: string; kind?: "percent" | "amount"; value?: number }> = []): number {
   let price = priceForQty(item, qty);
-  const group = customer?.priceGroupId ? item.groupPrices?.[customer.priceGroupId] : undefined;
-  if (group !== undefined && group > 0) {
-    price = group;
-    for (const b of [...(item.priceBreaks ?? [])].sort((a, b) => a.minQty - b.minQty)) if (qty >= b.minQty) price = Math.min(price, b.price);
-  }
-  if (customer?.discountPct) price = round(price * (1 - customer.discountPct / 100), 2);
-  return price;
+  const group = customer?.priceGroupId ? groups.find((g) => g.id === customer.priceGroupId) : undefined;
+  if (group?.value) price = group.kind === "amount" ? price - group.value : price * (1 - group.value / 100);
+  if (customer?.discountPct) price = price * (1 - customer.discountPct / 100);
+  return Math.max(0, round(price, 2));
 }
 
 export function marginPct(item: Item, price = item.price): number {

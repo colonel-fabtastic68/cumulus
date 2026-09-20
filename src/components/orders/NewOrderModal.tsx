@@ -102,7 +102,8 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
   const customers = useMemo(() => uniq([...customerRecords.map((c) => c.name.trim()), ...orders.map((o) => o.customer.trim())].filter(Boolean)).sort((a, b) => a.localeCompare(b)), [customerRecords, orders]);
   // The matched customer record drives pricing (group price, discount) for every line.
   const customerRecord = useMemo(() => findCustomer(customerRecords, { name: customer, email: customerEmail }), [customerRecords, customer, customerEmail]);
-  const priceFor = (item: Item, qty: number) => priceForCustomer(item, qty, customerRecord);
+  const priceGroupList = useSettings().catalog?.priceGroups ?? [];
+  const priceFor = (item: Item, qty: number) => priceForCustomer(item, qty, customerRecord, priceGroupList);
   // Picking a known customer fills in what the record knows.
   const onCustomerChange = (value: string) => {
     setCustomer(value);

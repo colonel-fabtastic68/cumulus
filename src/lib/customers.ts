@@ -56,7 +56,7 @@ export async function saveCustomer(store: Store, actor: Actor, input: CustomerIn
       const list = (input.contacts ?? existing?.contacts ?? []).map((c) => ({ name: c.name.trim(), role: c.role?.trim() || undefined, email: c.email?.trim() || undefined, phone: c.phone?.trim() || undefined })).filter((c) => c.name || c.email || c.phone);
       return list.length ? list : undefined;
     })(),
-    priceGroupId: input.priceGroupId ?? existing?.priceGroupId,
+    priceGroupId: "priceGroupId" in input ? input.priceGroupId || undefined : existing?.priceGroupId,
     discountPct: input.discountPct !== undefined && Number.isFinite(input.discountPct) && input.discountPct > 0 ? input.discountPct : input.discountPct === undefined ? existing?.discountPct : undefined,
     taxExempt: input.taxExempt ?? existing?.taxExempt ?? undefined,
     attributes: (() => {

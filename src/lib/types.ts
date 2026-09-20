@@ -734,9 +734,18 @@ export interface CustomFieldDef {
 }
 
 /** Workspace-defined vocabulary: extra item types, customer price groups and custom fields. */
+/** A customer tier: everyone in it gets this much off list price (after volume breaks). */
+export interface PriceGroup {
+  id: string;
+  name: string;
+  /** "percent" takes value % off; "amount" takes value in workspace currency off each unit. */
+  kind?: "percent" | "amount";
+  value?: number;
+}
+
 export interface CatalogSettings {
   itemTypes?: Array<{ id: string; label: string }>;
-  priceGroups?: Array<{ id: string; name: string }>;
+  priceGroups?: PriceGroup[];
   customFields?: {
     items?: CustomFieldDef[];
     customers?: CustomFieldDef[];

@@ -30,7 +30,7 @@ export function cleanAttributes(attrs: Record<string, string> | undefined): Reco
   return Object.keys(out).length ? out : undefined;
 }
 
-export const TERMS_SUGGESTIONS = ["Net 15", "Net 30", "Net 60", "Prepaid", "Credit card", "COD"];
+export const TERMS_SUGGESTIONS = ["Due on receipt", "Net 15", "Net 30", "Net 60", "Prepaid", "Credit card", "COD"];
 
 export function draftFromSupplier(s?: Supplier | null): SupplierDraft {
   return {

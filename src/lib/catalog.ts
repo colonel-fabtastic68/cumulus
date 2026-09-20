@@ -1,4 +1,4 @@
-import type { CatalogSettings, CustomFieldDef, ItemType, WorkspaceSettings } from "@/lib/types";
+import type { CatalogSettings, CustomFieldDef, ItemType, PriceGroup, WorkspaceSettings } from "@/lib/types";
 
 /** Workspace vocabulary helpers (Settings → Catalog). */
 
@@ -22,8 +22,14 @@ export function customFieldsFor(settings: Pick<WorkspaceSettings, "catalog">, ki
   return settings.catalog?.customFields?.[kind] ?? [];
 }
 
-export function priceGroups(settings: Pick<WorkspaceSettings, "catalog">): Array<{ id: string; name: string }> {
+export function priceGroups(settings: Pick<WorkspaceSettings, "catalog">): PriceGroup[] {
   return settings.catalog?.priceGroups ?? [];
+}
+
+/** "Stocking dealer · 15% off" for menus and columns. */
+export function priceGroupLabel(g: PriceGroup, currency = "USD"): string {
+  if (!g.value) return g.name;
+  return g.kind === "amount" ? `${g.name} · ${new Intl.NumberFormat(undefined, { style: "currency", currency }).format(g.value)} off` : `${g.name} · ${g.value}% off`;
 }
 
 /** A stable key from a label: "Wheel diameter" → "wheel_diameter". */
