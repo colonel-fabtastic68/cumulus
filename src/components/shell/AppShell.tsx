@@ -69,12 +69,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Shift+↑/↓ walk the sidebar once the workspace is open (not on sign-in, loading or onboarding screens).
   useNavArrowKeys(ready && !!user && !!settings.companyName.trim());
 
-  // The profile remembers each workspace's name for the switcher; follow renames made in Settings.
+  // The profile remembers each workspace's name and icon for the switcher and hub; follow changes made in Settings.
   const companyName = settings.companyName;
+  const logo = settings.logo;
   useEffect(() => {
-    if (ready && session.workspace && companyName.trim()) session.updateWorkspaceName(session.workspace.id, companyName.trim());
+    if (ready && session.workspace && companyName.trim()) session.updateWorkspaceName(session.workspace.id, companyName.trim(), logo ?? null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, companyName, session.workspace?.id]);
+  }, [ready, companyName, logo, session.workspace?.id]);
 
   // A workspace on the profile that refuses every read means the member record was removed. Drop it and show the hub.
   const refused = mode === "firestore" && !!storeError && /permission denied/i.test(storeError) ? (session.workspace?.id ?? null) : null;

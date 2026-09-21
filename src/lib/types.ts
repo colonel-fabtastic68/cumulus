@@ -511,6 +511,8 @@ export interface WorkspaceMembership {
   name: string;
   role: MemberRole;
   joinedAt: string;
+  /** Small square image (data URL) mirrored from the workspace settings, for the switcher and hub. */
+  icon?: string;
 }
 
 /** Answers from the short intake shown once to new accounts. */
@@ -695,6 +697,8 @@ export interface WorkspaceBilling {
 export interface WorkspaceSettings {
   id: "default";
   companyName: string;
+  /** Workspace icon: a 128px square image as a data URL (a few KB), shown top-left and on the hub. */
+  logo?: string;
   currency: string; // ISO 4217, e.g. "USD"
   timezone: string;
   /** Factor 2: optionally track in-use quantities as a separate bucket. */

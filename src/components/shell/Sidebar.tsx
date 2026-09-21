@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Building2, Check, ChevronDown, ChevronsUpDown, Mail, Plus } from "lucide-react";
-import { Kbd, Menu, type MenuItem, AppIcon } from "@/components/ui";
+import { Kbd, Menu, WorkspaceMark, type MenuItem } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { useCollection, useSettings } from "@/lib/store/provider";
 import { isLowStock } from "@/lib/inventory";
@@ -104,7 +104,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           className="w-full"
           trigger={
             <button type="button" className="flex h-14 w-full items-center gap-2.5 px-4 text-left hover:bg-[rgba(0,0,0,0.04)]" aria-label="Switch workspace">
-              <AppIcon size={28} />
+              <WorkspaceMark icon={settings.logo} size={28} />
               <span className="min-w-0 flex-1 leading-tight">
                 <span className="block truncate text-[13.5px] font-semibold text-text">{settings.companyName}</span>
                 <span className="block text-[11px] text-text-tertiary">{session.pendingInvites.length ? `${session.pendingInvites.length} pending invite${session.pendingInvites.length === 1 ? "" : "s"}` : "cumulusOS"}</span>
@@ -115,7 +115,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           items={[
             ...session.workspaces.map<MenuItem>((w) => ({
               label: w.name,
-              icon: w.id === session.workspaceId ? <Check /> : <Building2 />,
+              icon: w.id === session.workspaceId ? <Check /> : w.icon ? <WorkspaceMark icon={w.icon} size={16} /> : <Building2 />,
               onSelect: () => {
                 if (w.id === session.workspaceId) return;
                 session.switchWorkspace(w.id);
@@ -130,7 +130,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         />
       ) : (
         <div className="flex h-14 items-center gap-2.5 px-4">
-          <AppIcon size={28} />
+          <WorkspaceMark icon={settings.logo} size={28} />
           <div className="min-w-0 leading-tight">
             <div className="truncate text-[13.5px] font-semibold text-text">{settings.companyName}</div>
             <div className="text-[11px] text-text-tertiary">cumulusOS</div>

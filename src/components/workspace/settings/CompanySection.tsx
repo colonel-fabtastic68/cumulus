@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { ImagePlus } from "lucide-react";
 import { useUnsavedChanges } from "./useUnsavedChanges";
 import type { WorkspaceSettings } from "@/lib/types";
-import { Button, FormGrid, Select, TextField, useToast } from "@/components/ui";
+import { Button, FormGrid, Select, TextField, WorkspaceMark, useToast } from "@/components/ui";
 import { formatMoney } from "@/lib/format";
 import { SettingsCard } from "./SettingsCard";
 import { useSaveSettings } from "./useSaveSettings";
@@ -28,6 +29,9 @@ export function CompanySection({ settings, readOnly }: { settings: WorkspaceSett
   const [companyName, setCompanyName] = useState(settings.companyName);
   const [currency, setCurrency] = useState(settings.currency);
   const [timezone, setTimezone] = useState(settings.timezone);
+  const [logo, setLogo] = useState<string | undefined>(settings.logo);
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [orderPrefix, setOrderPrefix] = useState(settings.numbering?.orderPrefix ?? "SO-");
   const [nextOrder, setNextOrder] = useState(String(settings.counters.order ?? 1001));
   const [saving, setSaving] = useState(false);
@@ -36,7 +40,7 @@ export function CompanySection({ settings, readOnly }: { settings: WorkspaceSett
 
   const nameError = companyName.trim() ? undefined : "Enter a company name";
   const numberingDirty = orderPrefix !== (settings.numbering?.orderPrefix ?? "SO-") || Number(nextOrder) !== (settings.counters.order ?? 1001);
-  const dirty = companyName.trim() !== settings.companyName || currency !== settings.currency || timezone.trim() !== settings.timezone || numberingDirty;
+  const dirty = companyName.trim() !== settings.companyName || currency !== settings.currency || timezone.trim() !== settings.timezone || numberingDirty || (logo ?? undefined) !== (settings.logo ?? undefined);
   useUnsavedChanges(dirty);
 
   const save = async () => {
@@ -44,12 +48,33 @@ export function CompanySection({ settings, readOnly }: { settings: WorkspaceSett
     setSaving(true);
     try {
       const next = Math.max(1, Math.floor(Number(nextOrder) || settings.counters.order || 1001));
-      await saveSettings({ companyName: companyName.trim(), currency, timezone: timezone.trim() || "UTC", numbering: { ...(settings.numbering ?? {}), orderPrefix }, counters: { ...settings.counters, order: next } });
+      await saveSettings({ companyName: companyName.trim(), currency, timezone: timezone.trim() || "UTC", numbering: { ...(settings.numbering ?? {}), orderPrefix }, counters: { ...settings.counters, order: next }, logo: logo || undefined });
       toast("Company settings saved", "success");
     } catch (e) {
       toast(e instanceof Error ? e.message : "Could not save settings", "critical");
     } finally {
       setSaving(false);
+    }
+  };
+
+  /** Squares and shrinks the chosen image to 128px in the browser; a few KB as a data URL, stored with the settings. */
+  const onLogoFile = async (file: File) => {
+    setLogoError(null);
+    if (!/^image\//.test(file.type)) return setLogoError("Choose an image file (PNG, JPG, SVG, WebP).");
+    if (file.size > 8 * 1024 * 1024) return setLogoError("That image is over 8 MB; use a smaller one.");
+    try {
+      const bitmap = await createImageBitmap(file);
+      const side = Math.min(bitmap.width, bitmap.height);
+      const canvas = document.createElement("canvas");
+      canvas.width = 128;
+      canvas.height = 128;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, 128, 128);
+      let dataUrl = canvas.toDataURL("image/png");
+      if (dataUrl.length > 60_000) dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      setLogo(dataUrl);
+    } catch {
+      setLogoError("Could not read that image.");
     }
   };
 
@@ -64,6 +89,24 @@ export function CompanySection({ settings, readOnly }: { settings: WorkspaceSett
 
   return (
     <SettingsCard onSave={() => void save()} saving={saving} dirty={dirty && !nameError} readOnly={readOnly} footerNote={dirty ? "Unsaved changes" : undefined}>
+      <div className="flex items-center gap-4">
+        <WorkspaceMark icon={logo} size={56} alt="" />
+        <div className="flex flex-col gap-1.5">
+          <div className="text-[12.5px] font-medium text-text">Workspace icon</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" icon={<ImagePlus />} onClick={() => fileRef.current?.click()} disabled={readOnly}>
+              {logo ? "Replace" : "Upload"}
+            </Button>
+            {logo && (
+              <Button size="sm" variant="plain" onClick={() => setLogo(undefined)} disabled={readOnly}>
+                Remove
+              </Button>
+            )}
+            <input ref={fileRef} type="file" accept="image/*" className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void onLogoFile(f); }} />
+          </div>
+          <p className="text-[12px] text-text-tertiary">{logoError ?? "Shown top-left and on your workspace list, so you can tell workspaces apart. Square images look best."}</p>
+        </div>
+      </div>
       <TextField label="Company name" value={companyName} onChange={(e) => setCompanyName(e.target.value)} error={nameError} help="Shown in the sidebar and on exports." disabled={readOnly} />
       <FormGrid cols={2}>
         <TextField label="Order number prefix" value={orderPrefix} onChange={(e) => setOrderPrefix(e.target.value)} placeholder="Not set" help={`Leave blank for plain numbers. Next order: ${orderPrefix}${nextOrder || "…"}`} disabled={readOnly} />

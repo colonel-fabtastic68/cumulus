@@ -66,7 +66,7 @@ export interface SessionValue {
   revokeInvite: (id: string) => Promise<void>;
   subscribeWorkspaceInvites: (cb: (invites: WorkspaceInvite[]) => void) => () => void;
   /** Called when the open workspace's company name differs from what the profile remembers. */
-  updateWorkspaceName: (id: string, name: string) => void;
+  updateWorkspaceName: (id: string, name: string, icon?: string | null) => void;
   /**
    * The open workspace refused access. Confirms the member record is gone, then
    * drops the workspace from the profile. Resolves false when access still exists
@@ -312,10 +312,13 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
   );
 
   const updateWorkspaceName = useCallback(
-    (id: string, name: string) => {
-      if (!profile?.workspaces[id] || !name.trim() || profile.workspaces[id].name === name) return;
-      setProfile((p) => (p && p.workspaces[id] ? { ...p, workspaces: { ...p.workspaces, [id]: { ...p.workspaces[id]!, name } } } : p));
-      void updateWorkspaceNameDoc(app, profile.id, id, name).catch(() => {});
+    (id: string, name: string, icon?: string | null) => {
+      const current = profile?.workspaces[id];
+      if (!current || !name.trim()) return;
+      const nextIcon = icon ?? undefined;
+      if (current.name === name && (current.icon ?? undefined) === nextIcon) return;
+      setProfile((p) => (p && p.workspaces[id] ? { ...p, workspaces: { ...p.workspaces, [id]: { ...p.workspaces[id]!, name, ...(nextIcon ? { icon: nextIcon } : {}) } } } : p));
+      void updateWorkspaceNameDoc(app, profile.id, id, name, nextIcon ?? null).catch(() => {});
     },
     [app, profile],
   );

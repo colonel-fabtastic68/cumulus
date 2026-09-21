@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, Check, KeyRound, LogOut, Mail } from "lucide-react";
-import { AppIcon, Avatar, Badge, Banner, Button, Toggle, useToast } from "@/components/ui";
+import { AppIcon, Avatar, Badge, Banner, Button, Toggle, WorkspaceMark, useToast } from "@/components/ui";
 import { accountFetch } from "@/lib/account-fetch";
 import { FOUNDING_PLAN } from "@/lib/billing";
 import { formatMoney } from "@/lib/format";
@@ -85,9 +85,13 @@ export function WorkspaceHub({ standalone = false, notice }: { standalone?: bool
           <ul>
             {session.workspaces.map((w) => (
               <li key={w.id} className="flex items-center gap-3 border-t border-border px-4 py-3 first:border-t-0">
-                <span className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-primary text-text-inverse">
-                  <Building2 className="h-4 w-4" />
-                </span>
+                {w.icon ? (
+                  <WorkspaceMark icon={w.icon} size={32} alt={w.name} />
+                ) : (
+                  <span className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-primary text-text-inverse">
+                    <Building2 className="h-4 w-4" />
+                  </span>
+                )}
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13px] font-medium text-text">{w.name}</div>
                   <div className="text-[12px] text-text-secondary">{roleLabel(w.role)}</div>

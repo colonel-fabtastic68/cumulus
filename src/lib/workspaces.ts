@@ -174,8 +174,8 @@ export async function removeWorkspaceFromProfile(app: FirebaseApp, profile: User
 }
 
 /** Keep the workspace name on the profile in step with the company name in settings. */
-export async function updateWorkspaceName(app: FirebaseApp, uid: string, workspaceId: string, name: string): Promise<void> {
-  await updateDoc(doc(db(app), "users", uid), { [`workspaces.${workspaceId}.name`]: name, updatedAt: nowIso() });
+export async function updateWorkspaceName(app: FirebaseApp, uid: string, workspaceId: string, name: string, icon?: string | null): Promise<void> {
+  await updateDoc(doc(db(app), "users", uid), { [`workspaces.${workspaceId}.name`]: name, [`workspaces.${workspaceId}.icon`]: icon ? icon : deleteField(), updatedAt: nowIso() });
 }
 
 /**
