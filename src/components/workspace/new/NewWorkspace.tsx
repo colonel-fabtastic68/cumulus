@@ -107,7 +107,8 @@ export function NewWorkspace() {
     try {
       const membership = await session.createWorkspace({ name, currency, sample });
       toast(`${membership.name} is ready`, "success");
-      router.replace(APP_HOME);
+      // An empty workspace goes straight to bringing the catalog in; the sample one has data already.
+      router.replace(sample ? APP_HOME : "/import?onboarding=1");
     } catch (err) {
       creating.current = false;
       setError(describeWorkspaceError(err));
