@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Download, Eraser, RefreshCw, RotateCcw, ShieldCheck, Trash2, Upload } from "lucide-react";
 import { useRef } from "react";
-import { Badge, Banner, Button, Checkbox, CloudMark, ConfirmDialog, DescriptionList, Skeleton, Stat, Table, useToast, type Column } from "@/components/ui";
+import { Badge, Banner, Button, Checkbox, ConfirmDialog, DescriptionList, Skeleton, Stat, Table, useToast, type Column, AppIcon } from "@/components/ui";
 import { AccountApiError, accountFetch } from "@/lib/account-fetch";
 import { APP_HOME, signInHref } from "@/lib/auth-routes";
 import { formatDate, formatRelative } from "@/lib/format";
@@ -56,9 +56,7 @@ export function AdminView() {
     <div className="flex min-h-[100dvh] flex-col bg-bg">
       <header className="flex h-16 items-center gap-3 px-6">
         <Link href="/" className="flex items-center gap-2 rounded-[var(--radius-sm)] text-[14px] font-semibold text-text">
-          <span className="flex h-7 w-7 items-center justify-center rounded-[8px] bg-primary text-text-inverse">
-            <CloudMark />
-          </span>
+          <AppIcon size={28} />
           cumulusOS
         </Link>
         <Badge tone="info">Admin</Badge>

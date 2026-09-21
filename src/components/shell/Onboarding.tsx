@@ -6,7 +6,7 @@ import { buildSeed } from "@/lib/seed";
 import { nowIso } from "@/lib/utils";
 import { useCollection, useSettings, useStore } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
-import { Banner, Button, CloudMark, Select, TextField } from "@/components/ui";
+import { AppIcon, Banner, Button, Select, TextField } from "@/components/ui";
 
 const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "NZD", "MXN"];
 
@@ -57,9 +57,7 @@ export function Onboarding() {
   return (
     <div className="flex h-screen items-center justify-center bg-bg p-6">
       <div className="card w-full max-w-md p-6">
-        <span className="mb-3 flex h-10 w-10 items-center justify-center rounded-[10px] bg-primary text-text-inverse">
-          <CloudMark className="h-5 w-5" />
-        </span>
+        <AppIcon size={40} className="mb-3" />
         <h1 className="text-[16px] font-[650]">Set up your company</h1>
         <p className="mt-1 text-[13px] text-text-secondary">This workspace is empty. Name it, pick a currency, and you can start adding items or import a spreadsheet.</p>
         <form onSubmit={save} className="mt-4 flex flex-col gap-3">

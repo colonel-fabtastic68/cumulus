@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Building2, Check, CreditCard, Lock, LogOut, Sparkles } from "lucide-react";
-import { Badge, Banner, Button, CloudMark, Select, Skeleton, TextField, useToast } from "@/components/ui";
+import { AppIcon, Badge, Banner, Button, Select, Skeleton, TextField, useToast } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
 import { accountFetch } from "@/lib/account-fetch";
 import { APP_HOME, signInHref } from "@/lib/auth-routes";
@@ -220,9 +220,7 @@ export function NewWorkspace() {
   return (
     <div className="flex min-h-[100dvh] flex-col bg-bg">
       <header className="flex h-16 items-center gap-3 px-6">
-        <span className="flex h-7 w-7 items-center justify-center rounded-[8px] bg-primary text-text-inverse">
-          <CloudMark />
-        </span>
+        <AppIcon size={28} />
         <span className="text-[14px] font-semibold text-text">cumulusOS</span>
         <div className="ml-auto flex items-center gap-2">
           <Button size="sm" variant="tertiary" icon={<ArrowLeft />} href="/account">

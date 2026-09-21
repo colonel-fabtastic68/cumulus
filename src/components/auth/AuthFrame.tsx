@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { CloudMark } from "@/components/ui";
+import { AppIcon } from "@/components/ui";
 
 /** Off-white page with the cumulusOS mark top-left and the form card centered. */
 export function AuthFrame({ children }: { children: ReactNode }) {
@@ -8,9 +8,7 @@ export function AuthFrame({ children }: { children: ReactNode }) {
     <div className="flex min-h-[100dvh] flex-col bg-bg">
       <header className="flex h-16 items-center px-6">
         <Link href="/" className="flex items-center gap-2 rounded-[var(--radius-sm)] text-[14px] font-semibold text-text">
-          <span className="flex h-7 w-7 items-center justify-center rounded-[8px] bg-primary text-text-inverse">
-            <CloudMark />
-          </span>
+          <AppIcon size={28} />
           cumulusOS
         </Link>
       </header>

@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, Check, KeyRound, LogOut, Mail } from "lucide-react";
-import { Avatar, Badge, Banner, Button, CloudMark, Toggle, useToast } from "@/components/ui";
+import { AppIcon, Avatar, Badge, Banner, Button, Toggle, useToast } from "@/components/ui";
 import { accountFetch } from "@/lib/account-fetch";
 import { FOUNDING_PLAN } from "@/lib/billing";
 import { formatMoney } from "@/lib/format";
@@ -117,9 +117,7 @@ export function WorkspaceHub({ standalone = false, notice }: { standalone?: bool
   return (
     <div className="flex min-h-[100dvh] flex-col bg-bg">
       <header className="flex h-16 items-center gap-3 px-6">
-        <span className="flex h-7 w-7 items-center justify-center rounded-[8px] bg-primary text-text-inverse">
-          <CloudMark />
-        </span>
+        <AppIcon size={28} />
         <span className="text-[14px] font-semibold text-text">cumulusOS</span>
         <div className="ml-auto flex items-center gap-3 text-[12.5px] text-text-secondary">
           <span className="hidden sm:inline">

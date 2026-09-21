@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Building2, Check, ChevronDown, ChevronsUpDown, Mail, Plus } from "lucide-react";
-import { CloudMark, Kbd, Menu, type MenuItem } from "@/components/ui";
+import { Kbd, Menu, type MenuItem, AppIcon } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { useCollection, useSettings } from "@/lib/store/provider";
 import { isLowStock } from "@/lib/inventory";
@@ -104,9 +104,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           className="w-full"
           trigger={
             <button type="button" className="flex h-14 w-full items-center gap-2.5 px-4 text-left hover:bg-[rgba(0,0,0,0.04)]" aria-label="Switch workspace">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-primary text-white">
-                <CloudMark />
-              </span>
+              <AppIcon size={28} />
               <span className="min-w-0 flex-1 leading-tight">
                 <span className="block truncate text-[13.5px] font-semibold text-text">{settings.companyName}</span>
                 <span className="block text-[11px] text-text-tertiary">{session.pendingInvites.length ? `${session.pendingInvites.length} pending invite${session.pendingInvites.length === 1 ? "" : "s"}` : "cumulusOS"}</span>
@@ -132,9 +130,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         />
       ) : (
         <div className="flex h-14 items-center gap-2.5 px-4">
-          <span className="flex h-7 w-7 items-center justify-center rounded-[8px] bg-primary text-white">
-            <CloudMark />
-          </span>
+          <AppIcon size={28} />
           <div className="min-w-0 leading-tight">
             <div className="truncate text-[13.5px] font-semibold text-text">{settings.companyName}</div>
             <div className="text-[11px] text-text-tertiary">cumulusOS</div>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CloudMark } from "@/components/ui";
+import { AppIcon } from "@/components/ui";
 import type { RuntimeConfig } from "@/lib/firebase-config";
 import { SessionCta } from "./SessionCta";
 
@@ -13,9 +13,7 @@ const LINKS = [
 export function Wordmark({ className }: { className?: string }) {
   return (
     <Link href="/" className={`flex items-center gap-2.5 text-[15px] font-semibold text-text ${className ?? ""}`}>
-      <span className="flex h-7 w-7 items-center justify-center rounded-[8px] bg-primary text-text-inverse">
-        <CloudMark />
-      </span>
+      <AppIcon size={28} />
       cumulusOS
     </Link>
   );

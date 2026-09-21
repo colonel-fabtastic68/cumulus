@@ -12,3 +12,4 @@ export * from "./Combobox";
 export * from "./CloudMark";
 export * from "./Chart";
 export * from "./ChartChip";
+export * from "./AppIcon";
