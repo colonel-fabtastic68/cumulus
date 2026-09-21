@@ -3,7 +3,8 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, Check, KeyRound, LogOut, Mail } from "lucide-react";
-import { Avatar, Badge, Banner, Button, CloudMark, useToast } from "@/components/ui";
+import { Avatar, Badge, Banner, Button, CloudMark, Toggle, useToast } from "@/components/ui";
+import { accountFetch } from "@/lib/account-fetch";
 import { FOUNDING_PLAN } from "@/lib/billing";
 import { formatMoney } from "@/lib/format";
 import { describeAuthError, useAuth } from "@/lib/auth";
@@ -151,6 +152,19 @@ function AccountCard() {
   const [resetSent, setResetSent] = useState(false);
   const profile = session.profile;
   const hasPassword = session.account?.passwordAccount === true;
+  const [newsBusy, setNewsBusy] = useState(false);
+  const toggleNews = async (on: boolean) => {
+    if (!session.app) return;
+    setNewsBusy(true);
+    try {
+      await accountFetch(session.app, "/api/mailing-list", { subscribed: on });
+      toast(on ? "You'll get product news by email." : "Unsubscribed from product news.", "success");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), "critical");
+    } finally {
+      setNewsBusy(false);
+    }
+  };
 
   // Password accounts change theirs through the reset email: Firebase wants a sign-in from the last few minutes otherwise.
   const sendReset = async () => {
@@ -196,6 +210,11 @@ function AccountCard() {
           Sign out
         </Button>
       </div>
+      {!profile?.guest && (
+        <div className="mt-5 border-t border-border pt-4">
+          <Toggle label="Product news by email" help="What shipped, new integrations, pilot stories. At most one email a month." checked={profile?.marketingEmails === true} onChange={(v) => void toggleNews(v)} disabled={newsBusy} size="sm" />
+        </div>
+      )}
       {!profile?.guest && hasPassword && (
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
           <div className="flex items-center gap-2 text-[13px] text-text-secondary">

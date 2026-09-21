@@ -532,6 +532,8 @@ export interface UserProfile {
   guest?: boolean;
   /** Filled in (or skipped) on the welcome screen after sign-up. */
   business?: BusinessIntake;
+  /** Wants product news by email. Off unless switched on; mirrored to the mailing list on the server. */
+  marketingEmails?: boolean;
   /** Workspaces this account belongs to, by workspace id. */
   workspaces: Record<ID, WorkspaceMembership>;
   lastWorkspaceId?: ID;

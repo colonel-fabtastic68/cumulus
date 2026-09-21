@@ -6,6 +6,7 @@ import { formatMoney } from "@/lib/format";
 import { StratoPreview } from "./StratoPreview";
 import { ProductPreview } from "./ProductPreview";
 import { Reveal } from "./Reveal";
+import { MailingListForm } from "./MailingListForm";
 import { SessionCta } from "./SessionCta";
 
 const container = "mx-auto w-full max-w-[1120px] px-6";
@@ -224,6 +225,24 @@ export function Pricing({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
             <p className="mt-4 flex items-center gap-1.5 text-[12.5px] text-text-tertiary">
               <Lock className="h-3.5 w-3.5" /> Billed monthly in {plan.currency}. Card details are handled by Stripe, never by cumulusOS.
             </p>
+          </div>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+export function MailingList() {
+  return (
+    <section id="news" className="scroll-mt-16 border-t border-border">
+      <div className={`${container} py-14 md:py-16`}>
+        <Reveal className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+          <div className="max-w-[520px]">
+            <h2 className="text-[24px] font-semibold leading-[1.15] tracking-[-0.02em] text-text md:text-[28px]">Follow the build.</h2>
+            <p className="mt-3 text-[15px] leading-6 text-text-secondary">New integrations, what Strato learned to do this month, and pilot stories. No more than one email a month; unsubscribe from any of them.</p>
+          </div>
+          <div className="w-full md:max-w-[460px]">
+            <MailingListForm />
           </div>
         </Reveal>
       </div>

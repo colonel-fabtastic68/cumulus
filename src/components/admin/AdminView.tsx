@@ -10,7 +10,7 @@ import { AccountApiError, accountFetch } from "@/lib/account-fetch";
 import { APP_HOME, signInHref } from "@/lib/auth-routes";
 import { formatDate, formatRelative } from "@/lib/format";
 import { useSession } from "@/lib/session";
-import type { AdminAccount, AdminFeedback, AdminOverview, AdminSubscription, AdminWorkspace } from "@/lib/server/admin";
+import type { AdminAccount, AdminFeedback, AdminOverview, AdminSubscriber, AdminSubscription, AdminWorkspace } from "@/lib/server/admin";
 import type { DeleteUserResult } from "@/lib/server/adminActions";
 
 /** Founder's read-only view of every account, workspace and subscription (ADMIN_EMAILS on the server decides who may open it). */
@@ -164,6 +164,22 @@ function Overview({ data, open, onOpen, selected, onChanged }: { data: AdminOver
     { key: "created", header: "Started", render: (s) => <span className="text-text-secondary">{formatDate(s.createdAt)}</span>, sortValue: (s) => s.createdAt },
   ];
 
+  const subscriberColumns: Column<AdminSubscriber>[] = [
+    { key: "email", header: "Email", render: (m) => <span className="font-medium text-text">{m.email}</span>, sortValue: (m) => m.email },
+    { key: "status", header: "Status", render: (m) => <Badge tone={m.subscribed ? "success" : "default"}>{m.subscribed ? "subscribed" : "unsubscribed"}</Badge>, sortValue: (m) => (m.subscribed ? 0 : 1) },
+    { key: "source", header: "Source", render: (m) => <span className="text-text-secondary">{m.source}</span>, sortValue: (m) => m.source },
+    { key: "joined", header: "Joined", render: (m) => <span className="text-text-secondary">{formatRelative(m.createdAt)}</span>, sortValue: (m) => m.createdAt },
+  ];
+  const exportSubscribers = () => {
+    const rows = data.mailingList.filter((m) => m.subscribed);
+    const csv = ["email,source,joined", ...rows.map((m) => `${m.email},${m.source},${m.createdAt}`)].join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = `cumulusos-mailing-list-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
   const feedbackColumns: Column<AdminFeedback>[] = [
     { key: "kind", header: "Kind", render: (f) => <Badge tone={f.kind === "bug" ? "critical" : f.kind === "feature" ? "info" : "default"}>{f.kind === "feature" ? "feature request" : f.kind}</Badge>, sortValue: (f) => f.kind, width: "140px" },
     { key: "message", header: "Message", render: (f) => <span className="whitespace-pre-wrap text-text">{f.message}</span> },
@@ -185,6 +201,16 @@ function Overview({ data, open, onOpen, selected, onChanged }: { data: AdminOver
         <Heading title="Workspaces" hint="Click a row for members, connections and plan." />
         <Table rows={data.workspaces} columns={workspaceColumns} rowKey={(w) => w.id} onRowClick={(w) => onOpen(w.id)} rowClassName={(w) => (w.id === open ? "bg-surface-selected" : "")} defaultSort={{ key: "created", dir: "desc" }} dense emptyState="No workspaces yet." />
         {selected && <WorkspaceDetail w={selected} onChanged={onChanged} />}
+      </section>
+
+      <section>
+        <div className="mb-2.5 flex flex-wrap items-end justify-between gap-2">
+          <Heading title={`Mailing list (${data.mailingList.filter((m) => m.subscribed).length} subscribed)`} hint="Landing-page sign-ups and accounts that switched on product news." />
+          <Button size="sm" onClick={exportSubscribers} disabled={data.mailingList.length === 0}>
+            Export CSV
+          </Button>
+        </div>
+        <Table rows={data.mailingList} columns={subscriberColumns} rowKey={(m) => m.email} defaultSort={{ key: "joined", dir: "desc" }} dense emptyState="Nobody yet." />
       </section>
 
       <section>

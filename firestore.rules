@@ -87,6 +87,9 @@ service cloud.firestore {
     match /eventShares/{slug} {
       allow read, write: if false;
     }
+    match /mailingList/{entryId} {
+      allow read, write: if false;
+    }
     match /subscriptions/{subscriptionId} {
       allow read, write: if false;
     }

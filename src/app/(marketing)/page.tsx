@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { FinalCta, Features, Hero, Integrations, StratoSection, PilotSteps, Pricing } from "@/components/marketing/sections";
+import { FinalCta, Features, Hero, Integrations, MailingList, StratoSection, PilotSteps, Pricing } from "@/components/marketing/sections";
 import { runtimeConfigFromEnv } from "@/lib/firebase-config";
 
 export const metadata: Metadata = {
@@ -17,6 +17,7 @@ export default function LandingPage() {
       <Integrations />
       <PilotSteps />
       <Pricing runtimeConfig={runtimeConfig} />
+      <MailingList />
       <FinalCta runtimeConfig={runtimeConfig} />
     </>
   );
