@@ -324,6 +324,35 @@ export function Table<T>({ rows, columns: allColumns, rowKey, rowLabel, rowClass
     onSelectedChange?.(next);
   };
 
+  // Excel-style selection: Shift+click selects from the last clicked row to this one; Ctrl/Cmd+click adds or removes a row.
+  const anchorRef = useRef<string | null>(null);
+  const selectRange = (id: string) => {
+    const keys = visible.map(rowKey);
+    const a = anchorRef.current ? keys.indexOf(anchorRef.current) : -1;
+    const b = keys.indexOf(id);
+    if (b < 0) return;
+    const [from, to] = a < 0 ? [b, b] : [Math.min(a, b), Math.max(a, b)];
+    const next = new Set(sel);
+    for (let i = from; i <= to; i++) next.add(keys[i]!);
+    onSelectedChange?.(next);
+  };
+  /** True when the click was consumed as a selection gesture (so the row should not open). */
+  const selectionClick = (e: React.MouseEvent, id: string): boolean => {
+    if (!selectable) return false;
+    if (e.shiftKey) {
+      e.preventDefault();
+      selectRange(id);
+      return true;
+    }
+    if (e.metaKey || e.ctrlKey) {
+      toggle(id);
+      anchorRef.current = id;
+      return true;
+    }
+    anchorRef.current = id;
+    return false;
+  };
+
   const cellPad = dense ? "px-3 py-1.5" : fit ? "px-(--cell-x) py-2 max-sm:py-2.5" : "px-3 py-2 max-sm:py-2.5";
   const checkPad = fit ? "w-9 px-2.5 py-2 max-sm:py-2.5" : cn("w-9", cellPad);
   const colLine = (i: number) => columnDividers && i > 0 && "border-l border-[color:var(--divider-soft)]";
@@ -410,7 +439,15 @@ export function Table<T>({ rows, columns: allColumns, rowKey, rowLabel, rowClass
                 return (
                   <tr
                     key={id}
-                    onClick={onRowClick ? () => onRowClick(row) : undefined}
+                    onMouseDown={selectable ? (e) => { if (e.shiftKey) e.preventDefault(); } : undefined}
+                    onClick={
+                      onRowClick || selectable
+                        ? (e) => {
+                            if (selectionClick(e, id)) return;
+                            onRowClick?.(row);
+                          }
+                        : undefined
+                    }
                     tabIndex={onRowClick ? 0 : undefined}
                     aria-label={onRowClick ? `Open ${label}` : undefined}
                     onKeyDown={
@@ -426,8 +463,18 @@ export function Table<T>({ rows, columns: allColumns, rowKey, rowLabel, rowClass
                     className={cn("border-b border-[color:var(--divider)] last:border-b-0 focus-visible:bg-surface-hover focus-visible:outline-none", onRowClick && "cursor-pointer", isSel ? "bg-surface-selected" : "hover:bg-surface-hover/70", rowClassName?.(row))}
                   >
                     {selectable && (
-                      <td className={checkPad} onClick={(e) => e.stopPropagation()}>
-                        <Checkbox checked={isSel} onChange={() => toggle(id)} aria-label={`Select ${label}`} />
+                      <td
+                        className={checkPad}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (e.shiftKey) selectRange(id);
+                          else {
+                            toggle(id);
+                            anchorRef.current = id;
+                          }
+                        }}
+                      >
+                        <Checkbox checked={isSel} onChange={() => {}} aria-label={`Select ${label}`} />
                       </td>
                     )}
                     {shown.map((c, i) => (
