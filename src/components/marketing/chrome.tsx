@@ -8,6 +8,7 @@ const LINKS = [
   { href: "#strato", label: "Strato" },
   { href: "#pilot", label: "Pilot" },
   { href: "#pricing", label: "Pricing" },
+  { href: "/demo", label: "Demo" },
 ];
 
 export function Wordmark({ className }: { className?: string }) {
@@ -53,7 +54,7 @@ export function MarketingFooter() {
               {l.label}
             </a>
           ))}
-          <Link href="/demo" className="hover:text-text">
+          <Link href="/book" className="hover:text-text">
             Book a demo
           </Link>
           <Link href="/sign-in" className="hover:text-text">

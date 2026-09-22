@@ -2,6 +2,15 @@ import { COLLECTIONS, type CollectionMap, type CollectionName, type WorkspaceSna
 import type { Store, WriteOp } from "./types";
 
 const STORAGE_KEY = "cumulus:workspace:v1";
+
+/** Forgets the browser's local workspace so the next open reseeds it (the demo's "start fresh"). */
+export function clearLocalWorkspace(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Private browsing: nothing was stored anyway.
+  }
+}
 const CHANNEL = "cumulus:sync";
 
 type Listener = (rows: unknown[]) => void;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { isDemo } from "@/lib/firebase-config";
 import { ArrowRight, Download, ExternalLink, Plug, RefreshCw, Unplug } from "lucide-react";
 import type { Integration, IntegrationSettings } from "@/lib/types";
 import { Badge, Banner, Button, ConfirmDialog, DescriptionList, Modal, StatusBadge, TextField, Toggle, useToast } from "@/components/ui";
@@ -50,8 +51,10 @@ function SetupForm({ def, integration, onClose }: { def: IntegrationDef; integra
         {!live ? (
           <RoadmapForm def={def} integration={integration} onClose={onClose} />
         ) : mode !== "firestore" ? (
-          <Banner tone="info" title="Live connections need the hosted version">
-            This install runs in local mode with nothing on a server, so there is nowhere safe to keep {def.name} credentials. Sign in to a hosted workspace (Firestore mode) to connect. {def.export ? "A CSV export imports in the meantime." : ""}
+          <Banner tone="info" title={isDemo() ? `Connecting ${def.name} needs an account` : "Live connections need the hosted version"}>
+            {isDemo()
+              ? `The demo runs entirely in your browser, so there is nowhere to keep ${def.name} credentials. Create an account and connect it to your own workspace. ${def.export ? "A CSV export imports in the meantime." : ""}`
+              : `This install runs in local mode with nothing on a server, so there is nowhere safe to keep ${def.name} credentials. Sign in to a hosted workspace (Firestore mode) to connect. ${def.export ? "A CSV export imports in the meantime." : ""}`}
           </Banner>
         ) : !canManage ? (
           <Banner tone="info">Only workspace owners and admins can connect or change {def.name}.</Banner>

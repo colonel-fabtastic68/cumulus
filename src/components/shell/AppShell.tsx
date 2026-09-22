@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
+import { DemoBar } from "./DemoBar";
 import { StockPushBridge } from "@/components/workspace/integrations/StockPushBridge";
 import { AgentPanel } from "@/components/agent/AgentPanel";
 import { useAuth } from "@/lib/auth";
@@ -13,6 +14,7 @@ import { Onboarding } from "./Onboarding";
 import { PreviewBar } from "./PreviewBar";
 import { Banner, Button, Skeleton } from "@/components/ui";
 import { signInHref } from "@/lib/auth-routes";
+import { isDemo } from "@/lib/firebase-config";
 import { useSession } from "@/lib/session";
 import { WorkspaceHub } from "@/components/workspace/hub";
 import { useNavArrowKeys } from "./useNavArrowKeys";
@@ -192,6 +194,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       )}
       <div className="flex min-w-0 flex-1 flex-col">
+        {isDemo() && <DemoBar />}
         <TopBar onMenu={() => setMobileNav(true)} />
         <StockPushBridge />
         <main className="@container min-h-0 flex-1 overflow-y-auto">

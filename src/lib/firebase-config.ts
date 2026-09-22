@@ -25,6 +25,8 @@ export interface RuntimeConfig {
   emailCodes?: boolean;
   /** Calendly scheduling link behind "Book a demo"; absent hides the calendar. */
   calendlyUrl?: string;
+  /** The visitor opened the public demo: the sample workspace runs in the browser with no account. */
+  demo?: boolean;
 }
 
 /** Env names in the order they are consulted; the NEXT_PUBLIC_ ones are legacy. */
@@ -93,4 +95,9 @@ export function setRuntimeConfig(config: RuntimeConfig) {
 /** The active runtime config. Local mode until the server has injected one. */
 export function getRuntimeConfig(): RuntimeConfig {
   return injected ?? { firebase: null, workspaceId: "default" };
+}
+
+/** True inside the public demo (see src/lib/demo.ts). */
+export function isDemo(): boolean {
+  return getRuntimeConfig().demo === true;
 }
