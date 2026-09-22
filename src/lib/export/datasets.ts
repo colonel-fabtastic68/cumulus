@@ -41,6 +41,13 @@ function itemRows(src: ExportSource, scope: ItemScope): Item[] {
   return src.data.items.filter((i) => inScope(scope, i.id));
 }
 
+/** Items with a BOM, by SKU, so the export reads like a parts book. */
+function assemblyRows(src: ExportSource, scope: ItemScope): Item[] {
+  return itemRows(src, scope)
+    .filter((i) => i.bom.length > 0)
+    .sort((a, b) => a.sku.localeCompare(b.sku));
+}
+
 export const DATASETS: Dataset[] = [
   {
     id: "items",
@@ -59,14 +66,20 @@ export const DATASETS: Dataset[] = [
   {
     id: "bom",
     label: "Bills of materials",
-    description: "One row per component line of each assembly.",
+    description: "One block per assembly: a BOM row naming it, then one row per component underneath.",
     itemScoped: true,
-    count: (s, sc) => itemRows(s, sc).reduce((a, i) => a + i.bom.length, 0),
+    count: (s, sc) => assemblyRows(s, sc).reduce((a, i) => a + 1 + i.bom.length, 0),
     build: (src, scope) => {
       const items = byId(src.data.items);
       const rows: Cell[][] = [];
-      for (const asm of itemRows(src, scope)) for (const l of asm.bom) rows.push([asm.sku, asm.name, items.get(l.itemId)?.sku ?? l.itemId, items.get(l.itemId)?.name ?? "", l.qty, l.wastePct ?? "", items.get(l.itemId)?.unitCost ?? "", round(l.qty * (items.get(l.itemId)?.unitCost ?? 0))]);
-      return { headers: ["Assembly SKU", "Assembly", "Component SKU", "Component", "Qty per", "Waste %", "Component cost", "Line cost"], rows };
+      for (const asm of assemblyRows(src, scope)) {
+        rows.push(["BOM", asm.category ?? "", asm.sku, asm.name, "", "", "", ""]);
+        for (const l of asm.bom) {
+          const comp = items.get(l.itemId);
+          rows.push(["", "", "", "", comp?.category ?? "", comp?.sku ?? l.itemId, l.qty, [l.note?.trim(), l.wastePct ? `Waste ${l.wastePct}%` : ""].filter(Boolean).join("; ")]);
+        }
+      }
+      return { headers: ["Type", "Assembly category", "Assembly SKU", "Assembly name", "Component category", "Component SKU", "Component qty", "Component note"], rows };
     },
   },
   {
