@@ -1,0 +1,23 @@
+# Shopify app configuration for cumulusOS. The Dev Dashboard's version form has
+# no fields for the mandatory privacy webhooks, so they are declared here and
+# pushed as a new app version with `shopify app deploy` (Shopify CLI).
+# client_id is the app's public Client ID from the Dev Dashboard; the secret
+# stays in the deployment's environment (SHOPIFY_API_SECRET).
+
+client_id = "PASTE_CLIENT_ID_FROM_DEV_DASHBOARD"
+name = "cumulusOS"
+application_url = "https://www.cumulusos.com"
+embedded = false
+
+[access_scopes]
+scopes = "read_products,write_products,read_inventory,write_inventory,read_orders,read_locations,read_customers"
+
+[auth]
+redirect_urls = ["https://cumulusos.com/api/integrations/shopify/callback"]
+
+[webhooks]
+api_version = "2026-07"
+
+[[webhooks.subscriptions]]
+compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+uri = "https://cumulusos.com/api/integrations/shopify/compliance"
