@@ -594,6 +594,7 @@ export type ActivityType =
   | "integration.connected"
   | "integration.disconnected"
   | "integration.synced"
+  | "integration.compliance"
   | "shipment.tracked"
   | "quote.created"
   | "quote.sent"
