@@ -14,7 +14,7 @@ export async function POST(req: Request) {
   try {
     const sa = requireServiceAccount();
     const db = getFirestore(adminApp(sa));
-    const body = await readJson<{ email?: unknown; subscribed?: unknown }>(req);
+    const body = await readJson<{ email?: unknown; subscribed?: unknown; source?: unknown }>(req);
     const auth = req.headers.get("authorization");
     if (auth) {
       const ctx = await authenticateAccount(req);
@@ -28,7 +28,7 @@ export async function POST(req: Request) {
     if (rateLimited(`signup:${ip}`)) throw new HttpError(429, "Too many sign-ups from this connection; try again in a minute.");
     const email = typeof body.email === "string" ? normalizeEmail(body.email) : null;
     if (!email) throw new HttpError(400, "Enter a valid email address.");
-    await setSubscription(db, email, true, "landing");
+    await setSubscription(db, email, true, body.source === "demo" ? "demo" : "landing");
     return Response.json({ ok: true, subscribed: true });
   } catch (e) {
     return jsonError(e);

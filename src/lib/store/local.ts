@@ -3,6 +3,15 @@ import type { Store, WriteOp } from "./types";
 
 const STORAGE_KEY = "cumulus:workspace:v1";
 
+/** Whether this browser already holds a local workspace (the demo has been opened here before). */
+export function hasLocalWorkspace(): boolean {
+  try {
+    return !!localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return false;
+  }
+}
+
 /** Forgets the browser's local workspace so the next open reseeds it (the demo's "start fresh"). */
 export function clearLocalWorkspace(): void {
   try {

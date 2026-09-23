@@ -11,8 +11,8 @@ import { nowIso } from "@/lib/utils";
 export interface MailingListEntry {
   email: string;
   subscribed: boolean;
-  /** Where the address came from: the landing page, or an account toggle (then the uid). */
-  source: "landing" | "account";
+  /** Where the address came from: the landing page, the demo gate, or an account toggle (then the uid). */
+  source: "landing" | "demo" | "account";
   uid?: string;
   createdAt: string;
   updatedAt: string;

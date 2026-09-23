@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Button } from "@/components/ui";
-import { StartDemoButton } from "@/components/marketing/StartDemoButton";
+import { StartDemoForm } from "@/components/marketing/StartDemoForm";
 import { buildSeed } from "@/lib/seed";
 
 export const metadata: Metadata = {
@@ -26,15 +26,12 @@ export default function DemoPage() {
       <div className="max-w-[640px]">
         <h1 className="text-[34px] font-semibold leading-[1.08] tracking-[-0.025em] text-text md:text-[44px]">Try cumulusOS in your browser</h1>
         <p className="mt-4 text-[16px] leading-7 text-text-secondary md:text-[17px]">
-          The demo opens Halcyon Audio, a sample guitar-pedal maker: {counts.items} parts and assemblies, {counts.suppliers} suppliers, {counts.orders} orders, receiving, returns and a team of {counts.members}. Everything runs on this device, nothing is sent anywhere, and you can start over any time.
+          The demo opens Halcyon Audio, a sample guitar-pedal maker: {counts.items} parts and assemblies, {counts.suppliers} suppliers, {counts.orders} orders, receiving, returns and a team of {counts.members}. Everything runs on this device, only your email leaves it, and you can start over any time.
         </p>
-        <div className="mt-8 flex flex-wrap items-center gap-3">
-          <StartDemoButton>Open the demo</StartDemoButton>
-          <StartDemoButton variant="secondary" fresh>
-            Start fresh
-          </StartDemoButton>
+        <div className="mt-8">
+          <StartDemoForm />
         </div>
-        <p className="mt-3 text-[13px] text-text-tertiary">No account, no install. Strato answers with the sample data.</p>
+        <p className="mt-3 text-[13px] text-text-tertiary">No account, no install. Strato answers with the sample data. We use your email to follow up once about the demo and for occasional product news, one click to leave.</p>
       </div>
 
       <div className="mt-14 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
