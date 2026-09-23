@@ -10,7 +10,7 @@ import { round } from "@/lib/utils";
 
 export type Cell = string | number | boolean | null | undefined;
 
-export type DatasetId = "items" | "bom" | "stock" | "movements" | "lots" | "receipts" | "builds" | "orders" | "shipments" | "transfers" | "rmas" | "quotes" | "suppliers" | "locations" | "activity";
+export type DatasetId = "items" | "bom" | "stock" | "movements" | "lots" | "receipts" | "builds" | "orders" | "purchaseOrders" | "shipments" | "transfers" | "rmas" | "quotes" | "suppliers" | "locations" | "activity";
 
 export interface ExportSource {
   data: Pick<CollectionMap, never> & { [K in keyof CollectionMap]: CollectionMap[K][] };
@@ -57,9 +57,9 @@ export const DATASETS: Dataset[] = [
     count: (s, sc) => itemRows(s, sc).length,
     build: (src, scope) => {
       const suppliers = byId(src.data.suppliers);
-      const headers = ["SKU", "Name", "Description", "Category", "Type", "Status", "On hand", "In transit", "Unit", "Min qty", "Max qty", "Unit cost", "Price", "Sale price", "Value", "Supplier", "Supplier SKU", "Other suppliers", "Lead time days", "Location", "Barcode", "Brand", "Weight", "Weight unit", "Tags", "Cross-references", "Superseded by", "Created", "Updated"];
+      const headers = ["SKU", "Name", "Description", "Category", "Type", "Status", "On hand", "In transit", "Unit", "Min qty", "Max qty", "Unit cost", "Price", "Sale price", "Value", "Supplier", "Supplier SKU", "Other suppliers", "Lead time days", "Location", "Barcode", "Brand", "Weight", "Weight unit", "Tags", "Cross-references", "Superseded by", "Images", "Created", "Updated"];
       const items = byId(src.data.items);
-      const rows = itemRows(src, scope).map((i) => [i.sku, i.name, i.description ?? "", i.category ?? "", i.type === "assembly" ? "BOM" : "Part", i.status, i.onHand, i.inTransit ?? 0, i.unit, i.minQty ?? "", i.maxQty ?? "", i.unitCost, i.price, i.salePrice ?? "", round(i.onHand * i.unitCost), name(suppliers, i.supplierId), i.supplierSku ?? "", (i.suppliers ?? []).filter((s) => s.supplierId !== i.supplierId).map((s) => `${name(suppliers, s.supplierId)}${s.supplierSku ? ` (${s.supplierSku})` : ""}`).join("; "), i.leadTimeDays ?? "", i.location ?? "", i.barcode ?? "", i.brand ?? "", i.weight ?? "", i.weightUnit ?? "", i.tags.join("; "), (i.crossRefs ?? []).map((r) => `${r.number} (${r.kind}${r.source ? ", " + r.source : ""})`).join("; "), i.supersededBy ? (items.get(i.supersededBy)?.sku ?? "") : "", day(i.createdAt), day(i.updatedAt)]);
+      const rows = itemRows(src, scope).map((i) => [i.sku, i.name, i.description ?? "", i.category ?? "", i.type === "assembly" ? "BOM" : "Part", i.status, i.onHand, i.inTransit ?? 0, i.unit, i.minQty ?? "", i.maxQty ?? "", i.unitCost, i.price, i.salePrice ?? "", round(i.onHand * i.unitCost), name(suppliers, i.supplierId), i.supplierSku ?? "", (i.suppliers ?? []).filter((s) => s.supplierId !== i.supplierId).map((s) => `${name(suppliers, s.supplierId)}${s.supplierSku ? ` (${s.supplierSku})` : ""}`).join("; "), i.leadTimeDays ?? "", i.location ?? "", i.barcode ?? "", i.brand ?? "", i.weight ?? "", i.weightUnit ?? "", i.tags.join("; "), (i.crossRefs ?? []).map((r) => `${r.number} (${r.kind}${r.source ? ", " + r.source : ""})`).join("; "), i.supersededBy ? (items.get(i.supersededBy)?.sku ?? "") : "", (i.images ?? []).map((im) => im.url).join("; ") || i.imageUrl || "", day(i.createdAt), day(i.updatedAt)]);
       return { headers, rows };
     },
   },
@@ -80,6 +80,24 @@ export const DATASETS: Dataset[] = [
         }
       }
       return { headers: ["Type", "Assembly category", "Assembly SKU", "Assembly name", "Component category", "Component SKU", "Component qty", "Component note"], rows };
+    },
+  },
+  {
+    id: "purchaseOrders",
+    label: "Purchase orders",
+    description: "One row per line: ordered, received and still due, with the supplier and dates.",
+    itemScoped: true,
+    count: (s, sc) => s.data.purchaseOrders.reduce((a, p) => a + p.lines.filter((l) => inScope(sc, l.itemId)).length, 0),
+    build: (src, scope) => {
+      const items = byId(src.data.items);
+      const rows: Cell[][] = [];
+      for (const p of [...src.data.purchaseOrders].sort((a, b) => a.number.localeCompare(b.number))) {
+        for (const l of p.lines) {
+          if (!inScope(scope, l.itemId)) continue;
+          rows.push([p.number, p.status, p.supplier, p.expectedAt ?? "", p.reference ?? "", items.get(l.itemId)?.sku ?? l.itemId, items.get(l.itemId)?.name ?? "", l.supplierSku ?? "", l.qty, l.received ?? 0, round(l.qty - (l.received ?? 0), 4), l.unitCost, round(l.qty * l.unitCost), l.note ?? "", day(p.createdAt), day(p.sentAt), day(p.receivedAt)]);
+        }
+      }
+      return { headers: ["PO", "Status", "Supplier", "Expected", "Reference", "SKU", "Item", "Supplier SKU", "Ordered", "Received", "Open", "Unit cost", "Line total", "Note", "Created", "Sent", "Completed"], rows };
     },
   },
   {

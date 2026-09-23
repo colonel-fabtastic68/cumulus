@@ -54,6 +54,12 @@ async function wooCreds(ctx: ServerContext, integration: Integration, secrets: S
 
 // ---- products ------------------------------------------------------------------
 
+/** The item's web images for a store, main image first; the legacy single URL when that is all there is. */
+function imageUrlsOf(item: Item): string[] | undefined {
+  const urls = item.images?.length ? item.images.map((i) => i.url) : item.imageUrl ? [item.imageUrl] : [];
+  return urls.length ? urls : undefined;
+}
+
 interface ChannelRow {
   row: ImportRow;
   ref: NonNullable<Item["channels"]>;
@@ -85,6 +91,7 @@ function shopifyRows(products: shopify.ShopifyProduct[]): { rows: ChannelRow[]; 
           qty: v.inventory_management ? v.inventory_quantity : undefined,
           weight: v.weight || undefined,
           imageUrl: p.image?.src,
+          imageUrls: (p.images ?? []).map((i) => i.src).filter(Boolean),
           externalId: String(p.id),
           externalSource: "shopify",
           published: p.status === "active",
@@ -121,6 +128,7 @@ function wooRows(list: Array<{ product: woo.WooProduct; variation?: woo.WooVaria
         minQty: source.low_stock_amount ?? undefined,
         weight: Number(source.weight) || undefined,
         imageUrl: variation?.image?.src ?? product.images?.[0]?.src,
+        imageUrls: [variation?.image?.src, ...(product.images ?? []).map((i) => i.src)].filter((u, i, arr): u is string => !!u && arr.indexOf(u) === i),
         externalId: String(product.id),
         externalSource: "woocommerce",
         published: product.status === "publish" && (variation ? variation.status === "publish" : true),
@@ -515,7 +523,7 @@ export async function pushProductsToChannel(ctx: ServerContext, integration: Int
         let ref = existing.get(item.sku.toUpperCase());
         if (ref) out.linked++;
         else {
-          ref = await shopify.createProduct(creds, { title: item.name, sku: item.sku, price: item.price, description: item.description, vendor: item.brand, productType: item.category, tags: item.tags, barcode: item.barcode, weight: item.weight, weightUnit: item.weightUnit, publish });
+          ref = await shopify.createProduct(creds, { title: item.name, sku: item.sku, price: item.price, description: item.description, vendor: item.brand, productType: item.category, tags: item.tags, barcode: item.barcode, weight: item.weight, weightUnit: item.weightUnit, publish, images: imageUrlsOf(item) });
           out.created++;
           if (ref.inventoryItemId && qtyFor(item) > 0) stockEntries.push({ inventoryItemId: ref.inventoryItemId, quantity: qtyFor(item) });
         }
@@ -540,7 +548,7 @@ export async function pushProductsToChannel(ctx: ServerContext, integration: Int
         let ref = existing.get(item.sku.toUpperCase());
         if (ref) out.linked++;
         else {
-          const created = await woo.createProduct(creds, { name: item.name, sku: item.sku, price: item.price, description: item.description, stockQuantity: qtyFor(item), weight: item.weight, dimensions: item.dimensions, barcode: item.barcode, publish });
+          const created = await woo.createProduct(creds, { name: item.name, sku: item.sku, price: item.price, description: item.description, stockQuantity: qtyFor(item), weight: item.weight, dimensions: item.dimensions, barcode: item.barcode, publish, images: imageUrlsOf(item) });
           ref = { productId: created.id };
           out.created++;
         }

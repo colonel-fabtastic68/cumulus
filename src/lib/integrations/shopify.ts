@@ -37,6 +37,7 @@ export interface ShopifyProduct {
   tags: string;
   variants: ShopifyVariant[];
   image?: { src: string } | null;
+  images?: Array<{ src: string }>;
 }
 
 export interface ShopifyAddress {
@@ -139,6 +140,8 @@ export interface NewShopifyProduct {
   weightUnit?: string;
   /** Make it active and published to the online store at once; otherwise it waits as a draft. */
   publish?: boolean;
+  /** Web image addresses, main image first. */
+  images?: string[];
 }
 
 /** Creates a single-variant product, as a draft unless asked to publish it; stock is set afterwards through inventory levels. */
@@ -156,6 +159,7 @@ export async function createProduct(creds: ShopifyCreds, p: NewShopifyProduct): 
   if (p.vendor) product.vendor = p.vendor;
   if (p.productType) product.product_type = p.productType;
   if (p.tags?.length) product.tags = p.tags.join(", ");
+  if (p.images?.length) product.images = p.images.map((src) => ({ src }));
   const { data } = await request<{ product?: { id?: number; variants?: Array<{ id?: number; inventory_item_id?: number }> } }>(creds, "products.json", { method: "POST", body: { product } });
   const created = data?.product;
   const v = created?.variants?.[0];

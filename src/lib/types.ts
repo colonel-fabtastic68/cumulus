@@ -28,6 +28,14 @@ export interface BomLine {
   note?: string;
 }
 
+/** A web image for a product: hosted on the store or anywhere reachable; channels are sent the URLs. */
+export interface ItemImage {
+  url: string;
+  alt?: string;
+  /** Where the image came from; a sync fills channel images in when the item has none. */
+  source?: "manual" | "shopify" | "woocommerce";
+}
+
 export interface Item {
   id: ID;
   sku: string;
@@ -89,6 +97,8 @@ export interface Item {
   weightUnit?: string;
   dimensions?: { length?: number; width?: number; height?: number; unit?: string };
   imageUrl?: string;
+  /** Web images in display order; the first one is what channels show as the main image. `imageUrl` mirrors it. */
+  images?: ItemImage[];
   /** Extra attributes captured on import (custom fields), keyed by field name. */
   attributes?: Record<string, string>;
 
@@ -333,6 +343,65 @@ export interface OrderTemplate {
   shipTo?: Address;
   lines: Array<{ itemId: ID; qty: number; unitPrice?: number }>;
   note?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+}
+
+export type PurchaseOrderStatus = "draft" | "sent" | "partial" | "received" | "cancelled";
+
+export interface PurchaseOrderLine {
+  itemId: ID;
+  qty: number;
+  unitCost: number;
+  /** Units booked in through receipts so far. */
+  received?: number;
+  /** The supplier's own part number, as printed on the order. */
+  supplierSku?: string;
+  note?: string;
+}
+
+/** Goods ordered from a supplier. Stock moves only when a receipt is booked against it. */
+export interface PurchaseOrder {
+  id: ID;
+  number: string; // PO-1001
+  supplierId?: ID;
+  /** Supplier name as printed, kept even if the record changes. */
+  supplier: string;
+  status: PurchaseOrderStatus;
+  lines: PurchaseOrderLine[];
+  /** When the goods are expected (YYYY-MM-DD). */
+  expectedAt?: string;
+  shipTo?: Address;
+  terms?: string;
+  /** Supplier's confirmation or quote number. */
+  reference?: string;
+  note?: string;
+  /** Template the order started from. */
+  templateId?: ID;
+  source?: "manual" | "template" | "strato" | "suggestion";
+  sentAt?: string;
+  /** Set when every line is fully received. */
+  receivedAt?: string;
+  cancelledAt?: string;
+  /** Receipts booked against this order. */
+  receiptIds?: ID[];
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+}
+
+/** A reusable purchase order: supplier and lines, saved from an order, typed in, or uploaded as a sheet. */
+export interface PurchaseOrderTemplate {
+  id: ID;
+  name: string;
+  description?: string;
+  supplierId?: ID;
+  supplier?: string;
+  lines: Array<{ itemId: ID; qty: number; unitCost?: number; note?: string }>;
+  terms?: string;
+  note?: string;
+  source?: "manual" | "upload" | "strato" | "order";
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -599,7 +668,11 @@ export type ActivityType =
   | "quote.created"
   | "quote.sent"
   | "quote.accepted"
-  | "quote.declined";
+  | "quote.declined"
+  | "po.created"
+  | "po.sent"
+  | "po.received"
+  | "po.cancelled";
 
 export interface ActivityEvent {
   id: ID;
@@ -607,7 +680,7 @@ export interface ActivityEvent {
   message: string;
   actorId: string;
   actorName: string;
-  entityType?: "item" | "receipt" | "build" | "order" | "rma" | "supplier" | "member" | "transfer" | "shipment" | "integration" | "location" | "quote";
+  entityType?: "item" | "receipt" | "build" | "order" | "rma" | "supplier" | "member" | "transfer" | "shipment" | "integration" | "location" | "quote" | "purchaseOrder";
   entityId?: ID;
   /** Free-form details, e.g. { count: 12 } for bulk operations. */
   meta?: Record<string, unknown>;
@@ -720,6 +793,7 @@ export interface WorkspaceSettings {
     transfer?: number;
     shipment?: number;
     quote?: number;
+    purchaseOrder?: number;
   };
   shipping?: ShippingSettings;
   scanning?: ScanningSettings;
@@ -727,7 +801,7 @@ export interface WorkspaceSettings {
   billing?: WorkspaceBilling;
   catalog?: CatalogSettings;
   /** Order numbers: prefix + the next counter value. A custom number typed on an order moves the counter past it. */
-  numbering?: { orderPrefix?: string };
+  numbering?: { orderPrefix?: string; purchaseOrderPrefix?: string };
   /** When an item counts as low stock (the Low chip, the low-stock view, reorder suggestions). */
   stockAlerts?: StockAlertRule;
   updatedAt: string;
@@ -908,6 +982,8 @@ export interface CollectionMap {
   orderTemplates: OrderTemplate;
   customers: Customer;
   events: CalendarEvent;
+  purchaseOrders: PurchaseOrder;
+  purchaseOrderTemplates: PurchaseOrderTemplate;
 }
 
 export type CollectionName = keyof CollectionMap;
@@ -935,6 +1011,8 @@ export const COLLECTIONS: CollectionName[] = [
   "orderTemplates",
   "customers",
   "events",
+  "purchaseOrders",
+  "purchaseOrderTemplates",
 ];
 
 /** A full snapshot of a workspace. Used for seed data, export and import. */

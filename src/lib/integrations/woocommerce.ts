@@ -272,6 +272,8 @@ export interface NewWooProduct {
   barcode?: string;
   /** Publish at once; otherwise the product waits as a draft. */
   publish?: boolean;
+  /** Web image addresses, main image first. */
+  images?: string[];
 }
 
 /** Creates a simple product, as a draft unless asked to publish it straight away. */
@@ -289,6 +291,7 @@ export async function createProduct(creds: WooCreds, p: NewWooProduct): Promise<
   if (p.weight) body.weight = String(p.weight);
   if (p.dimensions && (p.dimensions.length || p.dimensions.width || p.dimensions.height)) body.dimensions = { length: String(p.dimensions.length ?? ""), width: String(p.dimensions.width ?? ""), height: String(p.dimensions.height ?? "") };
   if (p.barcode) body.global_unique_id = p.barcode;
+  if (p.images?.length) body.images = p.images.map((src) => ({ src }));
   const { data } = await request<{ id?: number }>(creds, "products", { method: "POST", body });
   if (!data || typeof data.id !== "number") throw new HttpError(502, `${new URL(creds.siteUrl).host} did not confirm the new product ${p.sku}.`);
   return { id: String(data.id) };

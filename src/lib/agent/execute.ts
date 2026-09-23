@@ -39,6 +39,7 @@ import { matches, round } from "@/lib/utils";
 import { crossRefText } from "@/lib/scan";
 import { itemSupplierLinks, supplierItems } from "@/lib/suppliers";
 import { kpiReport } from "@/lib/kpis";
+import { createPurchaseOrder, findTemplate, poIsOpen, poLineOpenQty, poTotal, receivePurchaseOrder, savePurchaseOrderTemplate, suggestPurchaseOrders } from "@/lib/purchaseOrders";
 import type { AgentToolName } from "./tools";
 
 export interface ExecContext {
@@ -560,6 +561,74 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
       return { ok: true, order: order.number, status: order.status, summary: `${order.status === "fulfilled" ? "Created and shipped" : "Created"} ${order.number}` };
     }
 
+    case "listPurchaseOrders": {
+      const [pos, items] = await Promise.all([store.list("purchaseOrders"), store.list("items")]);
+      const byId = new Map(items.map((i) => [i.id, i]));
+      const status = String(input.status ?? "open");
+      const sup = input.supplierName ? String(input.supplierName) : "";
+      const list = pos
+        .filter((p) => (status === "all" ? true : status === "open" ? poIsOpen(p) : p.status === status))
+        .filter((p) => (sup ? matches(sup, p.supplier) : true))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, Number(input.limit) || 25);
+      return {
+        count: list.length,
+        purchaseOrders: list.map((p) => ({ number: p.number, supplier: p.supplier, status: p.status, expectedAt: p.expectedAt, total: poTotal(p), lines: p.lines.map((l) => ({ sku: byId.get(l.itemId)?.sku ?? l.itemId, qty: l.qty, received: l.received ?? 0, open: poLineOpenQty(l), unitCost: l.unitCost })) })),
+      };
+    }
+
+    case "suggestPurchaseOrders": {
+      const [items, suppliers, settingsRows] = await Promise.all([store.list("items"), store.list("suppliers"), store.list("settings")]);
+      const sup = input.supplierName ? String(input.supplierName) : "";
+      const suggestions = suggestPurchaseOrders(items, suppliers, settingsRows[0]?.stockAlerts).filter((s) => (sup ? matches(sup, s.supplier) : true));
+      return { count: suggestions.length, suggestions: suggestions.map((s) => ({ supplier: s.supplier, leadTimeDays: s.leadTimeDays, total: s.total, lines: s.lines.map((l) => ({ sku: l.item.sku, name: l.item.name, onHand: l.item.onHand, minQty: l.item.minQty, qty: l.qty, unitCost: l.unitCost })) })) };
+    }
+
+    case "createPurchaseOrder": {
+      const [items, templates] = await Promise.all([store.list("items"), store.list("purchaseOrderTemplates")]);
+      const template = input.fromTemplate ? findTemplate(templates, String(input.fromTemplate)) : undefined;
+      if (input.fromTemplate && !template) throw new InventoryError(`No PO template called “${input.fromTemplate}”`);
+      const supplierId = await resolveSupplierId(ctx, String(input.supplierName ?? "") || template?.supplier);
+      const given = (input.lines as Array<Record<string, unknown>> | undefined) ?? [];
+      const lines = given.length
+        ? given.map((l) => {
+            const item = findItem(items, String(l.sku));
+            if (!item) throw new InventoryError(`Unknown SKU ${l.sku}`);
+            return { itemId: item.id, qty: Number(l.qty), unitCost: l.unitCost as number | undefined, note: l.note as string | undefined };
+          })
+        : (template?.lines ?? []);
+      const po = await createPurchaseOrder(store, actor, { supplierId, supplier: String(input.supplierName ?? "") || template?.supplier, lines, expectedAt: input.expectedAt as string | undefined, terms: (input.terms as string | undefined) ?? template?.terms, reference: input.reference as string | undefined, note: (input.note as string | undefined) ?? template?.note, templateId: template?.id, source: template ? "template" : "strato", send: Boolean(input.send) });
+      return { ok: true, purchaseOrder: po.number, status: po.status, total: poTotal(po), lines: po.lines.length, summary: `${po.status === "sent" ? "Sent" : "Drafted"} ${po.number} to ${po.supplier} · ${po.lines.length} line${po.lines.length === 1 ? "" : "s"} · ${poTotal(po).toFixed(2)}` };
+    }
+
+    case "receivePurchaseOrder": {
+      const [pos, items] = await Promise.all([store.list("purchaseOrders"), store.list("items")]);
+      const po = pos.find((p) => p.number.toUpperCase() === String(input.poNumber ?? "").trim().toUpperCase());
+      if (!po) throw new InventoryError(`No purchase order ${input.poNumber}`);
+      const given = input.lines as Array<Record<string, unknown>> | undefined;
+      const lines = given?.length
+        ? given.map((l) => {
+            const item = findItem(items, String(l.sku));
+            if (!item) throw new InventoryError(`Unknown SKU ${l.sku}`);
+            return { itemId: item.id, qty: Number(l.qty), unitCost: l.unitCost as number | undefined };
+          })
+        : undefined;
+      const { po: next, receipt } = await receivePurchaseOrder(store, actor, po.id, { lines, receivedAt: input.receivedAt as string | undefined, note: input.note as string | undefined });
+      return { ok: true, receipt: receipt.number, purchaseOrder: next.number, status: next.status, summary: `Received ${receipt.number} against ${next.number} · now ${next.status}` };
+    }
+
+    case "savePurchaseOrderTemplate": {
+      const items = await store.list("items");
+      const supplierId = await resolveSupplierId(ctx, input.supplierName as string | undefined);
+      const lines = ((input.lines as Array<Record<string, unknown>>) ?? []).map((l) => {
+        const item = findItem(items, String(l.sku));
+        if (!item) throw new InventoryError(`Unknown SKU ${l.sku}`);
+        return { itemId: item.id, qty: Number(l.qty), unitCost: l.unitCost as number | undefined };
+      });
+      const t = await savePurchaseOrderTemplate(store, actor, { name: String(input.name ?? ""), description: input.description as string | undefined, supplierId, supplier: input.supplierName as string | undefined, lines, note: input.note as string | undefined, source: "strato" });
+      return { ok: true, template: t.name, lines: t.lines.length, summary: `Saved PO template “${t.name}” with ${t.lines.length} line${t.lines.length === 1 ? "" : "s"}` };
+    }
+
     case "fulfillOrders": {
       const orders = await store.list("orders");
       const numbers = (input.orderNumbers as string[]) ?? [];
@@ -765,6 +834,18 @@ export async function describeProposal(name: AgentToolName, rawInput: unknown, c
       }
       case "fulfillOrders":
         return { title: `Ship ${(input.orderNumbers as string[])?.length ?? 0} order(s)`, lines: (input.orderNumbers as string[]) ?? [] };
+      case "createPurchaseOrder": {
+        const lines = (input.lines as Array<Record<string, unknown>>) ?? [];
+        return { title: `${input.send ? "Send" : "Draft"} purchase order to ${input.supplierName}${input.fromTemplate ? ` from template “${input.fromTemplate}”` : ""}`, lines: lines.length ? lines.map((l) => `${skuOf(l.sku)} × ${l.qty}${l.unitCost !== undefined ? ` @ ${l.unitCost}` : ""}`) : ["Lines from the template"] };
+      }
+      case "receivePurchaseOrder": {
+        const lines = (input.lines as Array<Record<string, unknown>>) ?? [];
+        return { title: `Receive against ${input.poNumber}`, lines: lines.length ? lines.map((l) => `${skuOf(l.sku)} × ${l.qty}`) : ["Everything still open on the order"] };
+      }
+      case "savePurchaseOrderTemplate": {
+        const lines = (input.lines as Array<Record<string, unknown>>) ?? [];
+        return { title: `Save PO template “${input.name}”${input.supplierName ? ` for ${input.supplierName}` : ""}`, lines: lines.map((l) => `${skuOf(l.sku)} × ${l.qty}`) };
+      }
       case "createRma": {
         const lines = (input.lines as Array<Record<string, unknown>>) ?? [];
         return { title: `Open RMA for ${input.customer}`, lines: [String(input.reason ?? ""), ...lines.map((l) => `${skuOf(l.sku)} × ${l.qty}`)] };

@@ -11,6 +11,7 @@ import { AdjustStockModal, BuildModal, ItemFormModal } from "@/components/invent
 import { useAgent } from "@/components/agent/AgentProvider";
 import { StockSummaryCard } from "@/components/item/StockSummaryCard";
 import { OverviewTab } from "@/components/item/OverviewTab";
+import { ImagesTab, itemImages } from "@/components/item/ImagesTab";
 import { BomTab } from "@/components/item/BomTab";
 import { WhereUsedTab } from "@/components/item/WhereUsedTab";
 import { StockHistoryTab } from "@/components/item/StockHistoryTab";
@@ -23,7 +24,7 @@ import { SupersedeModal } from "@/components/item/SupersedeModal";
 import { duplicateDefaults, errorMessage } from "@/components/item/utils";
 import { whereUsed } from "@/lib/inventory";
 
-type Tab = "overview" | "locations" | "crossRefs" | "bom" | "whereUsed" | "history" | "batches" | "pricing";
+type Tab = "overview" | "images" | "locations" | "crossRefs" | "bom" | "whereUsed" | "history" | "batches" | "pricing";
 
 export default function ItemDetailPage() {
   const params = useParams<{ id: string }>();
@@ -112,6 +113,7 @@ export default function ItemDetailPage() {
 
   const tabs: Array<{ value: Tab; label: string; count?: number }> = [
     { value: "overview", label: "Overview" },
+    { value: "images", label: "Images", count: itemImages(item).length || undefined },
     { value: "locations", label: "Locations", count: item.stock ? Object.values(item.stock).filter((s) => s.qty !== 0).length : undefined },
     { value: "crossRefs", label: "Cross-references", count: item.crossRefs?.length || undefined },
     ...(isAssembly ? [{ value: "bom" as Tab, label: "BOM", count: item.bom.length }] : [{ value: "bom" as Tab, label: "BOM" }]),
@@ -186,6 +188,7 @@ export default function ItemDetailPage() {
             <div hidden={tab !== "bom"}>
               <BomTab item={item} items={items} currency={settings.currency} canEdit={writable} />
             </div>
+            {tab === "images" && <ImagesTab item={item} canEdit={writable} />}
             {tab === "locations" && <LocationsTab item={item} canEdit={writable} />}
             {tab === "crossRefs" && <CrossRefsTab item={item} items={items} canEdit={writable} />}
             {tab === "whereUsed" && <WhereUsedTab item={item} items={items} />}

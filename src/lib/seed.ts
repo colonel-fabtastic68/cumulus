@@ -569,7 +569,7 @@ function generate(overrides: Map<string, { min: number; max: number }>, behind: 
     shipments: [],
     quotes: [],
     channelTombstones: [],
-    quoteTemplates: [], orderTemplates: [], customers: [], events: [],
+    quoteTemplates: [], orderTemplates: [], customers: [], events: [], purchaseOrders: [], purchaseOrderTemplates: [],
   };
 }
 
@@ -649,7 +649,7 @@ export function freshWorkspace(opts: { members?: Member[]; companyName?: string;
     shipments: [],
     quotes: [],
     channelTombstones: [],
-    quoteTemplates: [], orderTemplates: [], customers: [], events: [],
+    quoteTemplates: [], orderTemplates: [], customers: [], events: [], purchaseOrders: [], purchaseOrderTemplates: [],
   };
 }
 

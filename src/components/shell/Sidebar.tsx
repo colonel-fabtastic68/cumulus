@@ -22,10 +22,12 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const items = useCollection("items");
   const orders = useCollection("orders");
   const rmas = useCollection("rmas");
+  const purchaseOrders = useCollection("purchaseOrders");
   const lowCount = items.filter((i) => isLowStock(i, settings.stockAlerts)).length;
   const openOrders = orders.filter((o) => o.status === "open").length;
   const openRmas = rmas.filter((r) => r.status === "open" || r.status === "inspecting").length;
-  const counts: Record<string, number> = { "/inventory": lowCount, "/orders": openOrders, "/rmas": openRmas };
+  const openPos = purchaseOrders.filter((p) => p.status === "draft" || p.status === "sent" || p.status === "partial").length;
+  const counts: Record<string, number> = { "/inventory": lowCount, "/orders": openOrders, "/orders/purchase": openPos, "/rmas": openRmas };
 
   // Keep the active entry visible when the page changes from the keyboard (Shift+↑/↓) on short windows.
   useEffect(() => {
@@ -56,6 +58,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
               {n.children.map((c) => {
                 const ChildIcon = c.icon;
                 const childActive = isChildNavActive(c, n.children!, pathname);
+                const childCount = counts[c.href];
                 return (
                   <Link
                     key={c.href}
@@ -70,6 +73,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                   >
                     <ChildIcon className={cn("h-3.5 w-3.5", childActive ? "text-text" : "text-icon")} />
                     <span className="flex-1">{c.label}</span>
+                    {childCount ? <span className="rounded-full bg-surface-hover px-1.5 text-[11px] font-medium text-text-secondary">{childCount}</span> : null}
                   </Link>
                 );
               })}

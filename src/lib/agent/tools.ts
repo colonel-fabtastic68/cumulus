@@ -213,6 +213,35 @@ export const agentTools = {
     description: "Create or update a supplier by name.",
     inputSchema: z.object({ name: z.string(), email: z.string().optional(), phone: z.string().optional(), website: z.string().optional(), leadTimeDays: z.number().optional(), terms: z.string().optional(), notes: z.string().optional() }),
   }),
+  listPurchaseOrders: tool({
+    description: "List purchase orders with their lines, what has been received and what is still due. status 'open' = draft, sent or partly received.",
+    inputSchema: z.object({ status: z.enum(["open", "draft", "sent", "partial", "received", "cancelled", "all"]).optional(), supplierName: z.string().optional(), limit: z.number().optional() }),
+  }),
+  suggestPurchaseOrders: tool({
+    description: "Draft purchase orders from items below their low-stock line, grouped by supplier, with reorder quantities and each supplier's last cost. Read-only: use createPurchaseOrder to place one.",
+    inputSchema: z.object({ supplierName: z.string().optional() }),
+  }),
+  createPurchaseOrder: tool({
+    description: "Create a purchase order to a supplier. Lines take SKUs; unit cost defaults to the supplier's last cost for the item. It is a draft unless send=true. fromTemplate names a saved PO template; its lines are used when no lines are given.",
+    inputSchema: z.object({
+      supplierName: z.string(),
+      lines: z.array(z.object({ sku: z.string(), qty: z.number(), unitCost: z.number().optional(), note: z.string().optional() })).optional(),
+      fromTemplate: z.string().optional(),
+      expectedAt: z.string().optional().describe("YYYY-MM-DD"),
+      terms: z.string().optional(),
+      reference: z.string().optional(),
+      note: z.string().optional(),
+      send: z.boolean().optional(),
+    }),
+  }),
+  receivePurchaseOrder: tool({
+    description: "Receive goods against a purchase order by number (e.g. PO-1001). Omit lines to receive everything still open; give lines for a partial delivery. Books a receipt, so stock, lots and costs update.",
+    inputSchema: z.object({ poNumber: z.string(), lines: z.array(z.object({ sku: z.string(), qty: z.number(), unitCost: z.number().optional() })).optional(), receivedAt: z.string().optional(), note: z.string().optional() }),
+  }),
+  savePurchaseOrderTemplate: tool({
+    description: "Save a reusable purchase order template (supplier and lines) under a name so the same order can be placed again later.",
+    inputSchema: z.object({ name: z.string(), supplierName: z.string().optional(), lines: z.array(z.object({ sku: z.string(), qty: z.number(), unitCost: z.number().optional() })), description: z.string().optional(), note: z.string().optional() }),
+  }),
   deleteItems: tool({
     description: "Permanently delete items and their history. Prefer deactivateItems. Only use when the user explicitly asks to delete.",
     inputSchema: z.object({ skus: skuList, reason: z.string() }),
@@ -222,7 +251,7 @@ export const agentTools = {
 export type AgentTools = typeof agentTools;
 export type AgentToolName = keyof AgentTools;
 
-export const READ_TOOLS: AgentToolName[] = ["getWorkspaceSummary", "getConnections", "searchItems", "getItem", "explodeBom", "whereUsed", "getReport", "previewBulkUpdate"];
+export const READ_TOOLS: AgentToolName[] = ["getWorkspaceSummary", "getConnections", "searchItems", "getItem", "explodeBom", "whereUsed", "getReport", "previewBulkUpdate", "listPurchaseOrders", "suggestPurchaseOrders"];
 export const WRITE_TOOLS: AgentToolName[] = [
   "bulkUpdateItems",
   "createItems",
@@ -236,6 +265,9 @@ export const WRITE_TOOLS: AgentToolName[] = [
   "createRma",
   "resolveRma",
   "upsertSupplier",
+  "createPurchaseOrder",
+  "receivePurchaseOrder",
+  "savePurchaseOrderTemplate",
   "deleteItems",
   "syncChannel",
 ];
@@ -267,5 +299,10 @@ export const TOOL_LABELS: Record<AgentToolName, string> = {
   createRma: "Create RMA",
   resolveRma: "Resolve RMA",
   upsertSupplier: "Save supplier",
+  listPurchaseOrders: "Purchase orders",
+  suggestPurchaseOrders: "Suggest purchase orders",
+  createPurchaseOrder: "Create purchase order",
+  receivePurchaseOrder: "Receive purchase order",
+  savePurchaseOrderTemplate: "Save PO template",
   deleteItems: "Delete items",
 };

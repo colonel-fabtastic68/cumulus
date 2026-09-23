@@ -40,6 +40,8 @@ export default function ExportsPage() {
     orderTemplates: useCollection("orderTemplates"),
     customers: useCollection("customers"),
     events: useCollection("events"),
+    purchaseOrders: useCollection("purchaseOrders"),
+    purchaseOrderTemplates: useCollection("purchaseOrderTemplates"),
   };
   const [selected, setSelected] = useState<Set<DatasetId>>(() => new Set<DatasetId>(["items"]));
   const [format, setFormat] = useState<ExportFormat>("csv");

@@ -445,8 +445,8 @@ async function loadSettings(store: Store): Promise<WorkspaceSettings> {
 export async function nextNumber(store: Store, kind: keyof WorkspaceSettings["counters"]): Promise<{ number: string; ops: WriteOp[] }> {
   const settings = await loadSettings(store);
   const n = settings.counters[kind] ?? 1001;
-  const defaults = { receipt: "RCV-", build: "BLD-", order: "SO-", rma: "RMA-", transfer: "TR-", shipment: "SH-", quote: "QT-" };
-  const prefix = kind === "order" && settings.numbering?.orderPrefix !== undefined ? settings.numbering.orderPrefix : defaults[kind];
+  const defaults = { receipt: "RCV-", build: "BLD-", order: "SO-", rma: "RMA-", transfer: "TR-", shipment: "SH-", quote: "QT-", purchaseOrder: "PO-" };
+  const prefix = kind === "order" && settings.numbering?.orderPrefix !== undefined ? settings.numbering.orderPrefix : kind === "purchaseOrder" && settings.numbering?.purchaseOrderPrefix !== undefined ? settings.numbering.purchaseOrderPrefix : defaults[kind];
   const ops: WriteOp[] = [
     { op: "patch", collection: "settings", id: "default", patch: { counters: { ...settings.counters, [kind]: n + 1 }, updatedAt: nowIso() } },
   ];
@@ -1448,6 +1448,8 @@ export interface ImportRow {
   width?: number;
   height?: number;
   imageUrl?: string;
+  /** Every web image the source lists, in order; kept on the item when it has none of its own yet. */
+  imageUrls?: string[];
   /** Id in the source system (Shopify / WooCommerce product id). */
   externalId?: string;
   externalSource?: "shopify" | "woocommerce";
@@ -1518,6 +1520,9 @@ export async function importItems(store: Store, actor: Actor, rows: ImportRow[],
     if (row.published === false) fields.status = "inactive";
 
     const existing = bySku.get(sku);
+    // A store's images come along the first time; images curated here are never overwritten by a sync.
+    const urls = (row.imageUrls?.length ? row.imageUrls : row.imageUrl ? [row.imageUrl.split(/[,|]/)[0]!.trim()] : []).filter(Boolean);
+    if (urls.length && !existing?.images?.length) fields.images = urls.map((url) => ({ url, source: row.externalSource ?? "manual" }));
     if (row.attributes && Object.keys(row.attributes).length) {
       fields.attributes = { ...(existing?.attributes ?? {}), ...row.attributes };
     }

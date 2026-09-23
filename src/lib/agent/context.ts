@@ -2,7 +2,7 @@ import type { WorkspaceSnapshot } from "@/lib/types";
 import { inventoryValue, isLowStock, reorderQty } from "@/lib/inventory";
 
 /** Compact text snapshot of the workspace for Strato's system prompt. */
-export function buildAgentContext(ws: Pick<WorkspaceSnapshot, "items" | "suppliers" | "orders" | "rmas" | "settings" | "members"> & Partial<Pick<WorkspaceSnapshot, "integrations">>, extra: { page?: string; selectedSkus?: string[] } = {}): string {
+export function buildAgentContext(ws: Pick<WorkspaceSnapshot, "items" | "suppliers" | "orders" | "rmas" | "settings" | "members"> & Partial<Pick<WorkspaceSnapshot, "integrations" | "purchaseOrders" | "purchaseOrderTemplates">>, extra: { page?: string; selectedSkus?: string[] } = {}): string {
   const settings = ws.settings[0];
   const active = ws.items.filter((i) => i.status === "active");
   const low = ws.items.filter((i) => isLowStock(i, ws.settings?.[0]?.stockAlerts)).sort((a, b) => a.onHand / (a.minQty || 1) - b.onHand / (b.minQty || 1));
@@ -16,6 +16,8 @@ export function buildAgentContext(ws: Pick<WorkspaceSnapshot, "items" | "supplie
   lines.push(`Categories: ${Array.from(cats.entries()).map(([c, n]) => `${c} (${n})`).join(", ")}`);
   lines.push(`Suppliers: ${ws.suppliers.map((s) => `${s.name}${s.leadTimeDays ? ` [${s.leadTimeDays}d]` : ""}`).join(", ") || "none"}`);
   lines.push(`Open orders: ${openOrders.length}${openOrders.length ? ` (${openOrders.slice(0, 5).map((o) => `${o.number} ${o.customer}`).join("; ")})` : ""} · Open RMAs: ${openRmas.length}${openRmas.length ? ` (${openRmas.map((r) => r.number).join(", ")})` : ""}`);
+  const openPos = (ws.purchaseOrders ?? []).filter((p) => p.status === "draft" || p.status === "sent" || p.status === "partial");
+  lines.push(`Open purchase orders: ${openPos.length}${openPos.length ? ` (${openPos.slice(0, 5).map((p) => `${p.number} ${p.supplier} ${p.status}${p.expectedAt ? ` due ${p.expectedAt}` : ""}`).join("; ")})` : ""} · PO templates: ${(ws.purchaseOrderTemplates ?? []).map((t) => t.name).join(", ") || "none"}`);
   lines.push(`Team: ${ws.members.map((m) => `${m.name} (${m.role})`).join(", ")}`);
   const NAMES: Record<string, string> = { shopify: "Shopify", woocommerce: "WooCommerce", shippo: "Shippo", easypost: "EasyPost", quickbooks: "QuickBooks", square: "Square" };
   const connected = (ws.integrations ?? []).filter((c) => c.status === "connected" || c.status === "error");
