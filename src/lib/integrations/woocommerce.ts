@@ -363,8 +363,8 @@ export async function deleteProduct(creds: WooCreds, ref: WooRef, opts: { force?
   try {
     await request(creds, path, { method: "DELETE", query: { force: opts.force ? "true" : "false" } });
   } catch (e) {
-    // Already gone counts as done.
-    if (e instanceof HttpError && (e.status === 404 || e.code === "woocommerce_rest_product_invalid_id" || e.code === "woocommerce_rest_invalid_id")) return;
+    // Already gone (or already in the trash) counts as done.
+    if (e instanceof HttpError && (e.status === 404 || e.status === 410 || e.code === "woocommerce_rest_product_invalid_id" || e.code === "woocommerce_rest_invalid_id" || e.code === "woocommerce_rest_already_trashed")) return;
     throw e;
   }
 }

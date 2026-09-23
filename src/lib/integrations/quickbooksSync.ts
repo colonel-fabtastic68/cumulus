@@ -2,6 +2,7 @@ import type { Integration, Item } from "@/lib/types";
 import type { WriteOp } from "@/lib/store/types";
 import { activityOp, importItems, type ImportRow } from "@/lib/inventory";
 import { nowIso } from "@/lib/utils";
+import { applyExclusions } from "./exclusions";
 import type { Secrets, ServerContext } from "./server";
 import { listItems, withToken, type QboEnvironment, type QboItem } from "./quickbooks";
 
@@ -57,11 +58,15 @@ export function quickbooksRows(items: QboItem[]): { rows: Array<{ row: ImportRow
 export async function runQuickbooksSync(ctx: ServerContext, integration: Integration, secrets: Secrets): Promise<QboSyncResult> {
   const environment = (secrets.environment as QboEnvironment | undefined) ?? "sandbox";
   const all = await withToken(ctx, secrets, (token, realmId) => listItems(environment, token, realmId));
-  const { rows, namedAsSku, skippedOther } = quickbooksRows(all);
+  const listed = quickbooksRows(all);
+  const { namedAsSku, skippedOther } = listed;
   const firstSync = !integration.lastSyncAt;
   const takeStock = integration.settings?.takeStockOnFirstSync === true;
   const before = await ctx.store.list("items");
   const knownSkus = new Set(before.map((i) => i.sku.toUpperCase()));
+  // Products deleted here stay deleted, whatever QuickBooks still lists.
+  const excluded = applyExclusions(integration, listed.rows, knownSkus);
+  const rows = excluded.rows;
   // After the first sync only records QuickBooks changed since then are re-imported; the rest keep local edits.
   const since = integration.lastSyncAt ? new Date(integration.lastSyncAt).getTime() - 5 * 60_000 : 0;
   const toImport = rows.filter((r) => firstSync || !knownSkus.has(r.row.sku.toUpperCase()) || !r.modifiedAt || new Date(r.modifiedAt).getTime() > since);
@@ -74,7 +79,7 @@ export async function runQuickbooksSync(ctx: ServerContext, integration: Integra
 
   const items = await ctx.store.list("items");
   const bySku = new Map(items.map((i) => [i.sku.toUpperCase(), i]));
-  const ops: WriteOp[] = [];
+  const ops: WriteOp[] = [...excluded.ops];
   for (const r of rows) {
     const item = bySku.get(r.row.sku.toUpperCase());
     if (!item || item.externalIds?.quickbooks === r.qboId) continue;
@@ -82,7 +87,7 @@ export async function runQuickbooksSync(ctx: ServerContext, integration: Integra
     ops.push({ op: "patch", collection: "items", id: item.id, patch });
   }
   const finishedAt = nowIso();
-  const summary = `${rows.length} product${rows.length === 1 ? "" : "s"} from QuickBooks: ${result.created} new, ${result.updated} updated${namedAsSku ? `, ${namedAsSku} without a SKU filed under their name` : ""}${skippedOther ? `, ${skippedOther} categor${skippedOther === 1 ? "y/bundle" : "ies/bundles"} skipped` : ""}`;
+  const summary = `${rows.length} product${rows.length === 1 ? "" : "s"} from QuickBooks: ${result.created} new, ${result.updated} updated${namedAsSku ? `, ${namedAsSku} without a SKU filed under their name` : ""}${skippedOther ? `, ${skippedOther} categor${skippedOther === 1 ? "y/bundle" : "ies/bundles"} skipped` : ""}${excluded.skipped ? `, ${excluded.skipped} deleted here kept out` : ""}`;
   ops.push({ op: "patch", collection: "integrations", id: "quickbooks", patch: { lastSyncAt: finishedAt, lastSyncSummary: summary, lastError: undefined, status: "connected" } });
   ops.push(activityOp(ctx.actor, "integration.synced", `QuickBooks sync: ${summary}`, { entityType: "integration", entityId: "quickbooks", meta: { created: result.created, updated: result.updated } }));
   await ctx.store.batch(ops);

@@ -732,6 +732,8 @@ export interface Integration {
   webhooks?: Array<{ id: string; topic: string }>;
   /** Last time item details were pushed out; items updated after this go on the next push. */
   lastDetailsPushAt?: string;
+  /** SKUs deleted in cumulusOS: pulls from this connection skip them until the item exists here again. */
+  excludedSkus?: string[];
   createdAt: string;
 }
 

@@ -318,6 +318,23 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
   if (integration.config?.currency) rows.push({ label: "Currency", value: integration.config.currency });
   rows.push({ label: "Connected", value: integration.connectedAt ? <span title={formatDateTime(integration.connectedAt)}>{formatRelative(integration.connectedAt)}</span> : "—" });
   if (def.kind === "channel" || def.kind === "accounting" || def.kind === "pos") rows.push({ label: "Last sync", value: integration.lastSyncAt ? <span title={formatDateTime(integration.lastSyncAt)}>{formatRelative(integration.lastSyncAt)}{integration.lastSyncSummary ? ` · ${integration.lastSyncSummary}` : ""}</span> : <span className="text-text-tertiary">Not yet</span> });
+  if (integration.excludedSkus?.length) {
+    const n = integration.excludedSkus.length;
+    rows.push({
+      label: "Deleted here",
+      value: (
+        <span className="inline-flex flex-wrap items-center gap-2">
+          <span>
+            {n} SKU{n === 1 ? "" : "s"} kept out of syncs ({integration.excludedSkus.slice(0, 5).join(", ")}
+            {n > 5 ? `, +${n - 5}` : ""})
+          </span>
+          <button type="button" className="text-accent hover:underline" onClick={() => void run("save", async () => { await store.patch("integrations", def.id, { excludedSkus: [] }); return "The next sync may bring those products back in."; })} disabled={busy !== null}>
+            Allow them back
+          </button>
+        </span>
+      ),
+    });
+  }
   if (def.kind !== "accounting" && def.kind !== "pos") rows.push({ label: "Webhooks", value: integration.webhooks?.length ? `${integration.webhooks.length} registered (${integration.webhooks.map((w) => w.topic).join(", ")})` : <span className="text-text-tertiary">None</span> });
 
   return (

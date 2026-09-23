@@ -1264,6 +1264,13 @@ export async function deleteItems(store: Store, actor: Actor, itemIds: string[])
       if (ref) ops.push({ op: "put", collection: "channelTombstones", doc: { id: newId("tomb"), channel, sku: it.sku, itemId: it.id, ref, deletedAt: nowIso(), deletedBy: actor.id } });
     }
   }
+  // Connected stores and ledgers must not bring the SKU back on their next pull; each connection remembers what was deleted here.
+  const integrations = await store.list("integrations");
+  for (const integration of integrations) {
+    const have = new Set((integration.excludedSkus ?? []).map((s) => s.toUpperCase()));
+    const add = names.filter((sku) => !have.has(sku.toUpperCase()));
+    if (add.length) ops.push({ op: "patch", collection: "integrations", id: integration.id, patch: { excludedSkus: [...(integration.excludedSkus ?? []), ...add] } });
+  }
   ops.push(activityOp(actor, "item.deleted", `${actor.name} deleted ${names.length === 1 ? names[0] : `${names.length} items`}`, { meta: { count: names.length } }));
   await store.batch(ops);
 }

@@ -2,6 +2,7 @@ import type { Integration, Item } from "@/lib/types";
 import type { WriteOp } from "@/lib/store/types";
 import { activityOp, importItems, type ImportRow } from "@/lib/inventory";
 import { nowIso } from "@/lib/utils";
+import { applyExclusions } from "./exclusions";
 import type { Secrets, ServerContext } from "./server";
 import { inventoryCounts, listCatalog, withSquareToken, type SquareCategory, type SquareItem } from "./square";
 
@@ -54,11 +55,15 @@ export async function runSquareSync(ctx: ServerContext, integration: Integration
     const counts = integration.settings?.takeStockOnFirstSync ? await inventoryCounts(environment, token, tracked, locationIds) : new Map<string, number>();
     return { ...catalog, counts };
   });
-  const { rows, namedAsSku } = squareRows(catalogItems, categories);
+  const listed = squareRows(catalogItems, categories);
+  const { namedAsSku } = listed;
   const firstSync = !integration.lastSyncAt;
   const takeStock = integration.settings?.takeStockOnFirstSync === true;
   const before = await ctx.store.list("items");
   const known = new Set(before.map((i) => i.sku.toUpperCase()));
+  // Products deleted here stay deleted, whatever Square still lists.
+  const excluded = applyExclusions(integration, listed.rows, known);
+  const rows = excluded.rows;
   const since = integration.lastSyncAt ? new Date(integration.lastSyncAt).getTime() - 5 * 60_000 : 0;
   const toImport = rows.filter((r) => firstSync || !known.has(r.row.sku.toUpperCase()) || !r.modifiedAt || new Date(r.modifiedAt).getTime() > since);
   const fresh = toImport.filter((r) => !known.has(r.row.sku.toUpperCase()));
@@ -67,7 +72,7 @@ export async function runSquareSync(ctx: ServerContext, integration: Integration
   const b = existing.length ? await importItems(ctx.store, ctx.actor, existing.map((r) => ({ ...r.row, qty: undefined }))) : { created: 0, updated: 0, skipped: 0, errors: [] };
   const items = await ctx.store.list("items");
   const bySku = new Map(items.map((i) => [i.sku.toUpperCase(), i]));
-  const ops: WriteOp[] = [];
+  const ops: WriteOp[] = [...excluded.ops];
   for (const r of rows) {
     const item = bySku.get(r.row.sku.toUpperCase());
     if (!item || item.externalIds?.square === r.variationId) continue;
@@ -76,7 +81,7 @@ export async function runSquareSync(ctx: ServerContext, integration: Integration
   }
   const created = a.created + b.created;
   const updated = a.updated + b.updated;
-  const summary = `${rows.length} variation${rows.length === 1 ? "" : "s"} from Square: ${created} new, ${updated} updated${namedAsSku ? `, ${namedAsSku} without a SKU filed under their name` : ""}`;
+  const summary = `${rows.length} variation${rows.length === 1 ? "" : "s"} from Square: ${created} new, ${updated} updated${namedAsSku ? `, ${namedAsSku} without a SKU filed under their name` : ""}${excluded.skipped ? `, ${excluded.skipped} deleted here kept out` : ""}`;
   ops.push({ op: "patch", collection: "integrations", id: "square", patch: { lastSyncAt: nowIso(), lastSyncSummary: summary, lastError: undefined, status: "connected" } });
   ops.push(activityOp(ctx.actor, "integration.synced", `Square sync: ${summary}`, { entityType: "integration", entityId: "square", meta: { created, updated } }));
   await ctx.store.batch(ops);

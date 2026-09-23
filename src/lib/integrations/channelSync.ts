@@ -2,6 +2,7 @@ import type { Address, Integration, Item, ItemStock } from "@/lib/types";
 import type { WriteOp } from "@/lib/store/types";
 import { activityOp, adjustStock, cancelOrder, createOrder, defaultLocation, importItems, qtyAt, type ImportRow } from "@/lib/inventory";
 import { nowIso } from "@/lib/utils";
+import { applyExclusions, excludedSkuSet } from "./exclusions";
 import { HttpError, type Secrets, type ServerContext } from "./server";
 import * as shopify from "./shopify";
 import * as woo from "./woocommerce";
@@ -25,7 +26,7 @@ export interface SyncOptions {
 
 export interface SyncResult {
   summary: string;
-  products?: { seen: number; created: number; updated: number; skippedNoSku: number; unlinked?: number };
+  products?: { seen: number; created: number; updated: number; skippedNoSku: number; unlinked?: number; /** Rows for SKUs deleted here, left alone. */ keptOut?: number };
   orders?: { seen: number; created: number; alreadyIn: number; skippedNoLines: number; warnings: string[] };
 }
 
@@ -143,11 +144,15 @@ function wooRows(list: Array<{ product: woo.WooProduct; variation?: woo.WooVaria
 
 async function syncProducts(ctx: ServerContext, integration: Integration, secrets: Secrets): Promise<NonNullable<SyncResult["products"]>> {
   const id = integration.id as ChannelId;
-  const { rows, skippedNoSku } = id === "shopify" ? shopifyRows(await shopify.listProducts(shopifyCreds(integration, secrets))) : wooRows(await woo.listProducts(await wooCreds(ctx, integration, secrets)), integration.config?.weightUnit);
+  const listed = id === "shopify" ? shopifyRows(await shopify.listProducts(shopifyCreds(integration, secrets))) : wooRows(await woo.listProducts(await wooCreds(ctx, integration, secrets)), integration.config?.weightUnit);
   const firstSync = !integration.lastSyncAt;
   const takeStock = firstSync && integration.settings?.takeStockOnFirstSync === true;
   const before = await ctx.store.list("items");
   const knownSkus = new Set(before.map((i) => i.sku.toUpperCase()));
+  // SKUs deleted here stay deleted, whatever the store still lists.
+  const excluded = applyExclusions(integration, listed.rows, knownSkus);
+  const rows = excluded.rows;
+  const skippedNoSku = listed.skippedNoSku;
   // After the first sync only records the store changed since then are re-imported; the rest keep local edits.
   const since = integration.lastSyncAt ? new Date(integration.lastSyncAt).getTime() - 5 * 60_000 : 0;
   const toImport = rows.filter((r) => firstSync || !knownSkus.has(r.row.sku.toUpperCase()) || !r.modifiedAt || new Date(r.modifiedAt).getTime() > since);
@@ -155,7 +160,7 @@ async function syncProducts(ctx: ServerContext, integration: Integration, secret
   // Remember which channel record each item mirrors, so orders and stock pushes match by id, not just SKU.
   const items = await ctx.store.list("items");
   const bySku = new Map(items.map((i) => [i.sku.toUpperCase(), i]));
-  const ops: WriteOp[] = [];
+  const ops: WriteOp[] = [...excluded.ops];
   const storeKeys = new Set<string>();
   for (const r of rows) {
     const ref = r.ref[id]!;
@@ -184,7 +189,7 @@ async function syncProducts(ctx: ServerContext, integration: Integration, secret
   }
   if (unlinked) ops.push(activityOp(ctx.actor, "integration.synced", `${NAME[id]} no longer has ${unlinked} linked product${unlinked === 1 ? "" : "s"}; ${deactivate ? "deactivated and " : ""}unlinked here`, { entityType: "integration", entityId: id }));
   if (ops.length) await ctx.store.batch(ops);
-  return { seen: rows.length + skippedNoSku, created: result.created, updated: result.updated, skippedNoSku, unlinked };
+  return { seen: rows.length + skippedNoSku + excluded.skipped, created: result.created, updated: result.updated, skippedNoSku, unlinked, keptOut: excluded.skipped };
 }
 
 const NAME: Record<ChannelId, string> = { shopify: "Shopify", woocommerce: "WooCommerce" };
@@ -287,6 +292,13 @@ async function productDeletedInStore(ctx: ServerContext, integration: Integratio
 /** Applies a store-side product edit to the linked item (name, price, description…), then links it. */
 async function productUpdatedInStore(ctx: ServerContext, integration: Integration, rows: ChannelRow[]): Promise<string> {
   if (rows.length === 0) return "no SKU on the product";
+  const excluded = excludedSkuSet(integration);
+  if (excluded.size) {
+    const existing = new Set((await ctx.store.list("items")).map((i) => i.sku.toUpperCase()));
+    const keptOut = rows.filter((r) => excluded.has(r.row.sku.toUpperCase()) && !existing.has(r.row.sku.toUpperCase()));
+    if (keptOut.length === rows.length) return `${keptOut.map((r) => r.row.sku).join(", ")}: deleted here, kept out`;
+    rows = rows.filter((r) => !keptOut.includes(r));
+  }
   const result = await importItems(ctx.store, ctx.actor, rows.map((r) => ({ ...r.row, qty: undefined })), {});
   const items = await ctx.store.list("items");
   const bySku = new Map(items.map((i) => [i.sku.toUpperCase(), i]));
@@ -428,7 +440,7 @@ export async function syncChannel(ctx: ServerContext, integration: Integration, 
   if (what.products) {
     result.products = await syncProducts(ctx, integration, secrets);
     const p = result.products;
-    parts.push(`${p.seen} product${p.seen === 1 ? "" : "s"} (${p.created} new, ${p.updated} updated${p.unlinked ? `, ${p.unlinked} gone from the store` : ""}${p.skippedNoSku ? `, ${p.skippedNoSku} without SKU skipped` : ""})`);
+    parts.push(`${p.seen} product${p.seen === 1 ? "" : "s"} (${p.created} new, ${p.updated} updated${p.unlinked ? `, ${p.unlinked} gone from the store` : ""}${p.skippedNoSku ? `, ${p.skippedNoSku} without SKU skipped` : ""}${p.keptOut ? `, ${p.keptOut} deleted here kept out` : ""})`);
   }
   if (what.orders) {
     result.orders = await syncOrders(ctx, integration, secrets);
