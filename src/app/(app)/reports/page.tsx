@@ -14,6 +14,7 @@ import {
   DeadStockReport,
   KpiReport,
   LowStockReport,
+  PurchaseOrdersReport,
   REPORT_TABS,
   SeasonalityReport,
   ShelfLifeReport,
@@ -85,6 +86,7 @@ function ReportsView() {
       {tab === "lowStock" && <LowStockReport />}
       {tab === "kpis" && <KpiReport />}
       {tab === "backorders" && <BackorderReport />}
+      {tab === "purchaseOrders" && <PurchaseOrdersReport />}
       {tab === "valuation" && <ValuationReport />}
       {tab === "shelfLife" && <ShelfLifeReport />}
       {tab === "deadStock" && <DeadStockReport />}

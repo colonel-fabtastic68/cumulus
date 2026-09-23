@@ -10,3 +10,4 @@ export * from "./SeasonalityReport";
 export * from "./WriteOffsReport";
 export * from "./KpiReport";
 export * from "./BackorderReport";
+export * from "./PurchaseOrdersReport";
