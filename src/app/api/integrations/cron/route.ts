@@ -8,6 +8,7 @@ import { readSecrets, requireServiceAccount, systemContext } from "@/lib/integra
 import { applyTracking } from "@/lib/integrations/tracking";
 import { adminApp } from "@/lib/mcp/adminStore";
 import { nowIso } from "@/lib/utils";
+import { autoBackup } from "@/lib/server/backups";
 
 export const maxDuration = 300;
 
@@ -55,6 +56,15 @@ export async function GET(req: Request) {
         await ctx.store.patch("integrations", integration.id, { lastError: message });
         report.push({ workspace: wsRef.id, integration: integration.id, outcome: `error: ${message}` });
       }
+    }
+  }
+  // Time Machine: one automatic backup a day for every workspace that changed.
+  for (const wsRef of workspaces) {
+    try {
+      const outcome = await autoBackup(systemContext(wsRef.id, sa));
+      if (outcome !== "unchanged") report.push({ workspace: wsRef.id, integration: "backup", outcome });
+    } catch (e) {
+      report.push({ workspace: wsRef.id, integration: "backup", outcome: `error: ${e instanceof Error ? e.message : String(e)}` });
     }
   }
   return Response.json({ ranAt: nowIso(), report });

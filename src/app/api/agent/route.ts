@@ -74,7 +74,8 @@ export async function POST(req: Request) {
   const result = streamText({
     model: modelWithFallback(google),
     instructions: systemPrompt(body.context ?? "(no snapshot provided)", body.userName ?? "a teammate", body.autoApprove ?? false),
-    messages: await convertToModelMessages(messages),
+    // A proposal the person never answered has no result; dropping it beats failing the whole turn.
+    messages: await convertToModelMessages(messages, { ignoreIncompleteToolCalls: true }),
     tools: agentTools,
     stopWhen: isStepCount(16),
     // Retries, fallbacks and quota waits all happen inside the chain.

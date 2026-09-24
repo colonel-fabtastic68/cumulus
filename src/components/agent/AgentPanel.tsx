@@ -210,8 +210,30 @@ export function AgentChat({ onClose, pending, consumePending, pendingSession, co
    * there; regenerating would rerun those tools, so it is only used when the
    * last message is the person's.
    */
+  /**
+   * A proposal still waiting for approval when the person types something new
+   * is closed as "not applied", so the model sees a complete history (a tool
+   * call without a result cannot be sent back to it) and knows to re-plan.
+   */
+  const settlePendingProposals = () => {
+    let settled = 0;
+    for (const m of messages) {
+      if (m.role !== "assistant") continue;
+      for (const p of m.parts) {
+        if (!p.type.startsWith("tool-")) continue;
+        const tp = p as unknown as { type: string; toolCallId: string; state: string };
+        if (tp.state !== "input-available") continue;
+        const name = tp.type.slice(5) as AgentToolName;
+        addToolOutput({ tool: name, toolCallId: tp.toolCallId, output: { rejected: true, superseded: true, summary: "Not applied: the user moved on before approving. Re-plan from their latest message." } as never });
+        settled++;
+      }
+    }
+    return settled;
+  };
+
   const retry = () => {
     clearError();
+    settlePendingProposals();
     const last = messages[messages.length - 1];
     if (last?.role === "assistant") void sendMessage();
     else void regenerate();
@@ -221,6 +243,7 @@ export function AgentChat({ onClose, pending, consumePending, pendingSession, co
     const text = input.trim();
     if (!text || busy) return;
     setHistorical(false);
+    settlePendingProposals();
     void sendMessage({ text });
     setInput("");
   };

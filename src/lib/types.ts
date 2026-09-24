@@ -672,7 +672,9 @@ export type ActivityType =
   | "po.created"
   | "po.sent"
   | "po.received"
-  | "po.cancelled";
+  | "po.cancelled"
+  | "backup.created"
+  | "backup.restored";
 
 export interface ActivityEvent {
   id: ID;

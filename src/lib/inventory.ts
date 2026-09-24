@@ -666,7 +666,8 @@ export async function adjustStock(store: Store, actor: Actor, inputs: AdjustInpu
     ops.push(activityOp(actor, "stock.written_off", describeMovements(actor, byId, writeOffs, "wrote off"), { ...entity(writeOffs), meta: { count: writeOffs.length } }));
   }
   if (others.length) {
-    ops.push(activityOp(actor, "stock.adjusted", describeMovements(actor, byId, others, "adjusted"), { ...entity(others), meta: { count: others.length } }));
+    const changes: FieldChange[] = others.map((m) => ({ sku: byId.get(m.itemId)?.sku ?? m.itemId, field: m.reason ? `on hand (${m.reason})` : "on hand", from: round(m.balanceAfter - m.qty, 4), to: m.balanceAfter }));
+    ops.push(activityOp(actor, "stock.adjusted", describeMovements(actor, byId, others, "adjusted"), { ...entity(others), meta: { count: others.length, changes: changes.slice(0, CHANGE_LOG_LIMIT), changesTotal: changes.length } }));
   }
   await store.batch(ops);
   return movements;
@@ -1197,10 +1198,36 @@ export async function updateItem(store: Store, actor: Actor, itemId: string, pat
   }
   const changed = Object.keys(patch).filter((k) => JSON.stringify((patch as Record<string, unknown>)[k]) !== JSON.stringify((item as unknown as Record<string, unknown>)[k]));
   if (changed.length === 0) return;
+  const changes = fieldChanges(item, patch as Record<string, unknown>);
   await store.batch([
     { op: "patch", collection: "items", id: itemId, patch: { ...patch, updatedAt: nowIso(), updatedBy: actor.id } },
-    activityOp(actor, "item.updated", `${actor.name} updated ${item.sku} (${changed.join(", ")})${reason ? ` · ${reason}` : ""}`, { entityType: "item", entityId: itemId, meta: { fields: changed } }),
+    activityOp(actor, "item.updated", `${actor.name} updated ${item.sku} (${changed.join(", ")})${reason ? ` · ${reason}` : ""}`, { entityType: "item", entityId: itemId, meta: { fields: changed, reason, changes: changes.slice(0, CHANGE_LOG_LIMIT), changesTotal: changes.length } }),
   ]);
+}
+
+/** One before/after line for the activity log, so a bulk change can be audited field by field. */
+export interface FieldChange {
+  sku: string;
+  field: string;
+  from: unknown;
+  to: unknown;
+}
+
+/** How many before/after lines one activity entry keeps (the count on the entry is always complete). */
+export const CHANGE_LOG_LIMIT = 300;
+
+const plain = (v: unknown): unknown => (v === undefined ? null : Array.isArray(v) || (v && typeof v === "object") ? JSON.parse(JSON.stringify(v)) : v);
+
+/** Before/after pairs for the fields a patch would change on an item, in a form the log can store. */
+export function fieldChanges(item: Item, patch: Record<string, unknown>): FieldChange[] {
+  const out: FieldChange[] = [];
+  for (const [field, to] of Object.entries(patch)) {
+    if (field === "updatedAt" || field === "updatedBy") continue;
+    const from = (item as unknown as Record<string, unknown>)[field];
+    if (JSON.stringify(from ?? null) === JSON.stringify(to ?? null)) continue;
+    out.push({ sku: item.sku, field, from: plain(from), to: plain(to) });
+  }
+  return out;
 }
 
 /** Bulk field update — Strato's bread and butter. */
@@ -1209,14 +1236,17 @@ export async function bulkUpdateItems(store: Store, actor: Actor, itemIds: strin
   const items = await store.list("items");
   const byId = new Map(items.map((i) => [i.id, i]));
   const ops: WriteOp[] = [];
+  const changes: FieldChange[] = [];
   let count = 0;
   for (const id of itemIds) {
-    if (!byId.has(id)) continue;
+    const item = byId.get(id);
+    if (!item) continue;
     ops.push({ op: "patch", collection: "items", id, patch: { ...patch, updatedAt: nowIso(), updatedBy: actor.id } });
+    changes.push(...fieldChanges(item, patch as Record<string, unknown>));
     count++;
   }
   const fields = Object.keys(patch).join(", ");
-  ops.push(activityOp(actor, "item.updated", `${actor.name} updated ${fields} on ${count} item${count === 1 ? "" : "s"}${reason ? ` · ${reason}` : ""}`, { meta: { count, fields: Object.keys(patch) } }));
+  ops.push(activityOp(actor, "item.updated", `${actor.name} updated ${fields} on ${count} item${count === 1 ? "" : "s"}${reason ? ` · ${reason}` : ""}`, { meta: { count, fields: Object.keys(patch), reason, changes: changes.slice(0, CHANGE_LOG_LIMIT), changesTotal: changes.length } }));
   await store.batch(ops);
   return count;
 }
@@ -1563,9 +1593,14 @@ export async function importItems(store: Store, actor: Actor, rows: ImportRow[],
 /** Per-item patches in one batch with a single activity entry. */
 export async function bulkPatchItems(store: Store, actor: Actor, patches: Array<{ id: string; patch: ItemPatch }>, reason: string): Promise<number> {
   if (patches.length === 0) return 0;
+  const byId = new Map((await store.list("items")).map((i) => [i.id, i]));
   const ops: WriteOp[] = patches.map((p) => ({ op: "patch", collection: "items", id: p.id, patch: { ...p.patch, updatedAt: nowIso(), updatedBy: actor.id } }));
+  const changes = patches.flatMap((p) => {
+    const item = byId.get(p.id);
+    return item ? fieldChanges(item, p.patch as Record<string, unknown>) : [];
+  });
   const fields = Array.from(new Set(patches.flatMap((p) => Object.keys(p.patch)))).join(", ");
-  ops.push(activityOp(actor, "item.updated", `${actor.name} updated ${fields} on ${patches.length} item${patches.length === 1 ? "" : "s"} · ${reason}`, { meta: { count: patches.length } }));
+  ops.push(activityOp(actor, "item.updated", `${actor.name} updated ${fields} on ${patches.length} item${patches.length === 1 ? "" : "s"} · ${reason}`, { meta: { count: patches.length, fields: fields.split(", "), reason, changes: changes.slice(0, CHANGE_LOG_LIMIT), changesTotal: changes.length } }));
   await store.batch(ops);
   return patches.length;
 }

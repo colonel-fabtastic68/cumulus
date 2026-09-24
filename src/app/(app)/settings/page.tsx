@@ -16,6 +16,7 @@ import {
   LocationsSection,
   QuotingSection,
   ShippingSection,
+  TimeMachineSection,
   settingsSection,
 } from "@/components/workspace/settings";
 import { canManageTeam } from "@/components/workspace/team";
@@ -92,6 +93,11 @@ export default function SettingsPage() {
         <Row id="billing">
           <BillingSection settings={settings} />
         </Row>
+        {canManage && (
+          <Row id="time-machine">
+            <TimeMachineSection />
+          </Row>
+        )}
         {/* Hosted workspaces: backup, reset and clear live on the admin dashboard. Local mode keeps them here (there is no admin). */}
         {mode !== "firestore" && (
           <Row id="data">
