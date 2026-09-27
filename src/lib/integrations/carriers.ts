@@ -93,10 +93,15 @@ function shippoAddress(a: Address) {
   return { name: a.name || a.company || "Recipient", company: a.company, street1: a.street1, street2: a.street2, city: a.city, state: a.state, zip: a.zip, country: a.country, phone: a.phone, email: a.email };
 }
 
+/** Pasted API keys are sent as ShippoToken; tokens from the OAuth sign-in must go as Bearer. */
+function shippoAuth(token: string): string {
+  return /^shippo_/i.test(token) ? `ShippoToken ${token}` : `Bearer ${token}`;
+}
+
 async function shippoRequest<T>(token: string, path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
   const { data } = await fetchJson<T>(`${SHIPPO}${path}`, {
     method: init.method ?? "GET",
-    headers: { Authorization: `ShippoToken ${token}`, "Content-Type": "application/json", Accept: "application/json" },
+    headers: { Authorization: shippoAuth(token), "Content-Type": "application/json", Accept: "application/json" },
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
   });
   return data;

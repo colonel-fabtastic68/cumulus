@@ -112,11 +112,12 @@ export const INTEGRATIONS: IntegrationDef[] = [
   {
     id: "shippo",
     name: "Shippo",
+    oauth: true,
     kind: "carrier",
     stage: "in_progress",
     description: "One API key for USPS, UPS, FedEx, DHL and the other carriers on your Shippo account: compare rates when shipping an order, buy the label, and track it to the door.",
     fields: [{ key: "token", label: "API token", placeholder: "shippo_live_… or shippo_test_…", secret: true, help: "A test token buys sample labels and costs nothing; switch to the live token when ready." }],
-    setup: { steps: ["In Shippo open Settings → API and generate a token", "Add your carrier accounts under Settings → Carriers (USPS comes built in)", "Paste the token here, then set a ship-from address under Settings → Shipping and scanning"], docsUrl: "https://docs.goshippo.com/docs/guides_general/authentication/" },
+    setup: { steps: ["Press Connect to Shippo and sign in to your Shippo account (or create one there)", "Approve the access; you come straight back here, connected", "Add your carrier accounts in Shippo under Settings → Carriers (USPS comes built in), and set a ship-from address under Settings → Shipping and scanning"], docsUrl: "https://docs.goshippo.com/guides/authentication" },
   },
   {
     id: "easypost",

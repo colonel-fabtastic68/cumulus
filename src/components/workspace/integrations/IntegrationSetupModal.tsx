@@ -176,6 +176,8 @@ function OAuthConnect({ def, integration, onClose }: { def: IntegrationDef; inte
   const [refreshToken, setRefreshToken] = useState("");
   const [shop, setShop] = useState(integration?.config?.shop ?? "");
   const needsShop = def.id === "shopify";
+  // Shopify and the carriers also take a pasted key; QuickBooks only in the sandbox.
+  const pasteForm = needsShop || def.kind === "carrier";
 
   const paste = async () => {
     setBusy(true);
@@ -210,14 +212,14 @@ function OAuthConnect({ def, integration, onClose }: { def: IntegrationDef; inte
       {error && <Banner tone="critical">{error}</Banner>}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Button variant="plain" size="sm" onClick={() => setManual((v) => !v)}>
-          {manual ? (needsShop ? "Back to Connect to Shopify" : "Hide sandbox token entry") : needsShop ? "Use an Admin API access token instead" : def.id === "quickbooks" ? "Sandbox: paste tokens from Intuit's playground instead" : ""}
+          {manual ? (pasteForm ? `Back to Connect to ${def.name}` : "Hide sandbox token entry") : needsShop ? "Use an Admin API access token instead" : def.kind === "carrier" ? "Paste an API token instead" : def.id === "quickbooks" ? "Sandbox: paste tokens from Intuit's playground instead" : ""}
         </Button>
         <Button variant="primary" icon={<ExternalLink />} onClick={() => void start()} loading={busy && !manual} disabled={needsShop && !shop.trim()}>
           Connect to {def.name.replace(/ Online$/, "")}
         </Button>
       </div>
-      {manual && needsShop && <ConnectForm def={def} integration={integration} onClose={onClose ?? (() => {})} />}
-      {manual && !needsShop && (
+      {manual && pasteForm && <ConnectForm def={def} integration={integration} onClose={onClose ?? (() => {})} />}
+      {manual && !pasteForm && (
         <div className="flex flex-col gap-3 rounded-[var(--radius)] border border-border bg-surface-subdued p-4">
           <p className="text-[12.5px] leading-5 text-text-secondary">For sandbox development keys only. In Intuit&apos;s OAuth 2.0 Playground, get an authorization code for this app, press Get tokens, then copy the refresh token and realm id here. They are kept on the server and refreshed like any other connection.</p>
           <TextField label="Realm (company) ID" placeholder="9341457924087297" value={realmId} onChange={(e) => setRealmId(e.target.value)} autoComplete="off" />
