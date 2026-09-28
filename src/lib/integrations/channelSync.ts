@@ -8,9 +8,12 @@ import * as shopify from "./shopify";
 import * as woo from "./woocommerce";
 
 /**
- * Factor 40: two-way sync with sales channels. Products come in as items
- * (matched by SKU), paid orders come in as sales orders, and on-hand counts go
- * back out so the storefront never oversells.
+ * Factor 40: sales channels mirror cumulusOS. Nothing about it is configurable:
+ * items, categories, prices, descriptions, stock levels and active/inactive go
+ * out to the store; orders and products the store has that cumulusOS does not
+ * come in (once, with the store's count as the opening quantity); an item
+ * deleted here is removed from the store. Edits made in the store to a product
+ * cumulusOS knows are overwritten on the next push.
  */
 
 export type ChannelId = "shopify" | "woocommerce";
@@ -145,30 +148,17 @@ function wooRows(list: Array<{ product: woo.WooProduct; variation?: woo.WooVaria
 async function syncProducts(ctx: ServerContext, integration: Integration, secrets: Secrets): Promise<NonNullable<SyncResult["products"]>> {
   const id = integration.id as ChannelId;
   const listed = id === "shopify" ? shopifyRows(await shopify.listProducts(shopifyCreds(integration, secrets))) : wooRows(await woo.listProducts(await wooCreds(ctx, integration, secrets)), integration.config?.weightUnit);
-  const firstSync = !integration.lastSyncAt;
-  const takeStock = firstSync && integration.settings?.takeStockOnFirstSync === true;
   const before = await ctx.store.list("items");
   const knownSkus = new Set(before.map((i) => i.sku.toUpperCase()));
   // SKUs deleted here stay deleted, whatever the store still lists.
   const excluded = applyExclusions(integration, listed.rows, knownSkus);
   const rows = excluded.rows;
   const skippedNoSku = listed.skippedNoSku;
-  // Items already here: with "push item changes" on, cumulusOS owns the details and the store never overwrites
-  // them (our own pushes make the store report every product as modified). Otherwise a store edit comes in only
-  // when it is newer than the last edit made here.
-  const since = integration.lastSyncAt ? new Date(integration.lastSyncAt).getTime() - 5 * 60_000 : 0;
-  const localWins = integration.settings?.pushDetails !== false;
-  const beforeBySku = new Map(before.map((i) => [i.sku.toUpperCase(), i]));
-  const toImport = rows.filter((r) => {
-    const sku = r.row.sku.toUpperCase();
-    if (firstSync || !knownSkus.has(sku)) return true;
-    if (localWins) return false;
-    if (!r.modifiedAt) return true;
-    const storeChanged = new Date(r.modifiedAt).getTime();
-    const localChanged = new Date(beforeBySku.get(sku)?.updatedAt ?? 0).getTime();
-    return storeChanged > since && storeChanged > localChanged;
-  });
-  const result = await importItems(ctx.store, ctx.actor, toImport.map((r) => (takeStock ? r.row : { ...r.row, qty: undefined })), { setQuantities: takeStock });
+  // cumulusOS is the source of truth: a product the store has and cumulusOS does not is created here once, with the
+  // store's count as its opening quantity. Items that already exist are never changed by a pull; the next push
+  // sends cumulusOS's version out instead.
+  const toImport = rows.filter((r) => !knownSkus.has(r.row.sku.toUpperCase()));
+  const result = await importItems(ctx.store, ctx.actor, toImport.map((r) => r.row), { setQuantities: true });
   // Remember which channel record each item mirrors, so orders and stock pushes match by id, not just SKU.
   const items = await ctx.store.list("items");
   const bySku = new Map(items.map((i) => [i.sku.toUpperCase(), i]));
@@ -188,7 +178,8 @@ async function syncProducts(ctx: ServerContext, integration: Integration, secret
   // Products that vanished from the store: unlink the item (and deactivate it when asked to).
   // An empty listing is treated as a failed read rather than an emptied store, so nothing is unlinked on a hiccup.
   let unlinked = 0;
-  const deactivate = integration.settings?.deactivateOnStoreDelete === true;
+  // Unlinked, not deactivated: the item is cumulusOS's, and the next push recreates its product.
+  const deactivate = false;
   for (const item of rows.length === 0 ? [] : items) {
     const ref = item.channels?.[id];
     if (!ref || storeKeys.has(channelKey(ref))) continue;
@@ -216,9 +207,8 @@ export async function processTombstones(ctx: ServerContext, integration: Integra
   const tombstones = (await ctx.store.list("channelTombstones")).filter((t) => t.channel === id);
   const out = { removed: 0, errors: [] as string[] };
   if (tombstones.length === 0) return out;
-  const remove = integration.settings?.removeFromStoreOnDelete !== false;
   const done: WriteOp[] = [];
-  if (remove) {
+  {
     if (id === "shopify") {
       const creds = shopifyCreds(integration, secrets);
       for (const t of tombstones) {
@@ -242,8 +232,6 @@ export async function processTombstones(ctx: ServerContext, integration: Integra
         }
       }
     }
-  } else {
-    for (const t of tombstones) done.push({ op: "remove", collection: "channelTombstones", id: t.id });
   }
   if (out.removed) done.push(activityOp(ctx.actor, "integration.synced", `Removed ${out.removed} product${out.removed === 1 ? "" : "s"} from ${NAME[id]} for items deleted here`, { entityType: "integration", entityId: id }));
   if (done.length) await ctx.store.batch(done);
@@ -291,7 +279,8 @@ async function productDeletedInStore(ctx: ServerContext, integration: Integratio
   const id = integration.id as ChannelId;
   const items = (await ctx.store.list("items")).filter((i) => !!i.channels?.[id] && match(i));
   if (items.length === 0) return "no linked item";
-  const deactivate = integration.settings?.deactivateOnStoreDelete === true;
+  // The item stays as it is here; the next push puts the product back in the store.
+  const deactivate = false;
   const ops: WriteOp[] = items.map((item) => {
     const channels = { ...(item.channels ?? {}) };
     delete channels[id];
@@ -312,16 +301,10 @@ async function productUpdatedInStore(ctx: ServerContext, integration: Integratio
     if (keptOut.length === rows.length) return `${keptOut.map((r) => r.row.sku).join(", ")}: deleted here, kept out`;
     rows = rows.filter((r) => !keptOut.includes(r));
   }
-  // Same rule as a full sync: details edited here are not overwritten by the store when we push them out.
-  const localWins = integration.settings?.pushDetails !== false;
-  const before = new Map((await ctx.store.list("items")).map((i) => [i.sku.toUpperCase(), i]));
-  const importable = rows.filter((r) => {
-    const item = before.get(r.row.sku.toUpperCase());
-    if (!item) return true;
-    if (localWins) return false;
-    return !r.modifiedAt || new Date(r.modifiedAt).getTime() > new Date(item.updatedAt).getTime();
-  });
-  const result = importable.length ? await importItems(ctx.store, ctx.actor, importable.map((r) => ({ ...r.row, qty: undefined })), {}) : { created: 0, updated: 0, skipped: 0, errors: [] };
+  // Same rule as a full sync: only products cumulusOS does not have come in; existing items are never changed by the store.
+  const before = new Set((await ctx.store.list("items")).map((i) => i.sku.toUpperCase()));
+  const importable = rows.filter((r) => !before.has(r.row.sku.toUpperCase()));
+  const result = importable.length ? await importItems(ctx.store, ctx.actor, importable.map((r) => r.row), { setQuantities: true }) : { created: 0, updated: 0, skipped: 0, errors: [] };
   const items = await ctx.store.list("items");
   const bySku = new Map(items.map((i) => [i.sku.toUpperCase(), i]));
   const ops: WriteOp[] = [];
@@ -331,7 +314,7 @@ async function productUpdatedInStore(ctx: ServerContext, integration: Integratio
   }
   if (ops.length) await ctx.store.batch(ops);
   const skus = rows.map((r) => r.row.sku).join(", ");
-  return importable.length ? `${skus}: ${result.created ? "created" : "updated"} from the store` : `${skus}: linked; details here are newer and were kept`;
+  return importable.length ? `${skus}: created from the store (${result.created})` : `${skus}: linked; cumulusOS is the source of truth, so the store's edit is not applied`;
 }
 
 // ---- orders --------------------------------------------------------------------
@@ -544,7 +527,8 @@ export async function pushProductsToChannel(ctx: ServerContext, integration: Int
   const homeId = defaultLocation(locations).location.id;
   const locationId = integration.settings?.locationId;
   const qtyFor = (item: Item) => Math.max(0, locationId ? qtyAt(item, locationId, homeId) : item.onHand);
-  const publish = integration.settings?.publishProducts === true;
+  // Active items go live; inactive ones are never pushed as new products at all.
+  const publish = true;
   const ops: WriteOp[] = [];
 
   const skus = items.map((i) => i.sku.trim());
@@ -600,12 +584,10 @@ export async function pushProductsToChannel(ctx: ServerContext, integration: Int
 /** Applies one webhook delivery. Returns a one-line description for logs. */
 export async function handleChannelWebhook(ctx: ServerContext, integration: Integration, secrets: Secrets, topic: string, payload: unknown): Promise<string> {
   const id = integration.id as ChannelId;
-  const settings = integration.settings ?? {};
   const body = (payload ?? {}) as Record<string, unknown>;
 
   if (id === "shopify") {
     if (topic.startsWith("orders/")) {
-      if (!settings.syncOrders) return "orders sync is off";
       const incoming = fromShopifyOrder(body as unknown as shopify.ShopifyOrder);
       if (!incoming.cancelled && (body.fulfillment_status === "fulfilled" || ["voided", "refunded"].includes(String(body.financial_status)))) return `${incoming.externalRef} ignored (${body.fulfillment_status ?? body.financial_status})`;
       return `${incoming.externalRef}: ${await applyIncoming(ctx, integration, incoming)}`;
@@ -616,25 +598,14 @@ export async function handleChannelWebhook(ctx: ServerContext, integration: Inte
       return productDeletedInStore(ctx, integration, (i) => i.channels?.shopify?.productId === productId);
     }
     if (topic === "products/update") {
-      if (!settings.syncProducts) return "products sync is off";
       const { rows } = shopifyRows([body as unknown as shopify.ShopifyProduct]);
       return productUpdatedInStore(ctx, integration, rows);
     }
-    if (topic === "inventory_levels/update") {
-      if (!settings.acceptStockFromChannel) return "stock from channel is off";
-      const inventoryItemId = String(body.inventory_item_id ?? "");
-      const available = Number(body.available);
-      if (!inventoryItemId || !Number.isFinite(available)) return "ignored";
-      if (settings.channelLocationId && String(body.location_id ?? "") !== settings.channelLocationId) return "other location";
-      const item = (await ctx.store.list("items")).find((i) => i.channels?.shopify?.inventoryItemId === inventoryItemId);
-      if (!item) return "no linked item";
-      return await countFromChannel(ctx, integration, item, available);
-    }
+    if (topic === "inventory_levels/update") return "stock from the store is not applied; cumulusOS is the source of truth";
     return `unhandled topic ${topic}`;
   }
 
   if (topic.startsWith("order.")) {
-    if (!settings.syncOrders) return "orders sync is off";
     if (typeof body.id !== "number" && typeof body.id !== "string") return "no order in payload";
     const incoming = fromWooOrder(body as unknown as woo.WooOrder);
     const status = String(body.status ?? "");
@@ -651,14 +622,9 @@ export async function handleChannelWebhook(ctx: ServerContext, integration: Inte
     if (!productId) return "ignored";
     const notes: string[] = [];
     if (String(body.status ?? "") === "trash") return productDeletedInStore(ctx, integration, (i) => i.channels?.woocommerce?.productId === productId);
-    if (settings.syncProducts) {
+    {
       const { rows } = wooRows([{ product: body as unknown as woo.WooProduct }], integration.config?.weightUnit);
       if (rows.length) notes.push(await productUpdatedInStore(ctx, integration, rows));
-    }
-    if (settings.acceptStockFromChannel) {
-      const qty = body.manage_stock ? Number(body.stock_quantity) : NaN;
-      const item = (await ctx.store.list("items")).find((i) => i.channels?.woocommerce?.productId === productId && !i.channels?.woocommerce?.variationId);
-      if (item && Number.isFinite(qty)) notes.push(await countFromChannel(ctx, integration, item, qty));
     }
     return notes.join(" · ") || "nothing to apply";
   }
@@ -691,15 +657,15 @@ export interface RunResult {
 
 /** The whole two-way pass in the right order: deletes out, products and orders in, new items out, edits out, stock out. */
 export async function runChannelSync(ctx: ServerContext, integration: Integration, secrets: Secrets, opts: RunOptions): Promise<RunResult> {
-  const s = integration.settings ?? {};
   const errors: string[] = [];
   const parts: string[] = [];
   const tomb = await processTombstones(ctx, integration, secrets);
   errors.push(...tomb.errors);
   if (tomb.removed) parts.push(`${tomb.removed} removed from the store`);
   const result: RunResult = { summary: "", removed: tomb.removed, errors };
-  const doProducts = opts.products ?? s.syncProducts !== false;
-  const doOrders = opts.orders ?? s.syncOrders !== false;
+  // Everything runs every time; the options only narrow a pass (the page bridge pushes just the changed items).
+  const doProducts = opts.products ?? true;
+  const doOrders = opts.orders ?? true;
   if ((doProducts || doOrders) && !opts.itemIds) {
     const sync = await syncChannel(ctx, integration, secrets, { products: doProducts, orders: doOrders });
     result.products = sync.products;
@@ -707,20 +673,20 @@ export async function runChannelSync(ctx: ServerContext, integration: Integratio
     parts.push(sync.summary);
     errors.push(...(sync.orders?.warnings ?? []));
   }
-  if (opts.pushProducts ?? s.pushProducts) {
+  if (opts.pushProducts ?? true) {
     const p = await pushProductsToChannel(ctx, integration, secrets, opts.itemIds);
     result.created = p.created;
     result.linked = p.linked;
     errors.push(...p.errors);
-    if (p.created || p.linked) parts.push(`${p.created} new ${s.publishProducts ? "live" : "draft"} product${p.created === 1 ? "" : "s"} pushed${p.linked ? `, ${p.linked} linked by SKU` : ""}`);
+    if (p.created || p.linked) parts.push(`${p.created} new product${p.created === 1 ? "" : "s"} pushed${p.linked ? `, ${p.linked} linked by SKU` : ""}`);
   }
-  if (opts.pushDetails ?? s.pushDetails) {
+  if (opts.pushDetails ?? true) {
     const d = await pushItemDetails(ctx, integration, secrets, opts.detailIds ?? (opts.itemIds ? [] : undefined));
     result.detailsUpdated = d.updated;
     errors.push(...d.errors);
     if (d.updated) parts.push(`${d.updated} product${d.updated === 1 ? "" : "s"} updated in the store`);
   }
-  if (opts.pushStock ?? s.pushStock) {
+  if (opts.pushStock ?? true) {
     const st = await pushStockToChannel(ctx, integration, secrets, opts.itemIds);
     result.stockPushed = st.pushed;
     errors.push(...st.errors);
@@ -740,14 +706,5 @@ async function applyIncoming(ctx: ServerContext, integration: Integration, incom
   return upsertIncoming(ctx, integration, incoming, items, existing);
 }
 
-async function countFromChannel(ctx: ServerContext, integration: Integration, item: Item, qty: number): Promise<string> {
-  const locations = await ctx.store.list("locations");
-  const homeId = defaultLocation(locations).location.id;
-  const locationId = integration.settings?.locationId ?? homeId;
-  const current = qtyAt(item, locationId, homeId);
-  if (current === qty) return `${item.sku} already ${qty}`;
-  await adjustStock(ctx.store, ctx.actor, [{ itemId: item.id, newQty: qty, locationId, reason: `Count from ${integration.id === "shopify" ? "Shopify" : "WooCommerce"}` }]);
-  return `${item.sku} counted ${current} → ${qty}`;
-}
 
 export type { ItemStock };

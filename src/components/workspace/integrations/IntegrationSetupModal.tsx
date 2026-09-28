@@ -273,11 +273,11 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
       if (!r) return "This connection is not active.";
       const parts: string[] = [];
       if (r.removed) parts.push(`${r.removed} removed from the store`);
-      if (r.created) parts.push(`${r.created} new ${integration.settings?.publishProducts ? "live" : "draft"} product${r.created === 1 ? "" : "s"} created`);
+      if (r.created) parts.push(`${r.created} new product${r.created === 1 ? "" : "s"} created`);
       if (r.linked) parts.push(`${r.linked} linked by SKU`);
       if (r.updated) parts.push(`${r.updated} product${r.updated === 1 ? "" : "s"} updated`);
       if (r.pushed) parts.push(`${r.pushed} stock level${r.pushed === 1 ? "" : "s"} pushed`);
-      if (parts.length === 0) parts.push(integration.settings?.pushStock || integration.settings?.pushProducts || integration.settings?.pushDetails ? "Nothing to push; everything is in step" : "Pushing is off; turn on the push toggles below and save");
+      if (parts.length === 0) parts.push("Nothing to push; the store is in step");
       return `${parts.join(", ")}${r.errors.length ? ` · ${r.errors.slice(0, 2).join("; ")}` : ""}`;
     });
 
@@ -350,9 +350,14 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
           </Button>
           {def.kind === "channel" && (
             <Button icon={<ArrowRight />} onClick={() => void push()} loading={busy === "push"} disabled={busy !== null}>
-              Push to store
+              Push updates
             </Button>
           )}
+        </div>
+      )}
+      {def.kind === "channel" && (
+        <div className="rounded-[var(--radius)] border border-border bg-surface-subdued px-3.5 py-3 text-[12.5px] leading-5 text-text-secondary">
+          <span className="font-medium text-text">cumulusOS is the source of truth.</span> Items, categories, prices, descriptions, stock levels and active/inactive are pushed to {def.name} as you change them here and on every sync. Orders come in, and a product the store has that cumulusOS does not is created here once. Edits made in {def.name} are overwritten; deleting an item here removes it from the store.
         </div>
       )}
       {def.kind === "carrier" && (

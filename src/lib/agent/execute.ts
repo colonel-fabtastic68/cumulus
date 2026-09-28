@@ -803,14 +803,12 @@ export async function describeProposal(name: AgentToolName, rawInput: unknown, c
       }
       case "syncChannel": {
         const channel = CHANNEL_NAMES[String(input.channel)] ?? String(input.channel);
-        const integration = await ctx.store.get("integrations", String(input.channel) as "shopify" | "woocommerce");
-        const s = integration?.settings ?? {};
         const on = (v: unknown, fallback: boolean | undefined) => (typeof v === "boolean" ? v : fallback);
         const steps = [
-          on(input.products, s.syncProducts !== false) ? "Pull products in" : null,
-          on(input.orders, s.syncOrders !== false) ? "Pull open orders in" : null,
-          on(input.pushProducts, s.pushProducts) ? "Create items the store does not have yet" : null,
-          on(input.pushStock, s.pushStock) ? "Push stock levels out" : null,
+          on(input.products, true) ? "Pull in products the store has and cumulusOS does not" : null,
+          on(input.orders, true) ? "Pull open orders in" : null,
+          on(input.pushProducts, true) ? "Create items the store does not have yet" : null,
+          on(input.pushStock, true) ? "Push stock levels out" : null,
         ].filter((x): x is string => Boolean(x));
         return { title: `Sync ${channel} now`, lines: steps.length ? steps : ["Nothing selected to sync"] };
       }

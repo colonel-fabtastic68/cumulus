@@ -691,6 +691,10 @@ export interface ActivityEvent {
 
 export type IntegrationId = "shopify" | "woocommerce" | "quickbooks" | "square" | "shippo" | "easypost";
 
+/**
+ * Per-connection options. Sales channels (Shopify, WooCommerce) ignore the sync/push flags: the store always
+ * mirrors cumulusOS. The flags still drive the accounting and POS pulls.
+ */
 export interface IntegrationSettings {
   /** Pull products and variants in as items (channels). */
   syncProducts?: boolean;

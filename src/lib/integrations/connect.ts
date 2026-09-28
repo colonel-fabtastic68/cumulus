@@ -49,7 +49,7 @@ export async function connectIntegration(ctx: ServerContext, req: Request, id: I
     if (apiSecret) secrets.apiSecret = apiSecret;
     if (!settings.channelLocationId && info.primaryLocationId) settings.channelLocationId = info.primaryLocationId;
     const url = `${base}/api/integrations/shopify/webhook?ws=${encodeURIComponent(ctx.workspaceId)}&t=${secrets.webhookToken}`;
-    const topics = ["orders/create", "orders/updated", "orders/cancelled", "products/update", "products/delete", ...(settings.acceptStockFromChannel ? ["inventory_levels/update"] : [])];
+    const topics = ["orders/create", "orders/updated", "orders/cancelled", "products/update", "products/delete"];
     await removeWebhooks(existing, previous, id);
     for (const topic of topics) {
       try {

@@ -27,7 +27,7 @@ export function buildAgentContext(ws: Pick<WorkspaceSnapshot, "items" | "supplie
           .map((c) => {
             const where = c.config?.shop ?? c.config?.siteUrl ?? c.config?.account;
             const linked = ws.items.filter((i) => !!i.channels?.[c.id as "shopify" | "woocommerce"]).length;
-            const flags = [c.settings?.syncProducts && "products in", c.settings?.syncOrders && "orders in", c.settings?.pushStock && "stock out", c.settings?.pushProducts && "new items out"].filter(Boolean).join(", ");
+            const flags = c.id === "shopify" || c.id === "woocommerce" ? "store mirrors cumulusOS: items, prices, stock and status out; orders and new products in" : [c.settings?.syncProducts && "products in"].filter(Boolean).join(", ");
             return `${NAMES[c.id] ?? c.id} ${c.status === "error" ? "connected with an error" : "connected"}${where ? ` (${where})` : ""}${c.lastSyncAt ? `, last sync ${c.lastSyncAt.slice(0, 16).replace("T", " ")}` : ""}${flags ? ` [${flags}]` : ""}${linked ? `, ${linked} linked items` : ""}${c.lastError ? `, last error: ${c.lastError.slice(0, 120)}` : ""}`;
           })
           .join("; ")}`
