@@ -153,9 +153,21 @@ async function syncProducts(ctx: ServerContext, integration: Integration, secret
   const excluded = applyExclusions(integration, listed.rows, knownSkus);
   const rows = excluded.rows;
   const skippedNoSku = listed.skippedNoSku;
-  // After the first sync only records the store changed since then are re-imported; the rest keep local edits.
+  // Items already here: with "push item changes" on, cumulusOS owns the details and the store never overwrites
+  // them (our own pushes make the store report every product as modified). Otherwise a store edit comes in only
+  // when it is newer than the last edit made here.
   const since = integration.lastSyncAt ? new Date(integration.lastSyncAt).getTime() - 5 * 60_000 : 0;
-  const toImport = rows.filter((r) => firstSync || !knownSkus.has(r.row.sku.toUpperCase()) || !r.modifiedAt || new Date(r.modifiedAt).getTime() > since);
+  const localWins = integration.settings?.pushDetails !== false;
+  const beforeBySku = new Map(before.map((i) => [i.sku.toUpperCase(), i]));
+  const toImport = rows.filter((r) => {
+    const sku = r.row.sku.toUpperCase();
+    if (firstSync || !knownSkus.has(sku)) return true;
+    if (localWins) return false;
+    if (!r.modifiedAt) return true;
+    const storeChanged = new Date(r.modifiedAt).getTime();
+    const localChanged = new Date(beforeBySku.get(sku)?.updatedAt ?? 0).getTime();
+    return storeChanged > since && storeChanged > localChanged;
+  });
   const result = await importItems(ctx.store, ctx.actor, toImport.map((r) => (takeStock ? r.row : { ...r.row, qty: undefined })), { setQuantities: takeStock });
   // Remember which channel record each item mirrors, so orders and stock pushes match by id, not just SKU.
   const items = await ctx.store.list("items");
@@ -260,9 +272,10 @@ export async function pushItemDetails(ctx: ServerContext, integration: Integrati
     });
   } else {
     const creds = await wooCreds(ctx, integration, secrets);
+    const categoryFor = woo.categoryResolver(creds);
     await mapConcurrent(items, 4, async (item) => {
       try {
-        await woo.updateProduct(creds, item.channels!.woocommerce!, { name: item.name, description: item.description ?? "", price: item.price, weight: item.weight ?? 0, dimensions: item.dimensions, barcode: item.barcode ?? "", status: item.status === "active" ? undefined : "draft" });
+        await woo.updateProduct(creds, item.channels!.woocommerce!, { name: item.name, description: item.description ?? "", price: item.price, weight: item.weight ?? 0, dimensions: item.dimensions, barcode: item.barcode ?? "", status: item.status === "active" ? undefined : "draft", categoryId: await categoryFor(item.category) });
         out.updated++;
       } catch (e) {
         out.errors.push(`${item.sku}: ${e instanceof Error ? e.message : String(e)}`);
@@ -299,7 +312,16 @@ async function productUpdatedInStore(ctx: ServerContext, integration: Integratio
     if (keptOut.length === rows.length) return `${keptOut.map((r) => r.row.sku).join(", ")}: deleted here, kept out`;
     rows = rows.filter((r) => !keptOut.includes(r));
   }
-  const result = await importItems(ctx.store, ctx.actor, rows.map((r) => ({ ...r.row, qty: undefined })), {});
+  // Same rule as a full sync: details edited here are not overwritten by the store when we push them out.
+  const localWins = integration.settings?.pushDetails !== false;
+  const before = new Map((await ctx.store.list("items")).map((i) => [i.sku.toUpperCase(), i]));
+  const importable = rows.filter((r) => {
+    const item = before.get(r.row.sku.toUpperCase());
+    if (!item) return true;
+    if (localWins) return false;
+    return !r.modifiedAt || new Date(r.modifiedAt).getTime() > new Date(item.updatedAt).getTime();
+  });
+  const result = importable.length ? await importItems(ctx.store, ctx.actor, importable.map((r) => ({ ...r.row, qty: undefined })), {}) : { created: 0, updated: 0, skipped: 0, errors: [] };
   const items = await ctx.store.list("items");
   const bySku = new Map(items.map((i) => [i.sku.toUpperCase(), i]));
   const ops: WriteOp[] = [];
@@ -308,7 +330,8 @@ async function productUpdatedInStore(ctx: ServerContext, integration: Integratio
     if (item) ops.push({ op: "patch", collection: "items", id: item.id, patch: { channels: { ...(item.channels ?? {}), ...r.ref } } });
   }
   if (ops.length) await ctx.store.batch(ops);
-  return `${rows.map((r) => r.row.sku).join(", ")}: ${result.created ? "created" : "updated"} from the store`;
+  const skus = rows.map((r) => r.row.sku).join(", ");
+  return importable.length ? `${skus}: ${result.created ? "created" : "updated"} from the store` : `${skus}: linked; details here are newer and were kept`;
 }
 
 // ---- orders --------------------------------------------------------------------
@@ -560,7 +583,7 @@ export async function pushProductsToChannel(ctx: ServerContext, integration: Int
         let ref = existing.get(item.sku.toUpperCase());
         if (ref) out.linked++;
         else {
-          const created = await woo.createProduct(creds, { name: item.name, sku: item.sku, price: item.price, description: item.description, stockQuantity: qtyFor(item), weight: item.weight, dimensions: item.dimensions, barcode: item.barcode, publish, images: imageUrlsOf(item) });
+          const created = await woo.createProduct(creds, { name: item.name, sku: item.sku, price: item.price, description: item.description, stockQuantity: qtyFor(item), weight: item.weight, dimensions: item.dimensions, barcode: item.barcode, publish, images: imageUrlsOf(item), categoryId: item.category ? await woo.resolveCategory(creds, item.category) : undefined });
           ref = { productId: created.id };
           out.created++;
         }

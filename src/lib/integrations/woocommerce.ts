@@ -274,6 +274,8 @@ export interface NewWooProduct {
   publish?: boolean;
   /** Web image addresses, main image first. */
   images?: string[];
+  /** Product category (a WooCommerce category id; see resolveCategory). */
+  categoryId?: number;
 }
 
 /** Creates a simple product, as a draft unless asked to publish it straight away. */
@@ -292,6 +294,7 @@ export async function createProduct(creds: WooCreds, p: NewWooProduct): Promise<
   if (p.dimensions && (p.dimensions.length || p.dimensions.width || p.dimensions.height)) body.dimensions = { length: String(p.dimensions.length ?? ""), width: String(p.dimensions.width ?? ""), height: String(p.dimensions.height ?? "") };
   if (p.barcode) body.global_unique_id = p.barcode;
   if (p.images?.length) body.images = p.images.map((src) => ({ src }));
+  if (p.categoryId) body.categories = [{ id: p.categoryId }];
   const { data } = await request<{ id?: number }>(creds, "products", { method: "POST", body });
   if (!data || typeof data.id !== "number") throw new HttpError(502, `${new URL(creds.siteUrl).host} did not confirm the new product ${p.sku}.`);
   return { id: String(data.id) };
@@ -340,6 +343,50 @@ export interface WooProductPatch {
   barcode?: string;
   /** publish / draft */
   status?: "publish" | "draft";
+  /** The item's category: becomes the product's first category; other categories the store assigned stay. */
+  categoryId?: number;
+}
+
+/** Finds a product category by name, creating it when the store has none. Names are matched without regard to case. */
+export async function resolveCategory(creds: WooCreds, name: string): Promise<number> {
+  const wanted = name.trim();
+  const find = async () => {
+    const { data } = await request<Array<{ id: number; name: string }>>(creds, "products/categories", { query: { search: wanted, per_page: "100" } });
+    const hit = (data ?? []).find((c) => decodeEntities(c.name).toLowerCase() === wanted.toLowerCase());
+    return hit?.id;
+  };
+  const existing = await find();
+  if (existing) return existing;
+  try {
+    const { data } = await request<{ id?: number }>(creds, "products/categories", { method: "POST", body: { name: wanted } });
+    if (typeof data?.id === "number") return data.id;
+  } catch (e) {
+    // Created by someone else in the meantime, or a slug clash: look it up again below.
+    if (!(e instanceof HttpError && e.code === "term_exists")) throw e;
+  }
+  const again = await find();
+  if (!again) throw new HttpError(502, `${new URL(creds.siteUrl).host} could not create the category “${wanted}”.`);
+  return again;
+}
+
+/** WooCommerce returns category names HTML-encoded (Tools &amp; Dies). */
+function decodeEntities(s: string): string {
+  return s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&#0?39;/g, "'");
+}
+
+/** Caches category lookups for one push, so a hundred items in “Enclosures” cost one request. */
+export function categoryResolver(creds: WooCreds): (name: string | undefined) => Promise<number | undefined> {
+  const cache = new Map<string, Promise<number>>();
+  return (name) => {
+    const key = name?.trim().toLowerCase();
+    if (!key) return Promise.resolve(undefined);
+    let p = cache.get(key);
+    if (!p) {
+      p = resolveCategory(creds, name!.trim());
+      cache.set(key, p);
+    }
+    return p;
+  };
 }
 
 /** Updates the fields cumulusOS owns on a product or variation. */
@@ -352,6 +399,12 @@ export async function updateProduct(creds: WooCreds, ref: WooRef, p: WooProductP
   if (p.dimensions) body.dimensions = { length: String(p.dimensions.length ?? ""), width: String(p.dimensions.width ?? ""), height: String(p.dimensions.height ?? "") };
   if (p.barcode !== undefined) body.global_unique_id = p.barcode;
   if (p.status) body.status = p.status;
+  if (p.categoryId && !ref.variationId) {
+    // Keep the store's other categories; ours goes first, which is the one a pull reads back as the item's category.
+    const { data: current } = await request<{ categories?: Array<{ id: number }> }>(creds, `products/${ref.productId}`, { query: { _fields: "categories" } });
+    const others = (current?.categories ?? []).map((c) => c.id).filter((id) => id !== p.categoryId);
+    body.categories = [{ id: p.categoryId }, ...others.map((id) => ({ id }))];
+  }
   if (Object.keys(body).length === 0) return;
   const path = ref.variationId ? `products/${ref.productId}/variations/${ref.variationId}` : `products/${ref.productId}`;
   await request(creds, path, { method: "PUT", body });
