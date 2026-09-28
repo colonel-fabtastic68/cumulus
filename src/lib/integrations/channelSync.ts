@@ -1,6 +1,6 @@
 import type { Address, Integration, Item, ItemStock } from "@/lib/types";
 import type { WriteOp } from "@/lib/store/types";
-import { activityOp, adjustStock, cancelOrder, createOrder, defaultLocation, importItems, qtyAt, type ImportRow } from "@/lib/inventory";
+import { activityOp, cancelOrder, createOrder, defaultLocation, importItems, qtyAt, type ImportRow } from "@/lib/inventory";
 import { nowIso } from "@/lib/utils";
 import { applyExclusions, excludedSkuSet } from "./exclusions";
 import { HttpError, type Secrets, type ServerContext } from "./server";
