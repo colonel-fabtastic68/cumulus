@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui";
 import { useSettings } from "@/lib/store/provider";
+import { IntakeFormButton } from "@/components/marketing/IntakeFormButton";
 
 /** Sits above the top bar inside the public demo: what this is, and the two ways out. */
 export function DemoBar() {
@@ -14,6 +15,7 @@ export function DemoBar() {
         <span className="font-medium text-text">Demo workspace</span> · {settings.companyName || "Halcyon Audio"} is a sample company. Changes stay in this browser.
       </span>
       <div className="ml-auto flex items-center gap-2">
+        <IntakeFormButton size="sm" variant="tertiary" />
         <Button size="sm" variant="tertiary" onClick={() => leave()}>
           Leave demo
         </Button>

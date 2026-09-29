@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Button } from "@/components/ui";
 import { StartDemoForm } from "@/components/marketing/StartDemoForm";
+import { IntakeFormButton } from "@/components/marketing/IntakeFormButton";
 import { buildSeed } from "@/lib/seed";
 
 export const metadata: Metadata = {
@@ -32,6 +33,10 @@ export default function DemoPage() {
           <StartDemoForm />
         </div>
         <p className="mt-3 text-[13px] text-text-tertiary">No account, no install. Strato answers with the sample data. We use your email to follow up once about the demo and for occasional product news, one click to leave.</p>
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <IntakeFormButton variant="plain" label="Tell us about your shop" />
+          <span className="text-[13px] text-text-tertiary">Five minutes. We are in our launch phase, and the answers decide what we build first.</span>
+        </div>
       </div>
 
       <div className="mt-14 grid gap-4 md:grid-cols-2 lg:grid-cols-3">

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AppIcon } from "@/components/ui";
 import type { RuntimeConfig } from "@/lib/firebase-config";
 import { SessionCta } from "./SessionCta";
+import { IntakeFormButton } from "./IntakeFormButton";
 
 const LINKS = [
   { href: "#product", label: "Product" },
@@ -47,6 +48,9 @@ export function MarketingFooter() {
         <div>
           <Wordmark />
           <p className="mt-2 text-[13px] text-text-secondary">Agentic inventory for small product teams.</p>
+          <div className="mt-4">
+            <IntakeFormButton size="sm" />
+          </div>
         </div>
         <nav className="flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-text-secondary" aria-label="Footer">
           {LINKS.map((l) => (

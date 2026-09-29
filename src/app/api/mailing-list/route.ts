@@ -2,6 +2,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { HttpError, authenticateAccount, jsonError, readJson, requireServiceAccount } from "@/lib/integrations/server";
 import { adminApp } from "@/lib/mcp/adminStore";
 import { normalizeEmail, rateLimited, setSubscription } from "@/lib/server/mailingList";
+import { sendDemoWelcome } from "@/lib/server/demoEmail";
 
 export const maxDuration = 30;
 
@@ -28,8 +29,12 @@ export async function POST(req: Request) {
     if (rateLimited(`signup:${ip}`)) throw new HttpError(429, "Too many sign-ups from this connection; try again in a minute.");
     const email = typeof body.email === "string" ? normalizeEmail(body.email) : null;
     if (!email) throw new HttpError(400, "Enter a valid email address.");
-    await setSubscription(db, email, true, body.source === "demo" ? "demo" : "landing");
-    return Response.json({ ok: true, subscribed: true });
+    const demo = body.source === "demo";
+    await setSubscription(db, email, true, demo ? "demo" : "landing");
+    // The welcome carries the intake form; it must never stand between the person and the demo.
+    let welcome: string | undefined;
+    if (demo) welcome = await sendDemoWelcome(db, email).catch((e) => (console.error("[demo welcome]", e), "failed"));
+    return Response.json({ ok: true, subscribed: true, ...(welcome ? { welcome } : {}) });
   } catch (e) {
     return jsonError(e);
   }

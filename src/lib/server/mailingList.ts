@@ -14,6 +14,8 @@ export interface MailingListEntry {
   /** Where the address came from: the landing page, the demo gate, or an account toggle (then the uid). */
   source: "landing" | "demo" | "account";
   uid?: string;
+  /** When the demo welcome (with the intake form) went out; sent once per address. */
+  demoWelcomeAt?: string;
   createdAt: string;
   updatedAt: string;
 }
