@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Boxes, CalendarDays, ClipboardList, ClipboardCheck, Contact, Download, FileBarChart2, FileText, Hammer, Home, MessageSquare, PackageCheck, Plug, Receipt, RotateCcw, Settings, ShoppingCart, Sparkles, TrendingUp, Truck, Upload, UserRound, Users, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, Boxes, CalendarDays, ClipboardList, ClipboardCheck, ListChecks, Contact, Download, FileBarChart2, FileText, Hammer, Home, MessageSquare, PackageCheck, Plug, Receipt, RotateCcw, Settings, ShoppingCart, Sparkles, TrendingUp, Truck, Upload, UserRound, Users, type LucideIcon } from "lucide-react";
 
 export interface NavItem {
   href: string;
@@ -10,7 +10,15 @@ export interface NavItem {
 
 export const NAV: NavItem[] = [
   { href: "/home", label: "Home", icon: Home },
-  { href: "/inventory", label: "Inventory", icon: Boxes },
+  {
+    href: "/inventory",
+    label: "Inventory",
+    icon: Boxes,
+    children: [
+      { href: "/inventory", label: "Items", icon: Boxes },
+      { href: "/inventory/counts", label: "Cycle counts", icon: ListChecks },
+    ],
+  },
   { href: "/receiving", label: "Receiving", icon: PackageCheck },
   { href: "/transfers", label: "Transfers", icon: ArrowLeftRight },
   { href: "/builds", label: "BOM", icon: Hammer },

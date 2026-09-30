@@ -133,7 +133,7 @@ export type MovementType =
   | "transfer_out"
   | "transfer_in";
 
-export type RefType = "receipt" | "build" | "order" | "rma" | "import" | "agent" | "manual" | "transfer" | "shipment" | "channel";
+export type RefType = "receipt" | "build" | "order" | "rma" | "import" | "agent" | "manual" | "transfer" | "shipment" | "channel" | "count";
 
 export interface StockMovement {
   id: ID;
@@ -346,6 +346,53 @@ export interface OrderTemplate {
   createdAt: string;
   updatedAt: string;
   createdBy: string;
+}
+
+export type CycleCountStatus = "open" | "completed" | "cancelled";
+
+export interface CycleCountScope {
+  kind: "location" | "bins" | "category" | "items";
+  bins?: string[];
+  category?: string;
+  itemIds?: ID[];
+}
+
+export interface CycleCountLine {
+  itemId: ID;
+  /** Bin the item sits in at the count's location, as recorded when the count started. */
+  bin?: string;
+  /** System quantity at the location when the count started. */
+  expected: number;
+  /** What was found on the shelf. Absent until someone counts it. */
+  counted?: number;
+  countedAt?: string;
+  countedBy?: ID;
+  note?: string;
+  /** Strato's own expectation and why, when it proposed the count. */
+  proposed?: number;
+  proposedNote?: string;
+}
+
+/** A physical count of part of a location, reconciled against the ledger when completed. */
+export interface CycleCount {
+  id: ID;
+  number: string; // CC-1001
+  name?: string;
+  locationId: ID;
+  scope: CycleCountScope;
+  status: CycleCountStatus;
+  lines: CycleCountLine[];
+  note?: string;
+  source?: "manual" | "strato";
+  /** Hide expected quantities from counters (blind count). */
+  blind?: boolean;
+  createdAt: string;
+  createdBy: ID;
+  completedAt?: string;
+  completedBy?: ID;
+  cancelledAt?: string;
+  /** Filled on completion: lines adjusted, net units and value of the variance. */
+  result?: { adjusted: number; varianceUnits: number; varianceValue: number; counted: number };
 }
 
 export type PurchaseOrderStatus = "draft" | "sent" | "partial" | "received" | "cancelled";
@@ -674,7 +721,10 @@ export type ActivityType =
   | "po.received"
   | "po.cancelled"
   | "backup.created"
-  | "backup.restored";
+  | "backup.restored"
+  | "count.started"
+  | "count.completed"
+  | "count.cancelled";
 
 export interface ActivityEvent {
   id: ID;
@@ -682,7 +732,7 @@ export interface ActivityEvent {
   message: string;
   actorId: string;
   actorName: string;
-  entityType?: "item" | "receipt" | "build" | "order" | "rma" | "supplier" | "member" | "transfer" | "shipment" | "integration" | "location" | "quote" | "purchaseOrder";
+  entityType?: "item" | "receipt" | "build" | "order" | "rma" | "supplier" | "member" | "transfer" | "shipment" | "integration" | "location" | "quote" | "purchaseOrder" | "cycleCount";
   entityId?: ID;
   /** Free-form details, e.g. { count: 12 } for bulk operations. */
   meta?: Record<string, unknown>;
@@ -802,6 +852,7 @@ export interface WorkspaceSettings {
     shipment?: number;
     quote?: number;
     purchaseOrder?: number;
+    cycleCount?: number;
   };
   shipping?: ShippingSettings;
   scanning?: ScanningSettings;
@@ -992,6 +1043,7 @@ export interface CollectionMap {
   events: CalendarEvent;
   purchaseOrders: PurchaseOrder;
   purchaseOrderTemplates: PurchaseOrderTemplate;
+  cycleCounts: CycleCount;
 }
 
 export type CollectionName = keyof CollectionMap;
@@ -1021,6 +1073,7 @@ export const COLLECTIONS: CollectionName[] = [
   "events",
   "purchaseOrders",
   "purchaseOrderTemplates",
+  "cycleCounts",
 ];
 
 /** A full snapshot of a workspace. Used for seed data, export and import. */

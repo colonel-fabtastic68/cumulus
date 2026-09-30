@@ -242,6 +242,33 @@ export const agentTools = {
     description: "Save a reusable purchase order template (supplier and lines) under a name so the same order can be placed again later.",
     inputSchema: z.object({ name: z.string(), supplierName: z.string().optional(), lines: z.array(z.object({ sku: z.string(), qty: z.number(), unitCost: z.number().optional() })), description: z.string().optional(), note: z.string().optional() }),
   }),
+  proposeCycleCount: tool({
+    description: "Propose a cycle count: which items at a location deserve counting now (never counted, busy since the last count, low or negative on paper, high value), each with the quantity the system expects. Read-only; use startCycleCount to begin one.",
+    inputSchema: z.object({ locationName: z.string().optional(), limit: z.number().optional() }),
+  }),
+  getCycleCount: tool({
+    description: "Read a cycle count by number (e.g. CC-1001): every line with expected, counted, the difference, and any proposal Strato made.",
+    inputSchema: z.object({ countNumber: z.string() }),
+  }),
+  startCycleCount: tool({
+    description: "Start a cycle count at a location. Scope is a list of bins, a category, or a list of SKUs. Optional proposals record the quantity you expect per SKU so the result can be compared with your expectation afterwards.",
+    inputSchema: z.object({
+      locationName: z.string().optional(),
+      scope: z.object({ kind: z.enum(["location", "bins", "category", "items"]), bins: z.array(z.string()).optional(), category: z.string().optional(), skus: z.array(z.string()).optional() }),
+      name: z.string().optional(),
+      blind: z.boolean().optional(),
+      note: z.string().optional(),
+      proposals: z.array(z.object({ sku: z.string(), expected: z.number(), note: z.string().optional() })).optional(),
+    }),
+  }),
+  recordCycleCounts: tool({
+    description: "Record counted quantities on an open cycle count by number. Only the SKUs given change; the rest stay as they are.",
+    inputSchema: z.object({ countNumber: z.string(), entries: z.array(z.object({ sku: z.string(), counted: z.number(), note: z.string().optional() })) }),
+  }),
+  completeCycleCount: tool({
+    description: "Complete a cycle count: every counted line that differs from the system quantity becomes a count movement at the location. Lines left uncounted are untouched.",
+    inputSchema: z.object({ countNumber: z.string(), applyAdjustments: z.boolean().optional() }),
+  }),
   deleteItems: tool({
     description: "Permanently delete items and their history. Prefer deactivateItems. Only use when the user explicitly asks to delete.",
     inputSchema: z.object({ skus: skuList, reason: z.string() }),
@@ -251,7 +278,7 @@ export const agentTools = {
 export type AgentTools = typeof agentTools;
 export type AgentToolName = keyof AgentTools;
 
-export const READ_TOOLS: AgentToolName[] = ["getWorkspaceSummary", "getConnections", "searchItems", "getItem", "explodeBom", "whereUsed", "getReport", "previewBulkUpdate", "listPurchaseOrders", "suggestPurchaseOrders"];
+export const READ_TOOLS: AgentToolName[] = ["getWorkspaceSummary", "getConnections", "searchItems", "getItem", "explodeBom", "whereUsed", "getReport", "previewBulkUpdate", "listPurchaseOrders", "suggestPurchaseOrders", "proposeCycleCount", "getCycleCount"];
 export const WRITE_TOOLS: AgentToolName[] = [
   "bulkUpdateItems",
   "createItems",
@@ -268,6 +295,9 @@ export const WRITE_TOOLS: AgentToolName[] = [
   "createPurchaseOrder",
   "receivePurchaseOrder",
   "savePurchaseOrderTemplate",
+  "startCycleCount",
+  "recordCycleCounts",
+  "completeCycleCount",
   "deleteItems",
   "syncChannel",
 ];
@@ -304,5 +334,10 @@ export const TOOL_LABELS: Record<AgentToolName, string> = {
   createPurchaseOrder: "Create purchase order",
   receivePurchaseOrder: "Receive purchase order",
   savePurchaseOrderTemplate: "Save PO template",
+  proposeCycleCount: "Propose cycle count",
+  getCycleCount: "Cycle count",
+  startCycleCount: "Start cycle count",
+  recordCycleCounts: "Record counts",
+  completeCycleCount: "Complete cycle count",
   deleteItems: "Delete items",
 };

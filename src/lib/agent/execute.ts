@@ -39,6 +39,8 @@ import { matches, round } from "@/lib/utils";
 import { crossRefText } from "@/lib/scan";
 import { itemSupplierLinks, supplierItems } from "@/lib/suppliers";
 import { kpiReport } from "@/lib/kpis";
+import { completeCycleCount, describeScope, lineVariance, recordCounts, startCycleCount, suggestCountItems } from "@/lib/cycleCounts";
+import { defaultLocation } from "@/lib/inventory";
 import { createPurchaseOrder, findTemplate, poIsOpen, poLineOpenQty, poTotal, receivePurchaseOrder, savePurchaseOrderTemplate, suggestPurchaseOrders } from "@/lib/purchaseOrders";
 import type { AgentToolName } from "./tools";
 
@@ -629,6 +631,61 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
       return { ok: true, template: t.name, lines: t.lines.length, summary: `Saved PO template “${t.name}” with ${t.lines.length} line${t.lines.length === 1 ? "" : "s"}` };
     }
 
+    case "proposeCycleCount": {
+      const [items, movements, locations, counts] = await Promise.all([store.list("items"), store.list("movements"), store.list("locations"), store.list("cycleCounts")]);
+      const home = defaultLocation(locations).location;
+      const loc = input.locationName ? locations.find((l) => matches(String(input.locationName), l.name)) : undefined;
+      const locationId = loc?.id ?? home.id;
+      const suggestions = suggestCountItems(items, movements, locationId, home.id, counts, { limit: Number(input.limit) || 25 });
+      return { location: loc?.name ?? home.name, count: suggestions.length, suggestions: suggestions.map((s) => ({ sku: s.sku, name: s.name, bin: s.bin, expected: s.expected, reasons: s.reasons, priority: s.priority, lastCountedAt: s.lastCountedAt, movementsSinceCount: s.movementsSinceCount })) };
+    }
+
+    case "getCycleCount": {
+      const [counts, items] = await Promise.all([store.list("cycleCounts"), store.list("items")]);
+      const c = counts.find((x) => x.number.toUpperCase() === String(input.countNumber ?? "").trim().toUpperCase());
+      if (!c) throw new InventoryError(`No cycle count ${input.countNumber}`);
+      const byId = new Map(items.map((i) => [i.id, i]));
+      return { number: c.number, status: c.status, scope: describeScope(c.scope), result: c.result, lines: c.lines.map((l) => ({ sku: byId.get(l.itemId)?.sku ?? l.itemId, bin: l.bin, expected: l.expected, proposed: l.proposed, proposedNote: l.proposedNote, counted: l.counted, difference: lineVariance(l), note: l.note })) };
+    }
+
+    case "startCycleCount": {
+      const [items, locations] = await Promise.all([store.list("items"), store.list("locations")]);
+      const loc = input.locationName ? locations.find((l) => matches(String(input.locationName), l.name)) : undefined;
+      if (input.locationName && !loc) throw new InventoryError(`Unknown location ${input.locationName}`);
+      const scopeIn = (input.scope ?? {}) as { kind: "location" | "bins" | "category" | "items"; bins?: string[]; category?: string; skus?: string[] };
+      const skuToId = (sku: string) => {
+        const item = findItem(items, sku);
+        if (!item) throw new InventoryError(`Unknown SKU ${sku}`);
+        return item.id;
+      };
+      const scope = scopeIn.kind === "items" ? { kind: "items" as const, itemIds: (scopeIn.skus ?? []).map(skuToId) } : scopeIn.kind === "bins" ? { kind: "bins" as const, bins: scopeIn.bins ?? [] } : scopeIn.kind === "category" ? { kind: "category" as const, category: scopeIn.category ?? "" } : { kind: "location" as const };
+      const proposals = ((input.proposals as Array<Record<string, unknown>> | undefined) ?? []).map((p) => ({ itemId: skuToId(String(p.sku)), proposed: Number(p.expected), note: p.note as string | undefined }));
+      const count = await startCycleCount(store, actor, { locationId: loc?.id, scope, name: input.name as string | undefined, note: input.note as string | undefined, blind: input.blind as boolean | undefined, source: "strato", proposals });
+      return { ok: true, count: count.number, lines: count.lines.length, summary: `Started ${count.number} with ${count.lines.length} line${count.lines.length === 1 ? "" : "s"}` };
+    }
+
+    case "recordCycleCounts": {
+      const [counts, items] = await Promise.all([store.list("cycleCounts"), store.list("items")]);
+      const c = counts.find((x) => x.number.toUpperCase() === String(input.countNumber ?? "").trim().toUpperCase());
+      if (!c) throw new InventoryError(`No cycle count ${input.countNumber}`);
+      const entries = ((input.entries as Array<Record<string, unknown>>) ?? []).map((e) => {
+        const item = findItem(items, String(e.sku));
+        if (!item) throw new InventoryError(`Unknown SKU ${e.sku}`);
+        return { itemId: item.id, counted: Number(e.counted), note: e.note as string | undefined };
+      });
+      const next = await recordCounts(store, actor, c.id, entries);
+      const done = next.lines.filter((l) => l.counted !== undefined).length;
+      return { ok: true, count: next.number, counted: done, total: next.lines.length, summary: `Recorded ${entries.length} line${entries.length === 1 ? "" : "s"} on ${next.number} (${done} of ${next.lines.length} counted)` };
+    }
+
+    case "completeCycleCount": {
+      const counts = await store.list("cycleCounts");
+      const c = counts.find((x) => x.number.toUpperCase() === String(input.countNumber ?? "").trim().toUpperCase());
+      if (!c) throw new InventoryError(`No cycle count ${input.countNumber}`);
+      const done = await completeCycleCount(store, actor, c.id, { applyAdjustments: input.applyAdjustments !== false });
+      return { ok: true, count: done.number, result: done.result, summary: `Completed ${done.number}: ${done.result?.adjusted ?? 0} adjustment${done.result?.adjusted === 1 ? "" : "s"}, net ${done.result?.varianceUnits ?? 0} units` };
+    }
+
     case "fulfillOrders": {
       const orders = await store.list("orders");
       const numbers = (input.orderNumbers as string[]) ?? [];
@@ -832,6 +889,18 @@ export async function describeProposal(name: AgentToolName, rawInput: unknown, c
       }
       case "fulfillOrders":
         return { title: `Ship ${(input.orderNumbers as string[])?.length ?? 0} order(s)`, lines: (input.orderNumbers as string[]) ?? [] };
+      case "startCycleCount": {
+        const scope = (input.scope ?? {}) as { kind?: string; bins?: string[]; category?: string; skus?: string[] };
+        const what = scope.kind === "bins" ? `bins ${(scope.bins ?? []).join(", ")}` : scope.kind === "category" ? `category ${scope.category}` : scope.kind === "items" ? `${(scope.skus ?? []).length} SKUs` : "the whole location";
+        const proposals = (input.proposals as Array<Record<string, unknown>>) ?? [];
+        return { title: `Start a cycle count of ${what}${input.locationName ? ` at ${input.locationName}` : ""}`, lines: proposals.slice(0, 20).map((p) => `${skuOf(p.sku)}: expect ${p.expected}${p.note ? ` (${p.note})` : ""}`) };
+      }
+      case "recordCycleCounts": {
+        const entries = (input.entries as Array<Record<string, unknown>>) ?? [];
+        return { title: `Record ${entries.length} counted line${entries.length === 1 ? "" : "s"} on ${input.countNumber}`, lines: entries.slice(0, 20).map((e) => `${skuOf(e.sku)}: ${e.counted}`) };
+      }
+      case "completeCycleCount":
+        return { title: `Complete ${input.countNumber}${input.applyAdjustments === false ? " without adjusting stock" : " and adjust stock to the counts"}`, lines: [] };
       case "createPurchaseOrder": {
         const lines = (input.lines as Array<Record<string, unknown>>) ?? [];
         return { title: `${input.send ? "Send" : "Draft"} purchase order to ${input.supplierName}${input.fromTemplate ? ` from template “${input.fromTemplate}”` : ""}`, lines: lines.length ? lines.map((l) => `${skuOf(l.sku)} × ${l.qty}${l.unitCost !== undefined ? ` @ ${l.unitCost}` : ""}`) : ["Lines from the template"] };

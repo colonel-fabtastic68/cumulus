@@ -31,6 +31,7 @@ export const REF_LABELS: Record<RefType, string> = {
   transfer: "Transfer",
   shipment: "Shipment",
   channel: "Channel",
+  count: "Cycle count",
 };
 
 export function movementTone(type: MovementType): BadgeTone {
@@ -73,10 +74,13 @@ export function refHref(refType: RefType | undefined, refId?: string): string | 
         return "/orders";
       case "rma":
         return "/rmas";
+      case "count":
+        return refId ? `/inventory/counts/${refId}` : "/inventory/counts";
       default:
         return null;
     }
   })();
+  if (refType === "count") return base;
   if (!base) return null;
   return refId ? `${base}?highlight=${encodeURIComponent(refId)}` : base;
 }

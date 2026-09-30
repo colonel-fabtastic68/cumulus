@@ -20,6 +20,7 @@ export function activityCategory(type: string): ActivityCategory | null {
   const prefix = type.split(".")[0];
   switch (prefix) {
     case "stock":
+    case "count":
       return "stock";
     case "item":
     case "import":
@@ -63,6 +64,10 @@ export function activityLink(event: ActivityEvent, itemsById: Map<string, Item>)
       return { href: "/suppliers?highlight=" + event.entityId, label: "View supplier" };
     case "member":
       return { href: "/team", label: "View team" };
+    case "cycleCount":
+      return { href: "/inventory/counts/" + event.entityId, label: "View count" };
+    case "purchaseOrder":
+      return { href: "/orders/purchase?highlight=" + event.entityId, label: "View purchase order" };
     default:
       return null;
   }

@@ -10,7 +10,7 @@ import { round } from "@/lib/utils";
 
 export type Cell = string | number | boolean | null | undefined;
 
-export type DatasetId = "items" | "bom" | "stock" | "movements" | "lots" | "receipts" | "builds" | "orders" | "purchaseOrders" | "shipments" | "transfers" | "rmas" | "quotes" | "suppliers" | "locations" | "activity";
+export type DatasetId = "items" | "bom" | "stock" | "movements" | "lots" | "receipts" | "builds" | "orders" | "purchaseOrders" | "cycleCounts" | "shipments" | "transfers" | "rmas" | "quotes" | "suppliers" | "locations" | "activity";
 
 export interface ExportSource {
   data: Pick<CollectionMap, never> & { [K in keyof CollectionMap]: CollectionMap[K][] };
@@ -98,6 +98,26 @@ export const DATASETS: Dataset[] = [
         }
       }
       return { headers: ["PO", "Status", "Supplier", "Expected", "Reference", "SKU", "Item", "Supplier SKU", "Ordered", "Received", "Open", "Unit cost", "Line total", "Note", "Created", "Sent", "Completed"], rows };
+    },
+  },
+  {
+    id: "cycleCounts",
+    label: "Cycle counts",
+    description: "One row per counted line: expected, counted and the difference, with who counted and when.",
+    itemScoped: true,
+    count: (s, sc) => s.data.cycleCounts.reduce((a, c) => a + c.lines.filter((l) => inScope(sc, l.itemId)).length, 0),
+    build: (src, scope) => {
+      const items = byId(src.data.items);
+      const locations = byId(src.data.locations);
+      const members = byId(src.data.members);
+      const rows: Cell[][] = [];
+      for (const c of [...src.data.cycleCounts].sort((a, b) => a.number.localeCompare(b.number))) {
+        for (const l of c.lines) {
+          if (!inScope(scope, l.itemId)) continue;
+          rows.push([c.number, c.status, c.name ?? "", name(locations, c.locationId), l.bin ?? "", items.get(l.itemId)?.sku ?? l.itemId, items.get(l.itemId)?.name ?? "", l.expected, l.proposed ?? "", l.counted ?? "", l.counted === undefined ? "" : round(l.counted - l.expected, 4), l.note ?? "", name(members, l.countedBy), day(l.countedAt), day(c.createdAt), day(c.completedAt)]);
+        }
+      }
+      return { headers: ["Count", "Status", "Name", "Location", "Bin", "SKU", "Item", "Expected", "Strato expected", "Counted", "Difference", "Note", "Counted by", "Counted on", "Started", "Completed"], rows };
     },
   },
   {
