@@ -354,6 +354,29 @@ export interface OrderTemplate {
   createdBy: string;
 }
 
+export type DocumentUse = "purchase-orders" | "sales-orders" | "quotes" | "receiving" | "general";
+
+/** A file shared with everyone in the workspace: a template, a spec sheet, a supplier price list, a signed form. */
+export interface WorkspaceDocument {
+  id: ID;
+  name: string;
+  /** Simple one-level folder, e.g. "Templates" or "Supplier price lists". */
+  folder?: string;
+  kind: "document" | "template";
+  /** Where a template is offered, e.g. in the purchase order "From template" menu. */
+  useFor?: DocumentUse;
+  description?: string;
+  mime: string;
+  size: number;
+  /** Hosted: object path in the workspace's storage bucket. */
+  storagePath?: string;
+  /** Local mode: the file itself, for small files only. */
+  dataUrl?: string;
+  uploadedBy: ID;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type CycleCountStatus = "open" | "completed" | "cancelled";
 
 export interface CycleCountScope {
@@ -1050,6 +1073,7 @@ export interface CollectionMap {
   purchaseOrders: PurchaseOrder;
   purchaseOrderTemplates: PurchaseOrderTemplate;
   cycleCounts: CycleCount;
+  documents: WorkspaceDocument;
 }
 
 export type CollectionName = keyof CollectionMap;
@@ -1080,6 +1104,7 @@ export const COLLECTIONS: CollectionName[] = [
   "purchaseOrders",
   "purchaseOrderTemplates",
   "cycleCounts",
+  "documents",
 ];
 
 /** A full snapshot of a workspace. Used for seed data, export and import. */

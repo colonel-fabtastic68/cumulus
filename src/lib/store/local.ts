@@ -198,6 +198,6 @@ export function emptySnapshot(): WorkspaceSnapshot {
     shipments: [],
     quotes: [],
     channelTombstones: [],
-    quoteTemplates: [], orderTemplates: [], customers: [], events: [], purchaseOrders: [], purchaseOrderTemplates: [], cycleCounts: [],
+    quoteTemplates: [], orderTemplates: [], customers: [], events: [], purchaseOrders: [], purchaseOrderTemplates: [], cycleCounts: [], documents: [],
   };
 }

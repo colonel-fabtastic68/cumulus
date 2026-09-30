@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { BookmarkPlus, ChevronDown, Plus, Trash2 } from "lucide-react";
 import type { OrderTemplate, SalesOrder } from "@/lib/types";
 import { cancelOrder } from "@/lib/inventory";
@@ -11,6 +11,8 @@ import { canWrite, useCurrentUser } from "@/lib/auth";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { Button, ConfirmDialog, EmptyState, Menu, Modal, Page, QueryParamEffect, useToast } from "@/components/ui";
 import { NewOrderModal, OrderDetailModal, OrderStats, OrdersTable, ShipOrderModal } from "@/components/orders";
+import { useDocuments } from "@/lib/documents";
+import { FileText } from "lucide-react";
 
 export default function OrdersPage() {
   const orders = useCollection("orders");
@@ -23,6 +25,8 @@ export default function OrdersPage() {
 
   const [creating, setCreating] = useState(false);
   const templates = useCollection("orderTemplates");
+  const docs = useDocuments();
+  const documentTemplates = docs.templatesFor("sales-orders");
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [manageTemplates, setManageTemplates] = useState(false);
   const [deletingTemplate, setDeletingTemplate] = useState<OrderTemplate | null>(null);
@@ -51,30 +55,21 @@ export default function OrdersPage() {
 
 
   // "?ship=<orderId>" opens the ship modal straight away.
-  const onShipParam = useCallback(
-    (id: string) => {
-      const order = orders.find((o) => o.id === id);
-      if (order && writable) setShipTarget((current) => (current?.id === order.id ? current : order));
-    },
-    [orders, writable],
-  );
+  const onShipParam = (id: string) => {
+    const order = orders.find((o) => o.id === id);
+    if (order && writable) setShipTarget((current) => (current?.id === order.id ? current : order));
+  };
 
   // Shipping goes through the ship modal: pick quantities and a location, enter tracking or buy a label.
-  const fulfil = useCallback(
-    (order: SalesOrder) => {
-      if (!writable) return;
-      setShipTarget(order);
-    },
-    [writable],
-  );
+  const fulfil = (order: SalesOrder) => {
+    if (!writable) return;
+    setShipTarget(order);
+  };
 
-  const requestCancel = useCallback(
-    (order: SalesOrder) => {
-      if (!writable) return;
-      setCancelTarget(order);
-    },
-    [writable],
-  );
+  const requestCancel = (order: SalesOrder) => {
+    if (!writable) return;
+    setCancelTarget(order);
+  };
 
   const confirmCancel = async () => {
     const order = cancelTarget;
@@ -127,8 +122,24 @@ export default function OrdersPage() {
                     onSelect: () => startFromTemplate(t.id),
                   }))
                 : [{ label: <span className="text-text-tertiary">No templates yet. Open New order and choose “Save as template”.</span>, disabled: true }]),
+              ...(documentTemplates.length
+                ? [
+                    "divider" as const,
+                    ...documentTemplates.map((d) => ({
+                      label: (
+                        <span className="block min-w-0">
+                          <span className="block truncate">{d.name}</span>
+                          <span className="block text-[11px] text-text-tertiary">Document from the library{d.description ? ` · ${d.description}` : ""}</span>
+                        </span>
+                      ),
+                      icon: <FileText />,
+                      onSelect: () => void docs.open(d).catch((e) => toast(e instanceof Error ? e.message : String(e), "critical")),
+                    })),
+                  ]
+                : []),
               "divider" as const,
               { label: "Manage templates", onSelect: () => setManageTemplates(true) },
+              { label: "Document templates…", href: "/documents" },
             ]}
           />
         ) : undefined

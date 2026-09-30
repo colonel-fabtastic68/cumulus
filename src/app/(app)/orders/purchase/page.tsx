@@ -10,10 +10,14 @@ import { canWrite, useCurrentUser } from "@/lib/auth";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { Button, ConfirmDialog, EmptyState, Menu, Modal, Page, QueryParamEffect, TextField, useToast } from "@/components/ui";
 import { NewPurchaseOrderModal, PurchaseOrderDetailModal, PurchaseOrderStats, PurchaseOrdersTable, ReceivePurchaseOrderModal, UploadPoTemplateModal } from "@/components/purchasing";
+import { useDocuments } from "@/lib/documents";
+import { FileText } from "lucide-react";
 
 export default function PurchaseOrdersPage() {
   const purchaseOrders = useCollection("purchaseOrders");
   const templates = useCollection("purchaseOrderTemplates");
+  const docs = useDocuments();
+  const documentTemplates = docs.templatesFor("purchase-orders");
   const suppliers = useCollection("suppliers");
   const items = useItems();
   const itemsById = useItemsById();
@@ -162,9 +166,25 @@ export default function PurchaseOrdersPage() {
                       onSelect: () => startFromTemplate(t.id),
                     }))
                   : [{ label: <span className="text-text-tertiary">No templates yet. Upload a sheet, or save one from an order.</span>, disabled: true }]),
+                ...(documentTemplates.length
+                  ? [
+                      "divider" as const,
+                      ...documentTemplates.map((d) => ({
+                        label: (
+                          <span className="block min-w-0">
+                            <span className="block truncate">{d.name}</span>
+                            <span className="block text-[11px] text-text-tertiary">Document from the library{d.description ? ` · ${d.description}` : ""}</span>
+                          </span>
+                        ),
+                        icon: <FileText />,
+                        onSelect: () => void docs.open(d).catch((e) => toast(e instanceof Error ? e.message : String(e), "critical")),
+                      })),
+                    ]
+                  : []),
                 "divider" as const,
                 { label: "Upload a template…", icon: <FileUp />, onSelect: () => setUploadOpen(true) },
                 { label: "Manage templates", onSelect: () => setManageTemplates(true) },
+                { label: "Document templates…", href: "/documents" },
               ]}
             />
           )}
