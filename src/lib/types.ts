@@ -212,6 +212,10 @@ export interface ReceiptLine {
   qty: number;
   unitCost: number;
   lotId?: ID;
+  /** Checklist: ticked off on the shelf. */
+  checked?: boolean;
+  /** Checklist: quantity actually found, when it was written down (differs from qty on a short or over delivery). */
+  found?: number;
 }
 
 export interface Receipt {
@@ -227,6 +231,8 @@ export interface Receipt {
   receivedAt: string;
   lines: ReceiptLine[];
   note?: string;
+  /** The put-away checklist for this delivery, once someone has worked through it. */
+  checklist?: { completedAt?: string; completedBy?: ID; source?: "manual" | "photo"; adjusted?: number };
   createdAt: string;
   createdBy: string;
 }

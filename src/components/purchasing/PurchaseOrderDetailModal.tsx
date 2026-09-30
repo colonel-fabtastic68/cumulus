@@ -8,6 +8,8 @@ import { useCollection, useItemsById, useSettings } from "@/lib/store/provider";
 import { formatDate, formatDateTime, formatMoney, formatRelative, pluralize } from "@/lib/format";
 import { Badge, Button, DescriptionList, Modal, SimpleTable, useToast } from "@/components/ui";
 import { PoStatusBadge, printPurchaseOrder } from "./poUtils";
+import { printReceivingChecklist } from "@/lib/receivingChecklist";
+import { ClipboardCheck } from "lucide-react";
 
 interface Props {
   po: PurchaseOrder | null;
@@ -41,6 +43,10 @@ function Detail({ po, onClose, canWrite, busy, onSend, onReceive, onEdit, onCanc
   const print = () => {
     if (!printPurchaseOrder(po, { items: itemsById, settings, supplier })) toast("Allow pop-ups to print the order", "critical");
   };
+  const printChecklist = () => {
+    const rows = po.lines.filter((l) => poLineOpenQty(l) > 0).map((l) => ({ sku: itemsById.get(l.itemId)?.sku ?? l.itemId, name: itemsById.get(l.itemId)?.name ?? "", qty: poLineOpenQty(l), unit: itemsById.get(l.itemId)?.unit, bin: itemsById.get(l.itemId)?.location }));
+    if (!printReceivingChecklist({ title: `Receiving checklist ${po.number}`, subtitle: `${po.supplier} · due on this order`, rows, companyName: settings.companyName, blankQty: true })) toast("Allow pop-ups to print the checklist", "critical");
+  };
 
   return (
     <Modal
@@ -57,9 +63,16 @@ function Detail({ po, onClose, canWrite, busy, onSend, onReceive, onEdit, onCanc
       subtitle={po.supplier}
       footer={
         <>
-          <Button variant="plain" icon={<Printer />} onClick={print} className="mr-auto">
-            Print / PDF
-          </Button>
+          <div className="mr-auto flex items-center gap-1">
+            <Button variant="plain" icon={<Printer />} onClick={print}>
+              Print / PDF
+            </Button>
+            {open && (
+              <Button variant="plain" icon={<ClipboardCheck />} onClick={printChecklist}>
+                Receiving checklist
+              </Button>
+            )}
+          </div>
           {canWrite && (
             <Button variant="plain" icon={<BookmarkPlus />} onClick={() => onSaveTemplate(po)}>
               Save as template

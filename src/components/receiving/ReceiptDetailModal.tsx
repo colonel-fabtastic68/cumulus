@@ -12,6 +12,7 @@ import { voidReceipt } from "@/lib/inventory";
 import { canWrite, useCurrentUser } from "@/lib/auth";
 import { useStore } from "@/lib/store/provider";
 import { isBackDated, receiptTotal, type ReceiptLookups } from "./receiptUtils";
+import { ReceiptChecklist } from "./ReceiptChecklist";
 
 interface ReceiptDetailModalProps {
   receipt: Receipt | null;
@@ -158,6 +159,8 @@ function ReceiptDetail({ receipt, lookups, onClose }: { receipt: Receipt; lookup
             </tr>
           </tfoot>
         </SimpleTable>
+
+        {receipt.status === "received" && <ReceiptChecklist receipt={receipt} lookups={lookups} />}
 
         {receipt.note && (
           <div className="rounded-[var(--radius-sm)] bg-surface-subdued px-3 py-2 text-[12.5px]">
