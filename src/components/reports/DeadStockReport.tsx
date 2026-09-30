@@ -137,6 +137,11 @@ export function DeadStockReport() {
         description={`Active items with no sales, builds or write-offs in the last ${pluralize(days, "day")}. Items still used in an active BOM are listed for completeness but probably should not be deactivated; use the filter to hide them.`}
         actions={
           <>
+            <label className="flex items-center gap-2 text-[13px] text-text-secondary">
+              <span className="whitespace-nowrap">No movement in</span>
+              <TextField type="number" min={1} step={1} value={daysInput ?? String(settings.inactivityDays)} onChange={(e) => setDaysInput(e.target.value)} containerClassName="w-20" className="text-right" aria-label="Inactivity window (days)" />
+              <span>days</span>
+            </label>
             <ExportCsvButton onExport={exportCsv} disabled={rows.length === 0} />
             <AskAgentButton prompt={reviewPrompt} label="Review with Strato" disabled={all.length === 0} />
           </>
@@ -158,18 +163,6 @@ export function DeadStockReport() {
           toolbar={
             <>
               <SearchField value={q} onChange={setQ} placeholder="Search SKU or name" className="w-full sm:w-64" />
-              <TextField
-                type="number"
-                min={1}
-                step={1}
-                value={daysInput ?? String(settings.inactivityDays)}
-                onChange={(e) => setDaysInput(e.target.value)}
-                prefix="No movement in"
-                suffix="days"
-                containerClassName="w-56"
-                className="pl-[108px]"
-                aria-label="Inactivity window (days)"
-              />
               <Segmented
                 value={view}
                 onChange={setView}

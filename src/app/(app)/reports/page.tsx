@@ -14,6 +14,7 @@ import {
   DeadStockReport,
   KpiReport,
   LowStockReport,
+  MarginReport,
   PurchaseOrdersReport,
   REPORT_TABS,
   SeasonalityReport,
@@ -85,6 +86,7 @@ function ReportsView() {
       <Tabs value={tab} onChange={setTab} tabs={tabs} className="mb-5" />
       {tab === "lowStock" && <LowStockReport />}
       {tab === "kpis" && <KpiReport />}
+      {tab === "margins" && <MarginReport />}
       {tab === "backorders" && <BackorderReport />}
       {tab === "purchaseOrders" && <PurchaseOrdersReport />}
       {tab === "valuation" && <ValuationReport />}
