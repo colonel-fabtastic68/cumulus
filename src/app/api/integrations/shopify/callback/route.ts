@@ -34,9 +34,9 @@ export async function GET(req: Request) {
     if (!member.exists) throw new HttpError(403, "The account that started the connection is no longer a member of the workspace.");
     ctx.actor = { id: issued.uid, name: (member.data() as { name?: string }).name ?? "Member" };
 
-    const { accessToken } = await exchangeShopifyCode(config, shop, code);
+    const tokens = await exchangeShopifyCode(config, shop, code);
     // The client secret signs webhooks, so it doubles as the apiSecret the webhook route checks against.
-    await connectIntegration(ctx, req, "shopify", { credentials: { shop, accessToken, apiSecret: config.clientSecret } });
+    await connectIntegration(ctx, req, "shopify", { credentials: { shop, accessToken: tokens.accessToken, apiSecret: config.clientSecret, refreshToken: tokens.refreshToken ?? "", accessTokenExpiresAt: tokens.accessTokenExpiresAt ?? "", refreshTokenExpiresAt: tokens.refreshTokenExpiresAt ?? "" } });
     return back({ connected: "shopify" });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);

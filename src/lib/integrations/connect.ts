@@ -7,6 +7,7 @@ import { HttpError, appUrl, deleteSecrets, newToken, readSecrets, writeSecrets, 
 import * as qbo from "./quickbooks";
 import * as square from "./square";
 import * as shopify from "./shopify";
+import { freshShopifySecrets } from "./shopifyOAuth";
 import * as woo from "./woocommerce";
 
 export interface ConnectBody {
@@ -40,17 +41,23 @@ export async function connectIntegration(ctx: ServerContext, req: Request, id: I
 
   if (id === "shopify") {
     const shop = shopify.normalizeShop(clean(creds.shop) || existing?.config?.shop || "");
-    const accessToken = clean(creds.accessToken) || previous?.accessToken || "";
+    // A reconnect with no new token reuses the stored one, refreshed first when it is an expiring one.
+    const reused = !clean(creds.accessToken) && previous?.accessToken && existing?.config?.shop === shop ? await freshShopifySecrets(ctx, existing, previous) : null;
+    const accessToken = clean(creds.accessToken) || reused?.accessToken || "";
     if (!accessToken) throw new HttpError(400, "Enter the Admin API access token.");
     const apiSecret = clean(creds.apiSecret) || previous?.apiSecret || "";
     const info = await shopify.verifyShop({ shop, accessToken });
     Object.assign(config, { shop, shopName: info.name, domain: info.domain, currency: info.currency });
     secrets.accessToken = accessToken;
+    for (const k of ["refreshToken", "accessTokenExpiresAt", "refreshTokenExpiresAt"] as const) {
+      const v = clean(creds[k]) || (reused ?? previous)?.[k] || "";
+      if (v) secrets[k] = v;
+    }
     if (apiSecret) secrets.apiSecret = apiSecret;
     if (!settings.channelLocationId && info.primaryLocationId) settings.channelLocationId = info.primaryLocationId;
     const url = `${base}/api/integrations/shopify/webhook?ws=${encodeURIComponent(ctx.workspaceId)}&t=${secrets.webhookToken}`;
     const topics = ["orders/create", "orders/updated", "orders/cancelled", "products/update", "products/delete"];
-    await removeWebhooks(existing, previous, id);
+    await removeWebhooks(existing, reused ?? previous, id);
     for (const topic of topics) {
       try {
         webhooks.push({ id: await shopify.createWebhook({ shop, accessToken }, topic, url), topic });
@@ -190,7 +197,8 @@ async function removeWebhooks(existing: Integration | null, secrets: Secrets | n
 /** Removes webhooks on the platform, deletes the stored credentials and marks the integration disconnected. */
 export async function disconnectIntegration(ctx: ServerContext, id: IntegrationId): Promise<void> {
   const existing = await ctx.store.get("integrations", id);
-  const secrets = await readSecrets(ctx, id);
+  let secrets = await readSecrets(ctx, id);
+  if (id === "shopify" && existing && secrets) secrets = await freshShopifySecrets(ctx, existing, secrets).catch(() => secrets);
   await removeWebhooks(existing, secrets, id);
   if (id === "square" && secrets?.accessToken) {
     const config = square.squareConfig();

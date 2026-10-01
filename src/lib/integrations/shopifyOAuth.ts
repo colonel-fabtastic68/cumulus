@@ -2,7 +2,8 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { Firestore } from "firebase-admin/firestore";
 import type { OAuthState } from "@/lib/server/quickbooksRules";
 import { OAUTH_STATES } from "./quickbooks";
-import { HttpError, USER_AGENT, type ServerContext } from "./server";
+import { HttpError, USER_AGENT, writeSecrets, type Secrets, type ServerContext } from "./server";
+import type { Integration } from "@/lib/types";
 import { normalizeShop } from "./shopify";
 
 /**
@@ -95,21 +96,87 @@ export async function consumeShopifyState(db: Firestore, state: string): Promise
   return found as OAuthState & { shop: string };
 }
 
-/** Exchanges the authorization code for an offline access token. */
-export async function exchangeShopifyCode(config: ShopifyAppConfig, shop: string, code: string): Promise<{ accessToken: string; scope: string }> {
+export interface ShopifyTokens {
+  accessToken: string;
+  scope: string;
+  /** Present for expiring offline tokens (every public app now); absent for a pasted custom-app token. */
+  refreshToken?: string;
+  accessTokenExpiresAt?: string;
+  refreshTokenExpiresAt?: string;
+}
+
+interface TokenResponse {
+  access_token?: string;
+  scope?: string;
+  expires_in?: number;
+  refresh_token?: string;
+  refresh_token_expires_in?: number;
+  error?: string;
+  error_description?: string;
+}
+
+async function tokenRequest(shop: string, body: Record<string, string>, what: string): Promise<ShopifyTokens> {
   const res = await fetch(`https://${shop}/admin/oauth/access_token`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json", "User-Agent": USER_AGENT },
-    body: JSON.stringify({ client_id: config.clientId, client_secret: config.clientSecret, code }),
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json", "User-Agent": USER_AGENT },
+    body: new URLSearchParams(body).toString(),
     signal: AbortSignal.timeout(20_000),
   });
   const text = await res.text();
-  let data: { access_token?: string; scope?: string; error?: string; error_description?: string } = {};
+  let data: TokenResponse = {};
   try {
     data = text ? JSON.parse(text) : {};
   } catch {
     data = {};
   }
-  if (!res.ok || !data.access_token) throw new HttpError(502, `Shopify did not issue a token (${res.status}${data.error ? ` ${data.error}` : ""}${data.error_description ? `: ${data.error_description}` : ""}).`);
-  return { accessToken: data.access_token, scope: data.scope ?? "" };
+  if (!res.ok || !data.access_token) throw new HttpError(502, `Shopify did not ${what} (${res.status}${data.error ? ` ${data.error}` : ""}${data.error_description ? `: ${data.error_description}` : ""}).`);
+  const now = Date.now();
+  return {
+    accessToken: data.access_token,
+    scope: data.scope ?? "",
+    refreshToken: data.refresh_token,
+    accessTokenExpiresAt: data.expires_in ? new Date(now + data.expires_in * 1000).toISOString() : undefined,
+    refreshTokenExpiresAt: data.refresh_token_expires_in ? new Date(now + data.refresh_token_expires_in * 1000).toISOString() : undefined,
+  };
+}
+
+/**
+ * Exchanges the authorization code for an expiring offline token (an hour,
+ * plus a refresh token good for 90 days that rotates on every refresh).
+ * Shopify no longer accepts the non-expiring kind from public apps.
+ */
+export function exchangeShopifyCode(config: ShopifyAppConfig, shop: string, code: string): Promise<ShopifyTokens> {
+  return tokenRequest(shop, { client_id: config.clientId, client_secret: config.clientSecret, code, expiring: "1" }, "issue a token");
+}
+
+/** Trades the stored refresh token for a new access token and a new refresh token. No merchant interaction. */
+export function refreshShopifyToken(config: ShopifyAppConfig, shop: string, refreshToken: string): Promise<ShopifyTokens> {
+  return tokenRequest(shop, { client_id: config.clientId, client_secret: config.clientSecret, grant_type: "refresh_token", refresh_token: refreshToken }, "refresh the token");
+}
+
+/** Refresh when the access token is within five minutes of expiring. */
+const REFRESH_AHEAD_MS = 5 * 60_000;
+
+/**
+ * The secrets to use for a Shopify call right now: refreshed and saved when
+ * the access token is about to expire. Pasted custom-app tokens have no
+ * refresh token and pass through untouched. A refresh token that Shopify
+ * rejects (expired after 90 idle days, or the app was uninstalled) surfaces
+ * as a clear "connect again" error.
+ */
+export async function freshShopifySecrets(ctx: Pick<ServerContext, "db" | "workspaceId">, integration: Pick<Integration, "config">, secrets: Secrets): Promise<Secrets> {
+  const shop = integration.config?.shop;
+  if (!shop || !secrets.refreshToken) return secrets;
+  const expiresAt = secrets.accessTokenExpiresAt ? new Date(secrets.accessTokenExpiresAt).getTime() : 0;
+  if (expiresAt - Date.now() > REFRESH_AHEAD_MS) return secrets;
+  const config = requireShopifyAppConfig();
+  let tokens: ShopifyTokens;
+  try {
+    tokens = await refreshShopifyToken(config, shop, secrets.refreshToken);
+  } catch (e) {
+    throw new HttpError(401, `Shopify access for ${shop} could not be renewed (${e instanceof Error ? e.message : String(e)}). Open Integrations and connect the store again.`);
+  }
+  const next: Secrets = { ...secrets, accessToken: tokens.accessToken, ...(tokens.refreshToken ? { refreshToken: tokens.refreshToken } : {}), ...(tokens.accessTokenExpiresAt ? { accessTokenExpiresAt: tokens.accessTokenExpiresAt } : {}), ...(tokens.refreshTokenExpiresAt ? { refreshTokenExpiresAt: tokens.refreshTokenExpiresAt } : {}) };
+  await writeSecrets(ctx, "shopify", next);
+  return next;
 }

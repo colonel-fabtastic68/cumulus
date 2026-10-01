@@ -3,6 +3,7 @@ import type { WriteOp } from "@/lib/store/types";
 import { activityOp, cancelOrder, createOrder, defaultLocation, importItems, qtyAt, type ImportRow } from "@/lib/inventory";
 import { nowIso } from "@/lib/utils";
 import { applyExclusions, excludedSkuSet } from "./exclusions";
+import { freshShopifySecrets } from "./shopifyOAuth";
 import { HttpError, type Secrets, type ServerContext } from "./server";
 import * as shopify from "./shopify";
 import * as woo from "./woocommerce";
@@ -584,6 +585,7 @@ export async function pushProductsToChannel(ctx: ServerContext, integration: Int
 /** Applies one webhook delivery. Returns a one-line description for logs. */
 export async function handleChannelWebhook(ctx: ServerContext, integration: Integration, secrets: Secrets, topic: string, payload: unknown): Promise<string> {
   const id = integration.id as ChannelId;
+  if (id === "shopify") secrets = await freshShopifySecrets(ctx, integration, secrets);
   const body = (payload ?? {}) as Record<string, unknown>;
 
   if (id === "shopify") {
@@ -657,6 +659,7 @@ export interface RunResult {
 
 /** The whole two-way pass in the right order: deletes out, products and orders in, new items out, edits out, stock out. */
 export async function runChannelSync(ctx: ServerContext, integration: Integration, secrets: Secrets, opts: RunOptions): Promise<RunResult> {
+  if (integration.id === "shopify") secrets = await freshShopifySecrets(ctx, integration, secrets);
   const errors: string[] = [];
   const parts: string[] = [];
   const tomb = await processTombstones(ctx, integration, secrets);
