@@ -450,9 +450,17 @@ export async function syncChannel(ctx: ServerContext, integration: Integration, 
     parts.push(`${p.seen} product${p.seen === 1 ? "" : "s"} (${p.created} new, ${p.updated} updated${p.unlinked ? `, ${p.unlinked} gone from the store` : ""}${p.skippedNoSku ? `, ${p.skippedNoSku} without SKU skipped` : ""}${p.keptOut ? `, ${p.keptOut} deleted here kept out` : ""})`);
   }
   if (what.orders) {
-    result.orders = await syncOrders(ctx, integration, secrets);
-    const o = result.orders;
-    parts.push(`${o.seen} open order${o.seen === 1 ? "" : "s"} (${o.created} new${o.skippedNoLines ? `, ${o.skippedNoLines} unmatched` : ""})`);
+    try {
+      result.orders = await syncOrders(ctx, integration, secrets);
+      const o = result.orders;
+      parts.push(`${o.seen} open order${o.seen === 1 ? "" : "s"} (${o.created} new${o.skippedNoLines ? `, ${o.skippedNoLines} unmatched` : ""})`);
+    } catch (e) {
+      // Orders carry protected customer data; a Shopify app that has not been granted that access can still sync products.
+      const message = e instanceof Error ? e.message : String(e);
+      const protectedData = /protected customer data/i.test(message);
+      result.orders = { seen: 0, created: 0, alreadyIn: 0, skippedNoLines: 0, warnings: [protectedData ? "Orders need Protected customer data access for this app (Shopify Dev Dashboard → App setup). Products still sync." : `Orders: ${message}`] };
+      parts.push(protectedData ? "orders skipped (needs protected customer data access)" : "orders failed");
+    }
   }
   result.summary = parts.join(" · ") || "Nothing selected to sync";
   const patch: Partial<Integration> = { lastSyncAt: nowIso(), lastSyncSummary: result.summary, lastError: undefined, status: "connected" };
