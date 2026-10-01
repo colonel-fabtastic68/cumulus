@@ -89,6 +89,17 @@ export const agentTools = {
       pushProducts: z.boolean().optional().describe("Create items the store does not have yet"),
     }),
   }),
+  listStoreProductsWithoutSku: tool({
+    description: "Products a connected store (Shopify / WooCommerce) lists without a SKU, which is why they were not imported. Returns each one's key, title, variant, price, store quantity and a suggested SKU in the workspace's style. Use assignStoreSkus to fix them.",
+    inputSchema: z.object({ channel: z.enum(["shopify", "woocommerce"]).optional().describe("Default: every connected store") }),
+  }),
+  assignStoreSkus: tool({
+    description: "Fix store products that have no SKU: writes the SKU to the store product (Shopify variant / WooCommerce product) and creates the matching item here, linked, with the store's quantity as its opening count. Keys come from listStoreProductsWithoutSku; SKUs must be unique. Put every product in ONE call.",
+    inputSchema: z.object({
+      channel: z.enum(["shopify", "woocommerce"]),
+      assignments: z.array(z.object({ key: z.string().describe("The product's key from listStoreProductsWithoutSku"), sku: z.string() })),
+    }),
+  }),
   searchItems: tool({
     description: "Search and filter items in ONE call. Pass a list of SKUs to look several up at once, or a filter. Returns SKU, name, type, category, on-hand, min/max, cost, price, supplier, lead time, status. Use limit to keep results small.",
     inputSchema: z.object({ skus: skuList.optional().describe("Look up these SKUs (any number) in a single call"), filter: itemFilter.optional(), limit: z.number().optional().describe("Default 50, max 200"), sortBy: z.enum(["sku", "name", "onHand", "value", "updatedAt"]).optional() }),
@@ -278,7 +289,7 @@ export const agentTools = {
 export type AgentTools = typeof agentTools;
 export type AgentToolName = keyof AgentTools;
 
-export const READ_TOOLS: AgentToolName[] = ["getWorkspaceSummary", "getConnections", "searchItems", "getItem", "explodeBom", "whereUsed", "getReport", "previewBulkUpdate", "listPurchaseOrders", "suggestPurchaseOrders", "proposeCycleCount", "getCycleCount"];
+export const READ_TOOLS: AgentToolName[] = ["getWorkspaceSummary", "getConnections", "listStoreProductsWithoutSku", "searchItems", "getItem", "explodeBom", "whereUsed", "getReport", "previewBulkUpdate", "listPurchaseOrders", "suggestPurchaseOrders", "proposeCycleCount", "getCycleCount"];
 export const WRITE_TOOLS: AgentToolName[] = [
   "bulkUpdateItems",
   "createItems",
@@ -300,6 +311,7 @@ export const WRITE_TOOLS: AgentToolName[] = [
   "completeCycleCount",
   "deleteItems",
   "syncChannel",
+  "assignStoreSkus",
 ];
 
 export function isWriteTool(name: string): name is AgentToolName {
@@ -311,6 +323,8 @@ export const TOOL_LABELS: Record<AgentToolName, string> = {
   getWorkspaceSummary: "Workspace summary",
   getConnections: "Connections",
   syncChannel: "Sync channel",
+  listStoreProductsWithoutSku: "Store products without SKU",
+  assignStoreSkus: "Assign store SKUs",
   searchItems: "Search items",
   getItem: "Item detail",
   explodeBom: "Explode BOM",

@@ -336,6 +336,7 @@ export async function batchUpdateStock(creds: WooCreds, updates: Array<WooRef & 
 
 export interface WooProductPatch {
   name?: string;
+  sku?: string;
   description?: string;
   price?: number;
   weight?: number;
@@ -394,6 +395,7 @@ export async function updateProduct(creds: WooCreds, ref: WooRef, p: WooProductP
   const body: Record<string, unknown> = {};
   if (p.name !== undefined && !ref.variationId) body.name = p.name;
   if (p.description !== undefined && !ref.variationId) body.description = p.description;
+  if (p.sku !== undefined) body.sku = p.sku;
   if (p.price !== undefined) body.regular_price = p.price > 0 ? String(p.price) : "";
   if (p.weight !== undefined) body.weight = p.weight ? String(p.weight) : "";
   if (p.dimensions) body.dimensions = { length: String(p.dimensions.length ?? ""), width: String(p.dimensions.width ?? ""), height: String(p.dimensions.height ?? "") };

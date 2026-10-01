@@ -1,4 +1,4 @@
-import type { Address, Integration, Item, ItemStock } from "@/lib/types";
+import type { Address, Integration, Item, ItemStock, StoreProductWithoutSku } from "@/lib/types";
 import type { WriteOp } from "@/lib/store/types";
 import { activityOp, cancelOrder, createOrder, defaultLocation, importItems, qtyAt, type ImportRow } from "@/lib/inventory";
 import { nowIso } from "@/lib/utils";
@@ -73,21 +73,40 @@ interface ChannelRow {
   modifiedAt?: string;
 }
 
-function shopifyRows(products: shopify.ShopifyProduct[]): { rows: ChannelRow[]; skippedNoSku: number } {
+function shopifyRows(products: shopify.ShopifyProduct[]): { rows: ChannelRow[]; skippedNoSku: number; noSku: StoreProductWithoutSku[] } {
   const rows: ChannelRow[] = [];
-  let skippedNoSku = 0;
+  const noSku: StoreProductWithoutSku[] = [];
+  const seenAt = nowIso();
   for (const p of products) {
     const multi = p.variants.length > 1;
     for (const v of p.variants) {
       const sku = v.sku?.trim();
+      const variantTitle = multi && v.title && v.title !== "Default Title" ? v.title : undefined;
       if (!sku) {
-        skippedNoSku++;
+        noSku.push({
+          key: `${p.id}:${v.id}`,
+          ref: { productId: String(p.id), variantId: String(v.id), inventoryItemId: String(v.inventory_item_id) },
+          title: p.title,
+          variantTitle,
+          category: p.product_type || undefined,
+          brand: p.vendor || undefined,
+          tags: p.tags ? p.tags.split(",").map((t) => t.trim()).filter(Boolean) : undefined,
+          price: Number(v.price) || undefined,
+          barcode: v.barcode?.trim() || undefined,
+          qty: v.inventory_management ? v.inventory_quantity : undefined,
+          weight: v.weight || undefined,
+          weightUnit: v.weight_unit,
+          imageUrl: p.image?.src,
+          imageUrls: (p.images ?? []).map((i) => i.src).filter(Boolean),
+          published: p.status === "active",
+          seenAt,
+        });
         continue;
       }
       rows.push({
         row: {
           sku,
-          name: multi && v.title && v.title !== "Default Title" ? `${p.title} – ${v.title}` : p.title,
+          name: variantTitle ? `${p.title} – ${variantTitle}` : p.title,
           category: p.product_type || undefined,
           brand: p.vendor || undefined,
           tags: p.tags ? p.tags.split(",").map((t) => t.trim()).filter(Boolean) : undefined,
@@ -107,20 +126,37 @@ function shopifyRows(products: shopify.ShopifyProduct[]): { rows: ChannelRow[]; 
       });
     }
   }
-  return { rows, skippedNoSku };
+  return { rows, skippedNoSku: noSku.length, noSku };
 }
 
-function wooRows(list: Array<{ product: woo.WooProduct; variation?: woo.WooVariation }>, weightUnit?: string): { rows: ChannelRow[]; skippedNoSku: number } {
+function wooRows(list: Array<{ product: woo.WooProduct; variation?: woo.WooVariation }>, weightUnit?: string): { rows: ChannelRow[]; skippedNoSku: number; noSku: StoreProductWithoutSku[] } {
   const rows: ChannelRow[] = [];
-  let skippedNoSku = 0;
+  const noSku: StoreProductWithoutSku[] = [];
+  const seenAt = nowIso();
   for (const { product, variation } of list) {
     const source = variation ?? product;
     const sku = source.sku?.trim();
+    const options = variation?.attributes?.map((a) => a.option).filter(Boolean).join(" / ");
     if (!sku) {
-      skippedNoSku++;
+      noSku.push({
+        key: `${product.id}:${variation?.id ?? ""}`,
+        ref: { productId: String(product.id), variationId: variation ? String(variation.id) : undefined },
+        title: product.name,
+        variantTitle: options || undefined,
+        category: product.categories?.[0]?.name,
+        tags: product.tags?.map((t) => t.name),
+        price: Number(source.price || source.regular_price) || undefined,
+        barcode: source.global_unique_id?.trim() || undefined,
+        qty: source.manage_stock && source.stock_quantity !== null ? source.stock_quantity : undefined,
+        weight: Number(source.weight) || undefined,
+        weightUnit,
+        imageUrl: variation?.image?.src ?? product.images?.[0]?.src,
+        imageUrls: [variation?.image?.src, ...(product.images ?? []).map((i) => i.src)].filter((u, i, arr): u is string => !!u && arr.indexOf(u) === i),
+        published: product.status === "publish" && (variation ? variation.status === "publish" : true),
+        seenAt,
+      });
       continue;
     }
-    const options = variation?.attributes?.map((a) => a.option).filter(Boolean).join(" / ");
     rows.push({
       row: {
         sku,
@@ -143,7 +179,19 @@ function wooRows(list: Array<{ product: woo.WooProduct; variation?: woo.WooVaria
       modifiedAt: (variation?.date_modified_gmt ?? product.date_modified_gmt) ? new Date(`${variation?.date_modified_gmt ?? product.date_modified_gmt}Z`).toISOString() : undefined,
     });
   }
-  return { rows, skippedNoSku };
+  return { rows, skippedNoSku: noSku.length, noSku };
+}
+
+/** At most this many SKU-less store products are remembered per connection. */
+const MISSING_SKU_LIMIT = 300;
+
+/** Replaces the connection's list of SKU-less store products with what a full listing found. */
+function missingSkusOp(integration: Integration, found: StoreProductWithoutSku[]): WriteOp | null {
+  const current = integration.missingSkus ?? [];
+  const next = found.slice(0, MISSING_SKU_LIMIT);
+  if (JSON.stringify(next) === JSON.stringify(current)) return null;
+  integration.missingSkus = next;
+  return { op: "patch", collection: "integrations", id: integration.id, patch: { missingSkus: next } };
 }
 
 async function syncProducts(ctx: ServerContext, integration: Integration, secrets: Secrets): Promise<NonNullable<SyncResult["products"]>> {
@@ -164,6 +212,11 @@ async function syncProducts(ctx: ServerContext, integration: Integration, secret
   const items = await ctx.store.list("items");
   const bySku = new Map(items.map((i) => [i.sku.toUpperCase(), i]));
   const ops: WriteOp[] = [...excluded.ops];
+  // An empty listing is treated as a failed read (see below), so the SKU-less list is only replaced when the store answered.
+  if (rows.length || listed.noSku.length) {
+    const op = missingSkusOp(integration, listed.noSku);
+    if (op) ops.push(op);
+  }
   const storeKeys = new Set<string>();
   for (const r of rows) {
     const ref = r.ref[id]!;
@@ -316,6 +369,104 @@ async function productUpdatedInStore(ctx: ServerContext, integration: Integratio
   if (ops.length) await ctx.store.batch(ops);
   const skus = rows.map((r) => r.row.sku).join(", ");
   return importable.length ? `${skus}: created from the store (${result.created})` : `${skus}: linked; cumulusOS is the source of truth, so the store's edit is not applied`;
+}
+
+/** A webhook's product: variants without a SKU join the list, variants that now have one leave it. */
+async function rememberMissingSkus(ctx: ServerContext, integration: Integration, listed: { rows: ChannelRow[]; noSku: StoreProductWithoutSku[] }): Promise<void> {
+  const id = integration.id as ChannelId;
+  const resolved = new Set(listed.rows.map((r) => channelKey(r.ref[id]!)));
+  const current = (integration.missingSkus ?? []).filter((m) => !resolved.has(m.key));
+  const keys = new Set(listed.noSku.map((f) => f.key));
+  const next = [...current.filter((c) => !keys.has(c.key)), ...listed.noSku].slice(0, MISSING_SKU_LIMIT);
+  if (JSON.stringify(next) === JSON.stringify(integration.missingSkus ?? [])) return;
+  integration.missingSkus = next;
+  await ctx.store.patch("integrations", integration.id, { missingSkus: next });
+}
+
+export interface SkuAssignment {
+  /** StoreProductWithoutSku.key */
+  key: string;
+  sku: string;
+}
+
+export interface AssignSkusResult {
+  summary: string;
+  created: Array<{ sku: string; name: string }>;
+  errors: string[];
+}
+
+/**
+ * Gives SKU-less store products a SKU: written to the store first (the variant or variation), then the item is
+ * created here from the store's details with the store's count as its opening quantity, linked to the store record.
+ */
+export async function assignStoreSkus(ctx: ServerContext, integration: Integration, secrets: Secrets, assignments: SkuAssignment[]): Promise<AssignSkusResult> {
+  const id = integration.id as ChannelId;
+  if (id === "shopify") secrets = await freshShopifySecrets(ctx, integration, secrets);
+  const pending = new Map((integration.missingSkus ?? []).map((m) => [m.key, m]));
+  const items = await ctx.store.list("items");
+  const taken = new Set(items.map((i) => i.sku.toUpperCase()));
+  const out: AssignSkusResult = { summary: "", created: [], errors: [] };
+  const done: StoreProductWithoutSku[] = [];
+  const rows: ChannelRow[] = [];
+  const seen = new Set<string>();
+  for (const a of assignments) {
+    const sku = a.sku.trim();
+    const target = pending.get(a.key);
+    const label = target ? (target.variantTitle ? `${target.title} – ${target.variantTitle}` : target.title) : a.key;
+    if (!target) {
+      out.errors.push(`${label}: not on the list of store products without a SKU; sync first.`);
+      continue;
+    }
+    if (!sku) {
+      out.errors.push(`${label}: no SKU given.`);
+      continue;
+    }
+    if (taken.has(sku.toUpperCase()) || seen.has(sku.toUpperCase())) {
+      out.errors.push(`${label}: SKU ${sku} is already used.`);
+      continue;
+    }
+    seen.add(sku.toUpperCase());
+    try {
+      if (id === "shopify") {
+        const ref = target.ref as NonNullable<Item["channels"]>["shopify"] & { variantId: string };
+        await shopify.updateVariant(shopifyCreds(integration, secrets), ref.variantId, { sku });
+      } else {
+        const ref = target.ref as NonNullable<NonNullable<Item["channels"]>["woocommerce"]>;
+        await woo.updateProduct(await wooCreds(ctx, integration, secrets), ref, { sku });
+      }
+    } catch (e) {
+      out.errors.push(`${label}: ${NAME[id]} refused the SKU (${e instanceof Error ? e.message : String(e)})`);
+      continue;
+    }
+    rows.push({
+      row: { sku, name: label, category: target.category, brand: target.brand, tags: target.tags, price: target.price, barcode: target.barcode, qty: target.qty, weight: target.weight, imageUrl: target.imageUrl, imageUrls: target.imageUrls, externalId: target.ref.productId, externalSource: id, published: target.published },
+      ref: { [id]: target.ref } as NonNullable<Item["channels"]>,
+      weightUnit: target.weightUnit,
+    });
+    done.push(target);
+    out.created.push({ sku, name: label });
+  }
+  if (rows.length) {
+    await importItems(ctx.store, ctx.actor, rows.map((r) => r.row), { setQuantities: true });
+    const after = await ctx.store.list("items");
+    const bySku = new Map(after.map((i) => [i.sku.toUpperCase(), i]));
+    const ops: WriteOp[] = [];
+    for (const r of rows) {
+      const item = bySku.get(r.row.sku.toUpperCase());
+      if (!item) continue;
+      const patch: Partial<Item> = { channels: { ...(item.channels ?? {}), ...r.ref } };
+      if (r.weightUnit && r.row.weight && item.weightUnit !== r.weightUnit) patch.weightUnit = r.weightUnit;
+      ops.push({ op: "patch", collection: "items", id: item.id, patch });
+    }
+    const doneKeys = new Set(done.map((d) => d.key));
+    const remaining = (integration.missingSkus ?? []).filter((m) => !doneKeys.has(m.key));
+    integration.missingSkus = remaining;
+    ops.push({ op: "patch", collection: "integrations", id: integration.id, patch: { missingSkus: remaining } });
+    ops.push(activityOp(ctx.actor, "integration.synced", `Assigned SKUs to ${rows.length} ${NAME[id]} product${rows.length === 1 ? "" : "s"} and created ${rows.length === 1 ? "it" : "them"} here: ${rows.map((r) => r.row.sku).join(", ")}`, { entityType: "integration", entityId: id }));
+    await ctx.store.batch(ops);
+  }
+  out.summary = `${out.created.length} SKU${out.created.length === 1 ? "" : "s"} assigned in ${NAME[id]} and created here${out.errors.length ? `; ${out.errors.length} failed` : ""}`;
+  return out;
 }
 
 // ---- orders --------------------------------------------------------------------
@@ -608,8 +759,9 @@ export async function handleChannelWebhook(ctx: ServerContext, integration: Inte
       return productDeletedInStore(ctx, integration, (i) => i.channels?.shopify?.productId === productId);
     }
     if (topic === "products/update") {
-      const { rows } = shopifyRows([body as unknown as shopify.ShopifyProduct]);
-      return productUpdatedInStore(ctx, integration, rows);
+      const listed = shopifyRows([body as unknown as shopify.ShopifyProduct]);
+      await rememberMissingSkus(ctx, integration, listed);
+      return productUpdatedInStore(ctx, integration, listed.rows);
     }
     if (topic === "inventory_levels/update") return "stock from the store is not applied; cumulusOS is the source of truth";
     return `unhandled topic ${topic}`;
@@ -633,8 +785,9 @@ export async function handleChannelWebhook(ctx: ServerContext, integration: Inte
     const notes: string[] = [];
     if (String(body.status ?? "") === "trash") return productDeletedInStore(ctx, integration, (i) => i.channels?.woocommerce?.productId === productId);
     {
-      const { rows } = wooRows([{ product: body as unknown as woo.WooProduct }], integration.config?.weightUnit);
-      if (rows.length) notes.push(await productUpdatedInStore(ctx, integration, rows));
+      const listed = wooRows([{ product: body as unknown as woo.WooProduct }], integration.config?.weightUnit);
+      await rememberMissingSkus(ctx, integration, listed);
+      if (listed.rows.length) notes.push(await productUpdatedInStore(ctx, integration, listed.rows));
     }
     return notes.join(" · ") || "nothing to apply";
   }

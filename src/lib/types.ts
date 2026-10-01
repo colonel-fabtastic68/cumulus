@@ -823,7 +823,30 @@ export interface Integration {
   lastDetailsPushAt?: string;
   /** SKUs deleted in cumulusOS: pulls from this connection skip them until the item exists here again. */
   excludedSkus?: string[];
+  /** Store products that could not come in because they have no SKU; Strato or the connection panel assigns one, which is written to the store too. */
+  missingSkus?: StoreProductWithoutSku[];
   createdAt: string;
+}
+
+/** A product (or variant) the store lists without a SKU, kept so a SKU can be assigned to it later. */
+export interface StoreProductWithoutSku {
+  /** Stable key for the store record: productId:variantId (Shopify) or productId:variationId (WooCommerce). */
+  key: string;
+  ref: NonNullable<ChannelRefs["shopify"]> | NonNullable<ChannelRefs["woocommerce"]>;
+  title: string;
+  variantTitle?: string;
+  category?: string;
+  brand?: string;
+  tags?: string[];
+  price?: number;
+  barcode?: string;
+  qty?: number;
+  weight?: number;
+  weightUnit?: string;
+  imageUrl?: string;
+  imageUrls?: string[];
+  published?: boolean;
+  seenAt: string;
 }
 
 /** Left behind when a linked item is deleted, so the next push can remove the store product. */

@@ -2,14 +2,16 @@
 
 import { useState } from "react";
 import { isDemo } from "@/lib/firebase-config";
-import { ArrowRight, Download, ExternalLink, Plug, RefreshCw, Unplug } from "lucide-react";
+import { ArrowRight, Download, ExternalLink, Plug, RefreshCw, Sparkles, Unplug } from "lucide-react";
 import type { Integration, IntegrationSettings } from "@/lib/types";
 import { Badge, Banner, Button, ConfirmDialog, DescriptionList, Modal, StatusBadge, TextField, Toggle, useToast } from "@/components/ui";
 import { useLocations } from "@/lib/locations";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/api-client";
-import { useStore } from "@/lib/store/provider";
+import { useCollection, useStore } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
+import { useAgent } from "@/components/agent/AgentProvider";
+import { storeProductLabel, suggestSkus } from "@/lib/skus";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { nowIso } from "@/lib/utils";
 import { defaultSettings, type IntegrationDef } from "./catalog";
@@ -239,8 +241,10 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
   const api = useApi();
   const store = useStore();
   const toast = useToast();
+  const items = useCollection("items");
+  const agent = useAgent();
   const [settings, setSettings] = useState<IntegrationSettings>(() => ({ ...defaultSettings(def), ...(integration.settings ?? {}) }));
-  const [busy, setBusy] = useState<"sync" | "save" | "disconnect" | "push" | "reconnect" | null>(null);
+  const [busy, setBusy] = useState<"sync" | "save" | "disconnect" | "push" | "reconnect" | "skus" | null>(null);
   const [confirm, setConfirm] = useState(false);
   const [replace, setReplace] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "critical" | "info"; text: string } | null>(integration.lastError ? { tone: "critical", text: integration.lastError } : null);
@@ -280,6 +284,20 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
       if (parts.length === 0) parts.push("Nothing to push; the store is in step");
       return `${parts.join(", ")}${r.errors.length ? ` · ${r.errors.slice(0, 2).join("; ")}` : ""}`;
     });
+
+  // Store products with no SKU: give each a SKU in the workspace's style, written to the store, then created here.
+  const missing = integration.missingSkus ?? [];
+  const assignSuggestedSkus = () =>
+    run("skus", async () => {
+      const suggested = suggestSkus(missing, items);
+      const assignments = missing.map((m) => ({ key: m.key, sku: suggested.get(m.key)! }));
+      const res = await api<{ summary: string; errors: string[] }>(`/api/integrations/${def.id}/assign-skus`, { assignments });
+      return `${res.summary}${res.errors.length ? ` · ${res.errors.slice(0, 2).join("; ")}` : ""}`;
+    });
+  const fixWithStrato = () => {
+    onClose();
+    agent.open(`${def.name} has ${missing.length} product${missing.length === 1 ? "" : "s"} without a SKU, so ${missing.length === 1 ? "it was" : "they were"} not imported. List them, propose a SKU for each in our style, and assign them so they are fixed in ${def.name} and created here.`, { send: true });
+  };
 
   // Re-verifies with the stored credentials and registers the webhooks again (settings changes need this too).
   const reconnect = () =>
@@ -332,6 +350,26 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
           </span>
           <button type="button" className="text-accent hover:underline" onClick={() => void run("save", async () => { await store.patch("integrations", def.id, { excludedSkus: [] }); return "The next sync may bring those products back in."; })} disabled={busy !== null}>
             Allow them back
+          </button>
+        </span>
+      ),
+    });
+  }
+  if (missing.length) {
+    const n = missing.length;
+    rows.push({
+      label: "Without SKU",
+      value: (
+        <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span>
+            {n} product{n === 1 ? "" : "s"} in {def.name} {n === 1 ? "has" : "have"} no SKU and {n === 1 ? "was" : "were"} not imported ({missing.slice(0, 3).map(storeProductLabel).join(", ")}
+            {n > 3 ? `, +${n - 3}` : ""})
+          </span>
+          <button type="button" className="inline-flex items-center gap-1 text-accent hover:underline" onClick={fixWithStrato} disabled={busy !== null}>
+            <Sparkles className="h-3.5 w-3.5" /> Fix with Strato
+          </button>
+          <button type="button" className="text-accent hover:underline" onClick={() => void assignSuggestedSkus()} disabled={busy !== null}>
+            {busy === "skus" ? "Assigning…" : "Assign suggested SKUs"}
           </button>
         </span>
       ),

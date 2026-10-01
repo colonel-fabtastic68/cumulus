@@ -37,6 +37,7 @@ import {
 } from "@/lib/inventory";
 import { matches, round } from "@/lib/utils";
 import { crossRefText } from "@/lib/scan";
+import { storeProductLabel, suggestSkus } from "@/lib/skus";
 import { itemSupplierLinks, supplierItems } from "@/lib/suppliers";
 import { kpiReport } from "@/lib/kpis";
 import { completeCycleCount, describeScope, lineVariance, recordCounts, startCycleCount, suggestCountItems } from "@/lib/cycleCounts";
@@ -264,7 +265,7 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
             lastError: c.lastError,
             settings: c.settings,
             webhooks: c.webhooks?.map((w) => w.topic),
-            ...(channel ? { linkedItems: linked.length, notInStore: notInStore.length, notInStoreSkus: notInStore.slice(0, 20).map((i) => i.sku) } : {}),
+            ...(channel ? { linkedItems: linked.length, notInStore: notInStore.length, notInStoreSkus: notInStore.slice(0, 20).map((i) => i.sku), storeProductsWithoutSku: c.missingSkus?.length ?? 0 } : {}),
           };
         });
     }
@@ -278,6 +279,35 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
       for (const k of ["products", "orders", "pushStock", "pushProducts"] as const) if (typeof input[k] === "boolean") body[k] = input[k] as boolean;
       const res = await ctx.api<{ summary: string; errors?: string[]; stockPushed?: number; created?: number; detailsUpdated?: number; removed?: number }>(`/api/integrations/${channel}/sync`, body);
       return { ok: true, summary: res.summary, stockPushed: res.stockPushed, productsCreated: res.created, productsUpdated: res.detailsUpdated, productsRemoved: res.removed, warnings: (res.errors ?? []).slice(0, 10) };
+    }
+
+    case "listStoreProductsWithoutSku": {
+      const [integrations, items] = await Promise.all([store.list("integrations"), store.list("items")]);
+      const channels = integrations.filter((c) => (c.id === "shopify" || c.id === "woocommerce") && c.status !== "not_connected" && (!input.channel || c.id === input.channel));
+      if (channels.length === 0) return { products: [], note: input.channel ? `${CHANNEL_NAMES[String(input.channel)]} is not connected.` : "No store is connected." };
+      const products: Array<Record<string, unknown>> = [];
+      for (const c of channels) {
+        const list = c.missingSkus ?? [];
+        const suggested = suggestSkus(list, items);
+        for (const p of list) {
+          products.push({ channel: c.id, key: p.key, title: p.title, variant: p.variantTitle, name: storeProductLabel(p), category: p.category, brand: p.brand, price: p.price, barcode: p.barcode, storeQty: p.qty, published: p.published, suggestedSku: suggested.get(p.key) });
+        }
+      }
+      return {
+        products,
+        note: products.length ? "Each product needs a unique SKU. The suggestions follow the workspace's SKU style; adjust them if the user has a numbering scheme. Then call assignStoreSkus once with every key." : "Every store product has a SKU. If the store was changed recently, run syncChannel first to refresh the list.",
+      };
+    }
+
+    case "assignStoreSkus": {
+      const channel = String(input.channel);
+      if (!ctx.api) throw new InventoryError("Assigning store SKUs runs in the hosted app with a signed-in account; this session cannot reach the connection.");
+      const integration = await store.get("integrations", channel as "shopify" | "woocommerce");
+      if (!integration || integration.status === "not_connected") throw new InventoryError(`${CHANNEL_NAMES[channel] ?? channel} is not connected. Connect it under Integrations first.`);
+      const assignments = ((input.assignments as Array<{ key: string; sku: string }>) ?? []).map((a) => ({ key: String(a.key), sku: String(a.sku).trim() }));
+      if (assignments.length === 0) throw new InventoryError("No assignments given.");
+      const res = await ctx.api<{ summary: string; created: Array<{ sku: string; name: string }>; errors: string[] }>(`/api/integrations/${channel}/assign-skus`, { assignments });
+      return { ok: res.errors.length === 0, summary: res.summary, created: res.created, errors: res.errors };
     }
 
     case "searchItems": {
@@ -868,6 +898,16 @@ export async function describeProposal(name: AgentToolName, rawInput: unknown, c
           on(input.pushStock, true) ? "Push stock levels out" : null,
         ].filter((x): x is string => Boolean(x));
         return { title: `Sync ${channel} now`, lines: steps.length ? steps : ["Nothing selected to sync"] };
+      }
+      case "assignStoreSkus": {
+        const channel = CHANNEL_NAMES[String(input.channel)] ?? String(input.channel);
+        const integration = await ctx.store.get("integrations", String(input.channel) as "shopify" | "woocommerce");
+        const byKey = new Map((integration?.missingSkus ?? []).map((m) => [m.key, m]));
+        const assignments = (input.assignments as Array<{ key: string; sku: string }>) ?? [];
+        return {
+          title: `Assign ${assignments.length} SKU${assignments.length === 1 ? "" : "s"} in ${channel}`,
+          lines: [`Each SKU is written to the ${channel} product, then the item is created here with the store's quantity.`, ...assignments.slice(0, 40).map((a) => `${a.sku} → ${byKey.has(a.key) ? storeProductLabel(byKey.get(a.key)!) : a.key}`)],
+        };
       }
       case "adjustStock": {
         const adj = (input.adjustments as Array<Record<string, unknown>>) ?? [];

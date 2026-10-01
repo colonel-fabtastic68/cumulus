@@ -28,7 +28,7 @@ export function buildAgentContext(ws: Pick<WorkspaceSnapshot, "items" | "supplie
             const where = c.config?.shop ?? c.config?.siteUrl ?? c.config?.account;
             const linked = ws.items.filter((i) => !!i.channels?.[c.id as "shopify" | "woocommerce"]).length;
             const flags = c.id === "shopify" || c.id === "woocommerce" ? "store mirrors cumulusOS: items, prices, stock and status out; orders and new products in" : [c.settings?.syncProducts && "products in"].filter(Boolean).join(", ");
-            return `${NAMES[c.id] ?? c.id} ${c.status === "error" ? "connected with an error" : "connected"}${where ? ` (${where})` : ""}${c.lastSyncAt ? `, last sync ${c.lastSyncAt.slice(0, 16).replace("T", " ")}` : ""}${flags ? ` [${flags}]` : ""}${linked ? `, ${linked} linked items` : ""}${c.lastError ? `, last error: ${c.lastError.slice(0, 120)}` : ""}`;
+            return `${NAMES[c.id] ?? c.id} ${c.status === "error" ? "connected with an error" : "connected"}${where ? ` (${where})` : ""}${c.lastSyncAt ? `, last sync ${c.lastSyncAt.slice(0, 16).replace("T", " ")}` : ""}${flags ? ` [${flags}]` : ""}${linked ? `, ${linked} linked items` : ""}${c.missingSkus?.length ? `, ${c.missingSkus.length} store products without a SKU (not imported; fix with assignStoreSkus)` : ""}${c.lastError ? `, last error: ${c.lastError.slice(0, 120)}` : ""}`;
           })
           .join("; ")}`
       : "Connections: none connected (Shopify, WooCommerce, Shippo and EasyPost connect under Integrations)",
