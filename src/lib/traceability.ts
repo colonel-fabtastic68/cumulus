@@ -22,9 +22,16 @@ export interface TraceSource {
   customers?: Customer[];
 }
 
-/** What to call a batch: its lot number, else the supplier's code, else a short id. */
+/** A short, stable tag for a batch that pre-dates lot numbers, hashed from its id so look-alike ids still read apart. */
+function idTag(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return `#${h.toString(36).toUpperCase().padStart(6, "0").slice(-6)}`;
+}
+
+/** What to call a batch: its lot number, else the supplier's code, else a tag from its id. */
 export function lotLabel(lot: Pick<Lot, "id" | "number" | "supplierLot">): string {
-  return lot.number ?? lot.supplierLot ?? lot.id.replace(/^lot_/, "").slice(0, 8).toUpperCase();
+  return lot.number ?? lot.supplierLot ?? idTag(lot.id);
 }
 
 export function lotSourceLabel(lot: Lot): string {

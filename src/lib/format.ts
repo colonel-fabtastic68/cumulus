@@ -29,16 +29,27 @@ export function formatPercent(n: number, decimals = 0): string {
   return `${n.toFixed(decimals)}%`;
 }
 
+/**
+ * A plain date (YYYY-MM-DD: expected dates, order-by dates, snoozes) is a
+ * calendar day in the workspace's local sense, so it is read as local
+ * midnight; `new Date("2026-10-03")` would read it as UTC and show the day
+ * before anywhere west of Greenwich. Timestamps parse as usual.
+ */
+export function parseDate(value: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(value);
+}
+
 export function formatDate(iso?: string | null): string {
   if (!iso) return "—";
-  const d = new Date(iso);
+  const d = parseDate(iso);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 export function formatDateTime(iso?: string | null): string {
   if (!iso) return "—";
-  const d = new Date(iso);
+  const d = parseDate(iso);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleString("en-US", {
     month: "short",
@@ -48,22 +59,18 @@ export function formatDateTime(iso?: string | null): string {
   });
 }
 
+/** "3d ago" for the past, "in 3d" for the future (expected dates, snoozes). */
 export function formatRelative(iso?: string | null): string {
   if (!iso) return "—";
-  const t = new Date(iso).getTime();
+  const t = parseDate(iso).getTime();
   if (Number.isNaN(t)) return "—";
   const diff = Date.now() - t;
-  const s = Math.round(diff / 1000);
+  const future = diff < 0;
+  const s = Math.round(Math.abs(diff) / 1000);
   if (s < 45) return "just now";
   const m = Math.round(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.round(h / 24);
-  if (d < 30) return `${d}d ago`;
-  const mo = Math.round(d / 30);
-  if (mo < 12) return `${mo}mo ago`;
-  return `${Math.round(mo / 12)}y ago`;
+  const unit = m < 60 ? `${m}m` : Math.round(m / 60) < 24 ? `${Math.round(m / 60)}h` : Math.round(m / 1440) < 30 ? `${Math.round(m / 1440)}d` : Math.round(m / 43_200) < 12 ? `${Math.round(m / 43_200)}mo` : `${Math.round(m / 525_600)}y`;
+  return future ? `in ${unit}` : `${unit} ago`;
 }
 
 /** yyyy-mm-dd for <input type="date"> */

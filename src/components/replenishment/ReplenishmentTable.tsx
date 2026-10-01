@@ -258,6 +258,7 @@ export function ReplenishmentTable({ rows, canWrite, busy, onOrder, onBuild, onS
         rows={visible}
         columns={columns}
         rowKey={(r) => r.item.id}
+        rowLabel={(r) => r.item.sku}
         selectable={canWrite}
         selected={selected}
         onSelectedChange={setSelected}

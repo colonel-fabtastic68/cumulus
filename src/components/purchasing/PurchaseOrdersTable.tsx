@@ -196,6 +196,7 @@ export function PurchaseOrdersTable({ purchaseOrders, canWrite, busyId, onSelect
       columns={columns}
       rowKey={(p) => p.id}
       onRowClick={onSelect}
+      rowLabel={(p) => p.number}
       selectable={canWrite}
       selected={selected}
       onSelectedChange={setSelected}
