@@ -7,7 +7,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy policy"
-      updated="16 September 2026"
+      updated="30 September 2026"
       intro="cumulusOS is inventory software for small product teams. This policy explains what we collect when you use it, why we hold it, who processes it on our behalf, and how to get it back or have it deleted."
     >
       <LegalSection heading="What we collect">
@@ -20,6 +20,11 @@ export default function PrivacyPage() {
             "Messages you send to Strato, our assistant, and the workspace records needed to answer them.",
           ]}
         />
+      </LegalSection>
+
+      <LegalSection heading="Your customers' data from connected stores">
+        <p>When you connect Shopify, WooCommerce or Square, cumulusOS reads orders so they can become sales orders here. From each order we keep the buyer&apos;s name, email address, phone number and shipping address, the items and quantities, and the order number. We use them for exactly two things: to show and fulfill the order, and to print the shipping label. We read nothing else about your customers, we do not build profiles, we make no automated decisions about people, and we never sell, share or use this data for advertising or for anyone other than your workspace.</p>
+        <p>You are the controller of this data and we process it on your instructions under the <a href="/dpa" className="text-accent hover:underline">data processing addendum</a>. Deletion requests from the store are applied automatically through the store&apos;s compliance webhooks, and your team can erase a person&apos;s details from any customer record in the app (Customers, Erase personal data), which anonymizes every order, return and quote that named them while keeping quantities and totals for the books. Where a customer asks not to be contacted, the record carries a Do not contact flag that every outbound message respects.</p>
       </LegalSection>
 
       <LegalSection heading="Why we use it">
@@ -46,15 +51,15 @@ export default function PrivacyPage() {
       </LegalSection>
 
       <LegalSection heading="Keeping and deleting data">
-        <p>Workspace data is kept while the workspace exists. Owners and admins can export everything from the Exports page or from Settings, and can clear a workspace from Settings. Ask us to delete your account and we will remove it and its workspaces, except records we must keep for tax or legal reasons. Backups roll off within 30 days.</p>
+        <p>Workspace data is kept while the workspace exists. Owners and admins can export everything from the Exports page, restore or delete snapshots under Time Machine, and clear a workspace from Settings. Ask us to delete your account and we will remove it and its workspaces within 30 days, except records we must keep for tax or legal reasons. Daily snapshots are kept for 14 days and manual ones until you delete them; a deleted workspace&apos;s snapshots go with it. Customer details from a connected store are kept only as long as the order that carried them, and are removed at once when the store or the person asks. Disconnecting a store deletes its credentials immediately.</p>
       </LegalSection>
 
       <LegalSection heading="Security">
-        <p>Traffic is encrypted in transit. Database rules restrict every workspace to its members, and credentials for connected stores and carriers are held server-side where browsers cannot read them. No system is perfect: tell us at once if you think an account has been compromised.</p>
+        <p>All traffic is encrypted in transit (TLS). All stored data, including snapshots, uploaded documents and the credentials of connected stores, is encrypted at rest by Google Cloud (AES-256). Database rules restrict every workspace to its members; store and carrier credentials live in a server-only collection that browsers cannot read. Production data is kept apart from development: the demo and local mode run entirely in the browser and never touch the production database. Access to production systems is limited to the people who run cumulusOS, protected by two-factor authentication, and every read and write of customer data is logged by Google Cloud audit logging, with changes also recorded in each workspace&apos;s own activity log. Accounts need a password of at least ten characters or a one-time code sent by email. If we learn of a breach affecting your data we will tell you without undue delay and within 72 hours of confirming it, with what happened and what we are doing. No system is perfect: tell us at once if you think an account has been compromised.</p>
       </LegalSection>
 
       <LegalSection heading="Your rights">
-        <p>You can ask for a copy of your data, correct it, or have it deleted. Depending on where you live you may also object to certain processing or ask us to restrict it. Write to privacy@cumulusos.com and we will respond within 30 days.</p>
+        <p>You can ask for a copy of your data, correct it, or have it deleted. Depending on where you live you may also object to certain processing, ask us to restrict it, or opt out of any sharing (we do none). Write to privacy@cumulusos.com and we will respond within 30 days. If you are a customer of a shop that uses cumulusOS, your request goes to that shop, which can act on it in the app; we help them do so.</p>
       </LegalSection>
 
       <LegalSection heading="Children">

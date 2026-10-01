@@ -14,7 +14,7 @@ export function emailError(value: string): string | undefined {
 
 export function passwordError(value: string): string | undefined {
   if (!value) return "Enter a password.";
-  if (value.length < 6) return "Use at least 6 characters.";
+  if (value.length < 10) return "Use at least 10 characters.";
   return undefined;
 }
 

@@ -49,7 +49,7 @@ export function SignUpForm() {
       <form onSubmit={submit} noValidate className="flex flex-col gap-4">
         <TextField label="Your name" value={name} onChange={(e) => setName(e.target.value)} error={errors.name} placeholder="Maya Okafor" autoComplete="name" autoFocus />
         <TextField label="Work email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} placeholder="you@company.com" autoComplete="email" />
-        <PasswordField value={password} onChange={(e) => setPassword(e.target.value)} error={errors.password} autoComplete="new-password" help={errors.password ? undefined : "At least 6 characters."} />
+        <PasswordField value={password} onChange={(e) => setPassword(e.target.value)} error={errors.password} autoComplete="new-password" help={errors.password ? undefined : "At least 10 characters."} />
         {authError && <Banner tone="critical">{authError}</Banner>}
         <Button type="submit" variant="primary" size="lg" fullWidth loading={busy} disabled={busy}>
           Create account

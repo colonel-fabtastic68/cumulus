@@ -46,7 +46,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     id: "shopify",
     name: "Shopify",
     kind: "channel",
-    stage: "in_progress",
+    stage: "live",
     oauth: true,
     description: "cumulusOS is the source of truth for the store: items, categories, prices, stock and status are pushed to Shopify; paid orders and products new to the store come in. Edits made in Shopify are overwritten.",
     fields: [

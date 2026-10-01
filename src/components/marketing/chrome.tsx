@@ -70,6 +70,9 @@ export function MarketingFooter() {
           <Link href="/terms" className="hover:text-text">
             Terms of service
           </Link>
+          <Link href="/dpa" className="hover:text-text">
+            Data processing
+          </Link>
           <Link href="/eula" className="hover:text-text">
             License agreement
           </Link>

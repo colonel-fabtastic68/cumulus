@@ -310,6 +310,10 @@ export interface Customer {
   /** Percentage off every line for this customer, applied after the group price. */
   discountPct?: number;
   taxExempt?: boolean;
+  /** The person asked not to be contacted for anything beyond their orders. */
+  doNotContact?: boolean;
+  /** Personal details were erased at their request; the record stays so orders still resolve. */
+  erasedAt?: string;
   /** Custom fields defined in Settings → Catalog, keyed by field key. */
   attributes?: Record<string, string>;
   /** Where the record came from (manual, import, an order that named them, a channel). */

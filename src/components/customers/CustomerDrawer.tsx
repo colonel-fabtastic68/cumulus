@@ -2,11 +2,11 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Mail, MessageSquareText, Pencil, Trash2 } from "lucide-react";
+import { BellOff, Mail, MessageSquareText, Pencil, ShieldOff, Trash2 } from "lucide-react";
 import type { Customer } from "@/lib/types";
 import { Badge, Button, ConfirmDialog, DescriptionList, Drawer, useToast } from "@/components/ui";
 import { canWrite, useCurrentUser } from "@/lib/auth";
-import { customerHistory, deleteCustomer } from "@/lib/customers";
+import { customerHistory, deleteCustomer, eraseCustomerData } from "@/lib/customers";
 import { formatDate, formatMoney, formatRelative, pluralize } from "@/lib/format";
 import { useCollection, useSettings, useStore } from "@/lib/store/provider";
 import { CustomerModal } from "./CustomerModal";
@@ -22,6 +22,7 @@ export function CustomerDrawer({ customer, onClose }: { customer: Customer | nul
   const quotes = useCollection("quotes");
   const [editing, setEditing] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  const [confirmErase, setConfirmErase] = useState(false);
   const writable = canWrite(user);
   const history = useMemo(() => (customer ? customerHistory(customer, { orders, rmas, quotes }) : null), [customer, orders, rmas, quotes]);
 
@@ -52,6 +53,18 @@ export function CustomerDrawer({ customer, onClose }: { customer: Customer | nul
                 Email
               </Button>
               <Badge tone="attention">Coming soon</Badge>
+              {customer.erasedAt && <Badge tone="warning">Personal data erased {formatDate(customer.erasedAt)}</Badge>}
+              {customer.doNotContact && !customer.erasedAt && <Badge tone="warning">Do not contact</Badge>}
+              {writable && !customer.erasedAt && (
+                <>
+                  <Button size="sm" variant="plain" icon={<BellOff />} onClick={() => void store.patch("customers", customer.id, { doNotContact: !customer.doNotContact, updatedAt: new Date().toISOString() })}>
+                    {customer.doNotContact ? "Allow contact" : "Do not contact"}
+                  </Button>
+                  <Button size="sm" variant="plain" icon={<ShieldOff />} onClick={() => setConfirmErase(true)}>
+                    Erase personal data
+                  </Button>
+                </>
+              )}
             </div>
             <div className="grid grid-cols-3 gap-2">
               <Stat label="Orders" value={String(history.orders.length)} />
@@ -86,6 +99,20 @@ export function CustomerDrawer({ customer, onClose }: { customer: Customer | nul
         )}
       </Drawer>
       <CustomerModal open={editing} customer={customer} onClose={() => setEditing(false)} />
+      <ConfirmDialog
+        open={confirmErase}
+        onClose={() => setConfirmErase(false)}
+        destructive
+        title={`Erase ${customer?.name}'s personal data?`}
+        confirmLabel="Erase"
+        message={<>For a deletion request from the person. Their name, email, phone, address, notes and contacts come off this record and off every order, return and quote that named them. Quantities, totals and dates stay for the books. This cannot be undone.</>}
+        onConfirm={async () => {
+          if (!customer) return;
+          const r = await eraseCustomerData(store, user, customer.id, { orders, rmas, quotes });
+          toast(`Erased · ${pluralize(r.orders, "order")} and ${pluralize(r.quotes, "quote")} anonymized`, "success");
+          setConfirmErase(false);
+        }}
+      />
       <ConfirmDialog
         open={confirm}
         onClose={() => setConfirm(false)}

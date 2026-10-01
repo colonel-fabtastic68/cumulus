@@ -358,6 +358,7 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
       {def.kind === "channel" && (
         <div className="rounded-[var(--radius)] border border-border bg-surface-subdued px-3.5 py-3 text-[12.5px] leading-5 text-text-secondary">
           <span className="font-medium text-text">cumulusOS is the source of truth.</span> Items, categories, prices, descriptions, stock levels and active/inactive are pushed to {def.name} as you change them here and on every sync. Orders come in, and a product the store has that cumulusOS does not is created here once. Edits made in {def.name} are overwritten; deleting an item here removes it from the store.
+          <div className="mt-1.5 text-text-tertiary">Customer data: an order brings in the buyer&apos;s name, email, phone and shipping address, used only on the sales order and its shipping label. Nothing else about customers is read, and store deletion requests are honored automatically. See the <a href="/privacy" className="text-accent hover:underline" target="_blank" rel="noreferrer">privacy policy</a> and <a href="/dpa" className="text-accent hover:underline" target="_blank" rel="noreferrer">data processing addendum</a>.</div>
         </div>
       )}
       {def.kind === "carrier" && (

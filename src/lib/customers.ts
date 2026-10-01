@@ -2,6 +2,9 @@ import type { Customer, Quote, Rma, SalesOrder } from "@/lib/types";
 import type { Store } from "@/lib/store/types";
 import type { Actor } from "@/lib/inventory";
 import { newId, nowIso } from "@/lib/utils";
+import { REDACTED_NAME, redactCustomerPatch, redactOrderPatch } from "@/lib/server/shopifyComplianceRules";
+import { activityOp } from "@/lib/inventory";
+import type { WriteOp } from "@/lib/store/types";
 
 /** Lightweight CRM: customers are matched by email first, then by exact name, so old orders that only carry a name still line up. */
 
@@ -95,6 +98,27 @@ export async function ensureCustomer(store: Store, actor: Actor, ref: { name: st
 
 export async function deleteCustomer(store: Store, id: string): Promise<void> {
   await store.remove("customers", id);
+}
+
+/**
+ * A deletion request from the person themselves: their details come off the
+ * customer record and off every order, return and quote that named them. The
+ * records stay (quantities, totals and dates are business history), with the
+ * same redaction a Shopify customers/redact webhook applies.
+ */
+export async function eraseCustomerData(store: Store, actor: Actor, customerId: string, src: { orders: SalesOrder[]; rmas: Rma[]; quotes: Quote[] }): Promise<{ orders: number; rmas: number; quotes: number }> {
+  const customer = await store.get("customers", customerId);
+  if (!customer) throw new Error("Customer not found");
+  const history = customerHistory(customer, src);
+  const now = nowIso();
+  const ops: WriteOp[] = [];
+  for (const o of history.orders) ops.push({ op: "patch", collection: "orders", id: o.id, patch: redactOrderPatch() });
+  for (const r of history.rmas) ops.push({ op: "patch", collection: "rmas", id: r.id, patch: { customer: REDACTED_NAME } });
+  for (const q of history.quotes) ops.push({ op: "patch", collection: "quotes", id: q.id, patch: { customer: REDACTED_NAME } });
+  ops.push({ op: "patch", collection: "customers", id: customer.id, patch: { ...redactCustomerPatch(now), company: undefined, tags: [], erasedAt: now, doNotContact: true } });
+  ops.push(activityOp(actor, "integration.compliance", `${actor.name} erased the personal data of a customer at their request: ${history.orders.length} order${history.orders.length === 1 ? "" : "s"}, ${history.rmas.length} return${history.rmas.length === 1 ? "" : "s"} and ${history.quotes.length} quote${history.quotes.length === 1 ? "" : "s"} no longer name them`, { meta: { customerId: customer.id, orders: history.orders.length } }));
+  await store.batch(ops);
+  return { orders: history.orders.length, rmas: history.rmas.length, quotes: history.quotes.length };
 }
 
 /** Everything on record for one customer, matched by id and, for older records, by name or email. */
