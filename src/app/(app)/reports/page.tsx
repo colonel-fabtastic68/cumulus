@@ -19,6 +19,7 @@ import {
   REPORT_TABS,
   SeasonalityReport,
   ShelfLifeReport,
+  TraceabilityReport,
   ValuationReport,
   WriteOffsReport,
   isReportTab,
@@ -76,7 +77,7 @@ function ReportsView() {
   return (
     <Page
       title="Reports"
-      subtitle={`Reorder, valuation, ageing and usage across ${settings.companyName}. Every report exports to CSV and can be handed to Strato.`}
+      subtitle={`Reorder, valuation, traceability, ageing and usage across ${settings.companyName}. Every report exports to CSV and can be handed to Strato.`}
       secondaryActions={
         <Button icon={<Sparkles />} onClick={() => openAgent()}>
           Ask Strato
@@ -90,6 +91,7 @@ function ReportsView() {
       {tab === "backorders" && <BackorderReport />}
       {tab === "purchaseOrders" && <PurchaseOrdersReport />}
       {tab === "valuation" && <ValuationReport />}
+      {tab === "traceability" && <TraceabilityReport />}
       {tab === "shelfLife" && <ShelfLifeReport />}
       {tab === "deadStock" && <DeadStockReport />}
       {tab === "consumption" && <ConsumptionReport />}

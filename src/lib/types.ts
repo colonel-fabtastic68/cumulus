@@ -58,8 +58,10 @@ export interface Item {
   minQty?: number;
   maxQty?: number;
   leadTimeDays?: number;
+  /** How the item is replenished when its forecast falls below min. Absent = buy (build for assemblies), by hand. */
+  replenishment?: ReplenishmentRule;
 
-  /** Current standard unit cost. */
+  /** Current unit cost: the standard cost, or the moving average / FIFO layer cost under those costing methods. */
   unitCost: number;
   /** List price. */
   price: number;
@@ -135,6 +137,13 @@ export type MovementType =
 
 export type RefType = "receipt" | "build" | "order" | "rma" | "import" | "agent" | "manual" | "transfer" | "shipment" | "channel" | "count";
 
+/** Which batch a consumption came out of, and how much. */
+export interface LotAllocation {
+  lotId: ID;
+  qty: number;
+  unitCost: number;
+}
+
 export interface StockMovement {
   id: ID;
   itemId: ID;
@@ -145,7 +154,10 @@ export interface StockMovement {
   unitCost?: number;
   /** Where the stock moved. Absent on movements that pre-date locations (the default location). */
   locationId?: ID;
+  /** The batch stock went into (receipts, builds, returns). */
   lotId?: ID;
+  /** The batches stock came out of, oldest first, for traceability and FIFO costing. */
+  lots?: LotAllocation[];
   refType?: RefType;
   refId?: ID;
   reason?: string;
@@ -158,16 +170,42 @@ export interface StockMovement {
   createdBy: string;
 }
 
-/** A batch of stock received together. Used for shelf-life tracking. */
+export type LotSource = "receipt" | "build" | "adjustment" | "rma" | "import";
+
+/**
+ * A batch of stock received or built together: the unit of traceability and,
+ * under FIFO costing, a valuation layer.
+ */
 export interface Lot {
   id: ID;
   itemId: ID;
+  /** cumulusOS lot number (LOT-1001). Absent on batches that pre-date numbering; the id stands in. */
+  number?: string;
+  /** The supplier's own lot / batch code, as printed on the goods. */
+  supplierLot?: string;
+  source?: LotSource;
   receiptId?: ID;
+  /** The build that produced this batch (assemblies). */
+  buildId?: ID;
+  purchaseOrderId?: ID;
+  supplierId?: ID;
   qtyReceived: number;
   qtyRemaining: number;
   unitCost: number;
   receivedAt: string;
   expiresAt?: string;
+}
+
+/** Replenishment rule on an item: how and when it is reordered. */
+export interface ReplenishmentRule {
+  /** buy = purchase order to the supplier; build = produce from the BOM. */
+  route?: "buy" | "build";
+  /** Draft purchase orders are created without asking when the forecast dips below min (daily, hosted workspaces). */
+  auto?: boolean;
+  /** Round the quantity up to a multiple of this (case size, pack). */
+  multiple?: number;
+  /** Hide the item from Replenishment until this date (YYYY-MM-DD). */
+  snoozedUntil?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -212,6 +250,11 @@ export interface ReceiptLine {
   qty: number;
   unitCost: number;
   lotId?: ID;
+  /** The supplier's lot / batch code written on the goods, copied onto the lot. */
+  supplierLot?: string;
+  expiresAt?: string;
+  /** The purchase order this line was received against, when the delivery covered several. */
+  purchaseOrderId?: ID;
   /** Checklist: ticked off on the shelf. */
   checked?: boolean;
   /** Checklist: quantity actually found, when it was written down (differs from qty on a short or over delivery). */
@@ -224,6 +267,8 @@ export interface Receipt {
   supplierId?: ID;
   /** Vendor reference or PO number. */
   reference?: string;
+  /** Purchase orders this delivery was booked against (one receipt can close lines on several). */
+  purchaseOrderIds?: ID[];
   status: "draft" | "received" | "voided";
   voidedAt?: string;
   voidReason?: string;
@@ -255,6 +300,8 @@ export interface Build {
    */
   consumeSubassemblies: boolean;
   components: BuildComponent[];
+  /** The batch of finished units this build produced. */
+  lotId?: ID;
   note?: string;
   completedAt?: string;
   createdAt: string;
@@ -428,7 +475,8 @@ export interface CycleCount {
   result?: { adjusted: number; varianceUnits: number; varianceValue: number; counted: number };
 }
 
-export type PurchaseOrderStatus = "draft" | "sent" | "partial" | "received" | "cancelled";
+/** merged = folded into another order (see mergedInto); nothing is due on it any more. */
+export type PurchaseOrderStatus = "draft" | "sent" | "partial" | "received" | "cancelled" | "merged";
 
 export interface PurchaseOrderLine {
   itemId: ID;
@@ -459,13 +507,18 @@ export interface PurchaseOrder {
   note?: string;
   /** Template the order started from. */
   templateId?: ID;
-  source?: "manual" | "template" | "strato" | "suggestion";
+  source?: "manual" | "template" | "strato" | "suggestion" | "replenishment" | "auto";
   sentAt?: string;
   /** Set when every line is fully received. */
   receivedAt?: string;
   cancelledAt?: string;
   /** Receipts booked against this order. */
   receiptIds?: ID[];
+  /** Status merged: the order that absorbed this one's lines. */
+  mergedInto?: ID;
+  mergedAt?: string;
+  /** Orders folded into this one. */
+  mergedFrom?: ID[];
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -753,6 +806,7 @@ export type ActivityType =
   | "po.sent"
   | "po.received"
   | "po.cancelled"
+  | "po.merged"
   | "backup.created"
   | "backup.restored"
   | "count.started"
@@ -909,7 +963,10 @@ export interface WorkspaceSettings {
     quote?: number;
     purchaseOrder?: number;
     cycleCount?: number;
+    lot?: number;
   };
+  /** How stock is valued and what consumption costs. Absent = standard cost. */
+  costing?: CostingSettings;
   shipping?: ShippingSettings;
   scanning?: ScanningSettings;
   quoting?: QuotingSettings;
@@ -920,6 +977,17 @@ export interface WorkspaceSettings {
   /** When an item counts as low stock (the Low chip, the low-stock view, reorder suggestions). */
   stockAlerts?: StockAlertRule;
   updatedAt: string;
+}
+
+/**
+ * standard: every unit is worth the item's standard cost; receipts may update it.
+ * average: each receipt moves the item's cost to the quantity-weighted average of what is on hand (AVCO).
+ * fifo: each receipt is a layer at its own cost; consumption takes the oldest layers first and is costed at them.
+ */
+export type CostingMethod = "standard" | "average" | "fifo";
+
+export interface CostingSettings {
+  method: CostingMethod;
 }
 
 export interface StockAlertRule {

@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useUnsavedChanges } from "./useUnsavedChanges";
 import { StockAlertsForm } from "./StockAlertsForm";
-import { DEFAULT_STOCK_ALERTS } from "@/lib/inventory";
-import type { StockAlertRule } from "@/lib/types";
+import { costingMethod, DEFAULT_STOCK_ALERTS } from "@/lib/inventory";
+import type { CostingMethod, StockAlertRule } from "@/lib/types";
 import type { WorkspaceSettings } from "@/lib/types";
 import { TextField, Toggle, useToast } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -26,7 +26,25 @@ const POLICIES: Array<{ value: RelievePolicy; title: string; description: string
   },
 ];
 
-function PolicyOption({ option, selected, disabled, onSelect }: { option: (typeof POLICIES)[number]; selected: boolean; disabled: boolean; onSelect: () => void }) {
+const COSTING: Array<{ value: CostingMethod; title: string; description: string }> = [
+  {
+    value: "standard",
+    title: "Standard cost",
+    description: "Every unit is worth the item's standard cost. A receipt can update it to the price paid; sales and builds are costed at it.",
+  },
+  {
+    value: "average",
+    title: "Average cost",
+    description: "Each delivery moves the item's cost to the quantity-weighted average of what is on hand. Sales and builds are costed at that average.",
+  },
+  {
+    value: "fifo",
+    title: "FIFO",
+    description: "Each delivery is a layer at its own price. Sales and builds take the oldest layers first and are costed at them; the shelf is valued layer by layer.",
+  },
+];
+
+function PolicyOption<T extends string>({ name, option, selected, disabled, onSelect }: { name: string; option: { value: T; title: string; description: string }; selected: boolean; disabled: boolean; onSelect: () => void }) {
   return (
     <label
       className={cn(
@@ -35,7 +53,7 @@ function PolicyOption({ option, selected, disabled, onSelect }: { option: (typeo
         disabled && "cursor-not-allowed opacity-60",
       )}
     >
-      <input type="radio" name="relievePolicy" value={option.value} checked={selected} disabled={disabled} onChange={onSelect} className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[var(--accent)]" />
+      <input type="radio" name={name} value={option.value} checked={selected} disabled={disabled} onChange={onSelect} className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[var(--accent)]" />
       <span className="min-w-0">
         <span className="block text-[13px] font-medium text-text">{option.title}</span>
         <span className="mt-0.5 block text-[12px] leading-[1.45] text-text-secondary">{option.description}</span>
@@ -49,20 +67,21 @@ export function InventoryPolicySection({ settings, readOnly }: { settings: Works
   const toast = useToast();
   const [trackInUse, setTrackInUse] = useState(settings.trackInUse);
   const [relievePolicy, setRelievePolicy] = useState<RelievePolicy>(settings.relievePolicy);
+  const [costing, setCosting] = useState<CostingMethod>(costingMethod(settings));
   const [inactivityDays, setInactivityDays] = useState(String(settings.inactivityDays));
   const [alerts, setAlerts] = useState<StockAlertRule>(settings.stockAlerts ?? DEFAULT_STOCK_ALERTS);
   const [saving, setSaving] = useState(false);
 
   const days = Number(inactivityDays);
   const daysError = !inactivityDays.trim() || !Number.isInteger(days) || days < 1 ? "Enter a whole number of days (1 or more)" : undefined;
-  const dirty = trackInUse !== settings.trackInUse || relievePolicy !== settings.relievePolicy || days !== settings.inactivityDays || JSON.stringify(alerts) !== JSON.stringify(settings.stockAlerts ?? DEFAULT_STOCK_ALERTS);
+  const dirty = trackInUse !== settings.trackInUse || relievePolicy !== settings.relievePolicy || costing !== costingMethod(settings) || days !== settings.inactivityDays || JSON.stringify(alerts) !== JSON.stringify(settings.stockAlerts ?? DEFAULT_STOCK_ALERTS);
   useUnsavedChanges(dirty);
 
   const save = async () => {
     if (daysError) return;
     setSaving(true);
     try {
-      await saveSettings({ trackInUse, relievePolicy, inactivityDays: days, stockAlerts: alerts });
+      await saveSettings({ trackInUse, relievePolicy, costing: { method: costing }, inactivityDays: days, stockAlerts: alerts });
       toast("Inventory policy saved", "success");
     } catch (e) {
       toast(e instanceof Error ? e.message : "Could not save settings", "critical");
@@ -86,7 +105,17 @@ export function InventoryPolicySection({ settings, readOnly }: { settings: Works
         <p className="mb-2 text-[12px] text-text-tertiary">Decides when a build takes parts out of stock. Either way every change is a ledger movement.</p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Relieve policy">
           {POLICIES.map((p) => (
-            <PolicyOption key={p.value} option={p} selected={relievePolicy === p.value} disabled={readOnly} onSelect={() => setRelievePolicy(p.value)} />
+            <PolicyOption key={p.value} name="relievePolicy" option={p} selected={relievePolicy === p.value} disabled={readOnly} onSelect={() => setRelievePolicy(p.value)} />
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-1 text-[12.5px] font-medium text-text">Costing method</div>
+        <p className="mb-2 text-[12px] text-text-tertiary">How stock is valued and what a sale or build costs. Changing it applies from the next receipt on; costs already on the ledger stay as recorded.</p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Costing method">
+          {COSTING.map((c) => (
+            <PolicyOption key={c.value} name="costingMethod" option={c} selected={costing === c.value} disabled={readOnly} onSelect={() => setCosting(c.value)} />
           ))}
         </div>
       </div>

@@ -28,10 +28,13 @@ export function PurchaseOrderDetailModal({ po, ...rest }: Props) {
   return <Detail key={po.id} po={po} {...rest} />;
 }
 
+const SOURCE_LABEL: Record<NonNullable<PurchaseOrder["source"]>, string> = { manual: "Typed in", template: "Template", strato: "Strato", suggestion: "Low-stock suggestion", replenishment: "Replenishment", auto: "Automatic replenishment" };
+
 function Detail({ po, onClose, canWrite, busy, onSend, onReceive, onEdit, onCancel, onSaveTemplate }: Props & { po: PurchaseOrder }) {
   const itemsById = useItemsById();
   const members = useCollection("members");
   const suppliers = useCollection("suppliers");
+  const purchaseOrders = useCollection("purchaseOrders");
   const receipts = useCollection("receipts").filter((r) => po.receiptIds?.includes(r.id));
   const settings = useSettings();
   const toast = useToast();
@@ -39,6 +42,12 @@ function Detail({ po, onClose, canWrite, busy, onSend, onReceive, onEdit, onCanc
   const createdBy = members.find((m) => m.id === po.createdBy)?.name;
   const open = poIsOpen(po);
   const editable = open && poReceivedUnits(po) === 0;
+  const poNumber = (id: string) => purchaseOrders.find((p) => p.id === id)?.number ?? "another order";
+  const poLink = (id: string) => (
+    <Link key={id} href={`/orders/purchase?highlight=${id}`} className="font-mono text-accent hover:underline">
+      {poNumber(id)}
+    </Link>
+  );
 
   const print = () => {
     if (!printPurchaseOrder(po, { items: itemsById, settings, supplier })) toast("Allow pop-ups to print the order", "critical");
@@ -60,7 +69,7 @@ function Detail({ po, onClose, canWrite, busy, onSend, onReceive, onEdit, onCanc
           {poIsOverdue(po) && <Badge tone="warning">Overdue</Badge>}
         </span>
       }
-      subtitle={po.supplier}
+      subtitle={po.status === "merged" && po.mergedInto ? `${po.supplier} · the lines now sit on ${poNumber(po.mergedInto)}` : po.supplier}
       footer={
         <>
           <div className="mr-auto flex items-center gap-1">
@@ -125,7 +134,28 @@ function Detail({ po, onClose, canWrite, busy, onSend, onReceive, onEdit, onCanc
             ...(po.sentAt ? [{ label: "Sent", value: formatDateTime(po.sentAt) }] : []),
             ...(po.receivedAt ? [{ label: "Completed", value: formatDateTime(po.receivedAt) }] : []),
             ...(po.cancelledAt ? [{ label: "Cancelled", value: formatDateTime(po.cancelledAt) }] : []),
-            ...(po.templateId ? [{ label: "Source", value: "Template" }] : po.source && po.source !== "manual" ? [{ label: "Source", value: po.source === "strato" ? "Strato" : "Low-stock suggestion" }] : []),
+            ...(po.mergedInto
+              ? [
+                  {
+                    label: "Merged into",
+                    value: (
+                      <span>
+                        {poLink(po.mergedInto)}
+                        {po.mergedAt ? <span className="text-text-secondary"> · {formatDateTime(po.mergedAt)}</span> : null}
+                      </span>
+                    ),
+                  },
+                ]
+              : []),
+            ...(po.mergedFrom?.length
+              ? [
+                  {
+                    label: "Merged from",
+                    value: <span className="inline-flex flex-wrap gap-x-2">{po.mergedFrom.map(poLink)}</span>,
+                  },
+                ]
+              : []),
+            ...(po.templateId ? [{ label: "Source", value: "Template" }] : po.source && po.source !== "manual" ? [{ label: "Source", value: SOURCE_LABEL[po.source] }] : []),
           ]}
         />
         <SimpleTable>
@@ -184,7 +214,8 @@ function Detail({ po, onClose, canWrite, busy, onSend, onReceive, onEdit, onCanc
                     </Link>
                     <span className="text-text-secondary">
                       {" "}
-                      · {formatDate(r.receivedAt)} · {pluralize(r.lines.length, "line")}
+                      · {formatDate(r.receivedAt)} · {pluralize(r.lines.filter((l) => !l.purchaseOrderId || l.purchaseOrderId === po.id).length, "line")}
+                      {r.purchaseOrderIds && r.purchaseOrderIds.length > 1 ? ` · one delivery with ${r.purchaseOrderIds.filter((id) => id !== po.id).map(poNumber).join(", ")}` : ""}
                       {r.status === "voided" ? " · voided" : ""}
                     </span>
                   </li>

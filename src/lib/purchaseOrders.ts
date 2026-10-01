@@ -1,14 +1,15 @@
-import type { Address, Item, PurchaseOrder, PurchaseOrderLine, PurchaseOrderStatus, PurchaseOrderTemplate, Receipt, StockAlertRule, Supplier } from "@/lib/types";
+import type { Address, Item, PurchaseOrder, PurchaseOrderLine, PurchaseOrderStatus, PurchaseOrderTemplate, Receipt, Supplier } from "@/lib/types";
 import type { Store, WriteOp } from "@/lib/store/types";
-import { activityOp, InventoryError, isLowStock, nextNumber, receiveStock, reorderQty, type Actor } from "@/lib/inventory";
+import { activityOp, InventoryError, nextNumber, receiveStock, type Actor, type ReceiveLineInput } from "@/lib/inventory";
 import { supplierLinkFor } from "@/lib/suppliers";
-import { newId, nowIso, round, sum } from "@/lib/utils";
+import { newId, nowIso, round, sum, uniq } from "@/lib/utils";
 
 /**
  * Purchase orders: what was ordered from a supplier, what has arrived, and
  * what is still due. Stock only moves through receipts booked against the
  * order, so the ledger stays the single source of truth. Templates keep a
- * supplier and lines for orders that repeat.
+ * supplier and lines for orders that repeat. Several orders to one supplier
+ * can be merged into one, or received together on one delivery.
  */
 
 export const PO_OPEN_STATUSES: PurchaseOrderStatus[] = ["draft", "sent", "partial"];
@@ -57,6 +58,19 @@ export function unitCostFor(item: Item, supplierId?: string): number {
     if (link?.unitCost !== undefined && Number.isFinite(link.unitCost)) return link.unitCost;
   }
   return item.unitCost;
+}
+
+/** Units of each item still due on open orders, so a forecast knows what is already coming. */
+export function openPurchaseQty(purchaseOrders: PurchaseOrder[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const po of purchaseOrders) {
+    if (!poIsOpen(po)) continue;
+    for (const l of po.lines) {
+      const open = poLineOpenQty(l);
+      if (open > 0) out.set(l.itemId, round((out.get(l.itemId) ?? 0) + open, 4));
+    }
+  }
+  return out;
 }
 
 export interface PurchaseOrderLineInput {
@@ -181,6 +195,26 @@ export async function updatePurchaseOrder(store: Store, actor: Actor, id: string
   return next;
 }
 
+/**
+ * Adds lines to a draft. An item already on the order has the quantity added
+ * to its line at the order's cost, so a draft stays one line per item.
+ */
+export async function addPurchaseOrderLines(store: Store, actor: Actor, id: string, inputs: PurchaseOrderLineInput[]): Promise<{ po: PurchaseOrder; added: number }> {
+  const po = await loadPo(store, id);
+  if (po.status !== "draft") throw new InventoryError(`${po.number} is ${po.status === "sent" ? "already sent" : po.status}; only drafts take extra lines`);
+  const items = await store.list("items");
+  const added = buildLines(items, po.supplierId, inputs);
+  const lines = po.lines.map((l) => ({ ...l }));
+  for (const a of added) {
+    const existing = lines.find((l) => l.itemId === a.itemId);
+    if (existing) existing.qty = round(existing.qty + a.qty, 4);
+    else lines.push(a);
+  }
+  const next: PurchaseOrder = { ...po, lines, updatedAt: nowIso() };
+  await store.put("purchaseOrders", next);
+  return { po: next, added: added.length };
+}
+
 export async function markPurchaseOrderSent(store: Store, actor: Actor, id: string): Promise<PurchaseOrder> {
   const po = await loadPo(store, id);
   if (po.status !== "draft") throw new InventoryError(`${po.number} is already ${po.status}`);
@@ -199,48 +233,186 @@ export async function cancelPurchaseOrder(store: Store, actor: Actor, id: string
   return next;
 }
 
+// ---- merging --------------------------------------------------------------------
+
+function supplierKey(po: Pick<PurchaseOrder, "supplierId" | "supplier">): string {
+  return po.supplierId ?? `name:${po.supplier.trim().toLowerCase()}`;
+}
+
+/** True when the orders go to the same supplier, so one delivery (or one merged order) can cover them. */
+export function sameSupplier(pos: Array<Pick<PurchaseOrder, "supplierId" | "supplier">>): boolean {
+  return new Set(pos.map(supplierKey)).size <= 1;
+}
+
+/** Why a set of orders cannot be folded into one, or null when they can. */
+export function mergeBlocker(pos: PurchaseOrder[]): string | null {
+  if (pos.length < 2) return "Choose at least two orders to merge";
+  for (const po of pos) {
+    if (!poIsOpen(po)) return `${po.number} is ${po.status}`;
+    if (poReceivedUnits(po) > 0) return `${po.number} already has goods received against it`;
+  }
+  if (!sameSupplier(pos)) return "The orders go to different suppliers";
+  return null;
+}
+
+/**
+ * Folds several open orders to one supplier into one. The oldest (or the one
+ * chosen) keeps its number and header; the others' lines move onto it (an item
+ * on both gets the quantities added at the quantity-weighted cost), and they
+ * close as merged with a pointer to the survivor. Nothing moves in stock.
+ */
+export async function mergePurchaseOrders(store: Store, actor: Actor, ids: string[], opts: { into?: string } = {}): Promise<PurchaseOrder> {
+  const pos = (await Promise.all(uniq(ids).map((id) => loadPo(store, id)))).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const blocker = mergeBlocker(pos);
+  if (blocker) throw new InventoryError(blocker);
+  const target = opts.into ? pos.find((p) => p.id === opts.into) : pos[0];
+  if (!target) throw new InventoryError("The order to merge into is not among the chosen orders");
+  const sources = pos.filter((p) => p.id !== target.id);
+  const lines = target.lines.map((l) => ({ ...l }));
+  for (const src of sources) {
+    for (const l of src.lines) {
+      const existing = lines.find((x) => x.itemId === l.itemId);
+      if (!existing) {
+        lines.push({ ...l });
+        continue;
+      }
+      const qty = round(existing.qty + l.qty, 4);
+      existing.unitCost = round((existing.qty * existing.unitCost + l.qty * l.unitCost) / qty, 4);
+      existing.qty = qty;
+      if (!existing.supplierSku && l.supplierSku) existing.supplierSku = l.supplierSku;
+      if (!existing.note && l.note) existing.note = l.note;
+    }
+  }
+  const now = nowIso();
+  const earliest = pos.map((p) => p.expectedAt).filter((d): d is string => !!d).sort()[0];
+  const references = uniq(pos.map((p) => p.reference?.trim()).filter((r): r is string => !!r));
+  const notes = [target.note, ...sources.map((s) => (s.note ? `${s.number}: ${s.note}` : ""))].filter(Boolean).join("\n");
+  const merged: PurchaseOrder = {
+    ...target,
+    lines,
+    expectedAt: target.expectedAt ?? earliest,
+    reference: references.length ? references.join(", ") : undefined,
+    note: notes || undefined,
+    mergedFrom: [...(target.mergedFrom ?? []), ...sources.map((s) => s.id)],
+    updatedAt: now,
+  };
+  const ops: WriteOp[] = [{ op: "put", collection: "purchaseOrders", doc: merged }];
+  for (const src of sources) ops.push({ op: "put", collection: "purchaseOrders", doc: { ...src, status: "merged", mergedInto: target.id, mergedAt: now, updatedAt: now } });
+  const sentSources = sources.filter((s) => s.status !== "draft");
+  ops.push(
+    activityOp(actor, "po.merged", `${actor.name} merged ${sources.map((s) => s.number).join(", ")} into ${target.number} (${target.supplier}) · ${lines.length} line${lines.length === 1 ? "" : "s"} · $${poTotal(merged).toFixed(2)}${sentSources.length ? ` · ${sentSources.map((s) => s.number).join(", ")} had already been sent; tell the supplier` : ""}`, {
+      entityType: "purchaseOrder",
+      entityId: target.id,
+      meta: { mergedFrom: sources.map((s) => s.number), lines: lines.length, total: poTotal(merged) },
+    }),
+  );
+  await store.batch(ops);
+  return merged;
+}
+
+// ---- receiving --------------------------------------------------------------------
+
+export interface ReceivePurchaseOrderLineInput {
+  /** Which of the orders the line is for. Omit to take from the oldest order that still has the item open. */
+  purchaseOrderId?: string;
+  itemId: string;
+  qty: number;
+  unitCost?: number;
+  locationId?: string;
+  bin?: string;
+  supplierLot?: string;
+  expiresAt?: string;
+}
+
 export interface ReceivePurchaseOrderInput {
   /** Omit to receive everything still open at the ordered cost. */
-  lines?: Array<{ itemId: string; qty: number; unitCost?: number; locationId?: string; bin?: string }>;
+  lines?: ReceivePurchaseOrderLineInput[];
   receivedAt?: string;
   locationId?: string;
   note?: string;
+  /** Printed on the receipt; defaults to the order numbers. */
+  reference?: string;
   updateStandardCost?: boolean;
+  /** Lines for items none of the orders carry are received without an order instead of being refused (the receiving form's extra lines). */
+  allowExtraLines?: boolean;
 }
 
-/** Books a delivery against the order: a normal receipt (lots, ledger, costs) plus the order's received counts. */
-export async function receivePurchaseOrder(store: Store, actor: Actor, id: string, input: ReceivePurchaseOrderInput = {}): Promise<{ po: PurchaseOrder; receipt: Receipt }> {
-  const po = await loadPo(store, id);
-  if (!poIsOpen(po)) throw new InventoryError(`${po.number} is ${po.status}; nothing can be received against it`);
-  const byItem = new Map(po.lines.map((l) => [l.itemId, l]));
-  const requested: NonNullable<ReceivePurchaseOrderInput["lines"]> = input.lines ?? poOpenLines(po).map((l) => ({ itemId: l.itemId, qty: poLineOpenQty(l), unitCost: l.unitCost }));
+/**
+ * Books one delivery against one or more open orders from the same supplier:
+ * a normal receipt (lots, ledger, costs) whose lines each name the order they
+ * close, plus the received counts on every order.
+ */
+export async function receivePurchaseOrders(store: Store, actor: Actor, ids: string[], input: ReceivePurchaseOrderInput = {}): Promise<{ purchaseOrders: PurchaseOrder[]; receipt: Receipt }> {
+  const pos = (await Promise.all(uniq(ids).map((id) => loadPo(store, id)))).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  if (pos.length === 0) throw new InventoryError("Choose at least one purchase order");
+  for (const po of pos) if (!poIsOpen(po)) throw new InventoryError(`${po.number} is ${po.status}; nothing can be received against it`);
+  if (!sameSupplier(pos)) throw new InventoryError("One delivery comes from one supplier; receive orders from different suppliers separately");
   const items = await store.list("items");
   const skuOf = (itemId: string) => items.find((i) => i.id === itemId)?.sku ?? itemId;
-  const receiptLines: Array<{ itemId: string; qty: number; unitCost?: number; locationId?: string; bin?: string }> = [];
+  const numbers = pos.map((p) => p.number).join(", ");
+  const requested: ReceivePurchaseOrderLineInput[] = input.lines ?? pos.flatMap((po) => poOpenLines(po).map((l) => ({ purchaseOrderId: po.id, itemId: l.itemId, qty: poLineOpenQty(l), unitCost: l.unitCost })));
+  const openLeft = new Map<string, number>();
+  for (const po of pos) for (const l of po.lines) openLeft.set(`${po.id}:${l.itemId}`, poLineOpenQty(l));
+  const receiptLines: ReceiveLineInput[] = [];
   for (const r of requested) {
-    const line = byItem.get(r.itemId);
-    if (!line) throw new InventoryError(`${skuOf(r.itemId)} is not on ${po.number}`);
     const qty = Number(r.qty);
     if (!Number.isFinite(qty) || qty <= 0) continue;
-    const open = poLineOpenQty(line);
-    if (qty > open + 1e-9) throw new InventoryError(`${skuOf(r.itemId)}: ${qty} is more than the ${open} still open on ${po.number}`);
-    receiptLines.push({ itemId: r.itemId, qty, unitCost: r.unitCost ?? line.unitCost, locationId: r.locationId ?? input.locationId, bin: r.bin });
+    const candidates = r.purchaseOrderId ? pos.filter((p) => p.id === r.purchaseOrderId) : pos;
+    if (r.purchaseOrderId && candidates.length === 0) throw new InventoryError(`${skuOf(r.itemId)} names an order that is not being received`);
+    if (!r.purchaseOrderId && input.allowExtraLines && !pos.some((p) => p.lines.some((l) => l.itemId === r.itemId))) {
+      receiptLines.push({ itemId: r.itemId, qty, unitCost: r.unitCost, locationId: r.locationId ?? input.locationId, bin: r.bin, supplierLot: r.supplierLot, expiresAt: r.expiresAt });
+      continue;
+    }
+    let remaining = qty;
+    for (const po of candidates) {
+      const key = `${po.id}:${r.itemId}`;
+      const open = openLeft.get(key) ?? 0;
+      if (open <= 0) continue;
+      const take = round(Math.min(open, remaining), 4);
+      const line = po.lines.find((l) => l.itemId === r.itemId)!;
+      receiptLines.push({ itemId: r.itemId, qty: take, unitCost: r.unitCost ?? line.unitCost, locationId: r.locationId ?? input.locationId, bin: r.bin, supplierLot: r.supplierLot, expiresAt: r.expiresAt, purchaseOrderId: po.id });
+      openLeft.set(key, round(open - take, 4));
+      remaining = round(remaining - take, 4);
+      if (remaining <= 1e-9) break;
+    }
+    if (remaining > 1e-9) {
+      const onOrder = candidates.some((p) => p.lines.some((l) => l.itemId === r.itemId));
+      throw new InventoryError(onOrder ? `${skuOf(r.itemId)}: ${qty} is more than the ${round(qty - remaining, 4)} still open on ${candidates.map((p) => p.number).join(", ")}` : `${skuOf(r.itemId)} is not on ${numbers}`);
+    }
   }
   if (receiptLines.length === 0) throw new InventoryError("Nothing to receive: every line is already in");
-  const receipt = await receiveStock(store, actor, { supplierId: po.supplierId, reference: po.number, receivedAt: input.receivedAt, note: input.note, lines: receiptLines, updateStandardCost: input.updateStandardCost });
-  const lines = po.lines.map((l) => {
-    const got = receiptLines.filter((r) => r.itemId === l.itemId).reduce((a, r) => a + r.qty, 0);
-    return got ? { ...l, received: round((l.received ?? 0) + got, 4) } : l;
-  });
-  const complete = lines.every((l) => poLineOpenQty(l) <= 0);
+  const receipt = await receiveStock(store, actor, { supplierId: pos[0]!.supplierId, reference: input.reference?.trim() || numbers, purchaseOrderIds: pos.map((p) => p.id), receivedAt: input.receivedAt, note: input.note, lines: receiptLines, updateStandardCost: input.updateStandardCost });
   const now = nowIso();
-  const next: PurchaseOrder = { ...po, lines, status: complete ? "received" : "partial", receivedAt: complete ? now : po.receivedAt, receiptIds: [...(po.receiptIds ?? []), receipt.id], updatedAt: now };
+  const ops: WriteOp[] = [];
+  const next: PurchaseOrder[] = [];
+  const outcome: string[] = [];
+  for (const po of pos) {
+    const got = receiptLines.filter((r) => r.purchaseOrderId === po.id);
+    if (got.length === 0) {
+      next.push(po);
+      continue;
+    }
+    const lines = po.lines.map((l) => {
+      const q = sum(got.filter((r) => r.itemId === l.itemId).map((r) => r.qty));
+      return q ? { ...l, received: round((l.received ?? 0) + q, 4) } : l;
+    });
+    const complete = lines.every((l) => poLineOpenQty(l) <= 0);
+    const updated: PurchaseOrder = { ...po, lines, status: complete ? "received" : "partial", receivedAt: complete ? now : po.receivedAt, receiptIds: [...(po.receiptIds ?? []), receipt.id], updatedAt: now };
+    next.push(updated);
+    ops.push({ op: "put", collection: "purchaseOrders", doc: updated });
+    const stillOpen = poOpenLines(updated).length;
+    outcome.push(`${po.number} ${complete ? "complete" : `${stillOpen} line${stillOpen === 1 ? "" : "s"} still open`}`);
+  }
   const units = sum(receiptLines.map((r) => r.qty));
-  await store.batch([
-    { op: "put", collection: "purchaseOrders", doc: next },
-    activityOp(actor, "po.received", `${actor.name} received ${receipt.number} against ${po.number}: ${units} unit${units === 1 ? "" : "s"} on ${receiptLines.length} line${receiptLines.length === 1 ? "" : "s"}${complete ? " · order complete" : ` · ${poOpenLines(next).length} line${poOpenLines(next).length === 1 ? "" : "s"} still open`}`, { entityType: "purchaseOrder", entityId: po.id, meta: { receiptId: receipt.id, complete } }),
-  ]);
-  return { po: next, receipt };
+  ops.push(activityOp(actor, "po.received", `${actor.name} received ${receipt.number} against ${numbers}: ${units} unit${units === 1 ? "" : "s"} on ${receiptLines.length} line${receiptLines.length === 1 ? "" : "s"} · ${outcome.join(" · ")}`, { entityType: "purchaseOrder", entityId: pos[0]!.id, meta: { receiptId: receipt.id, purchaseOrderIds: pos.map((p) => p.id), complete: next.every((p) => p.status === "received") } }));
+  await store.batch(ops);
+  return { purchaseOrders: next, receipt };
+}
+
+/** Books a delivery against one order. */
+export async function receivePurchaseOrder(store: Store, actor: Actor, id: string, input: ReceivePurchaseOrderInput = {}): Promise<{ po: PurchaseOrder; receipt: Receipt }> {
+  const { purchaseOrders, receipt } = await receivePurchaseOrders(store, actor, [id], input);
+  return { po: purchaseOrders[0]!, receipt };
 }
 
 // ---- templates -------------------------------------------------------------
@@ -382,33 +554,4 @@ export function templateFromRows(headers: string[], rows: Record<string, string>
     else merged.set(m.item!.id, { itemId: m.item!.id, qty: m.qty, ...(m.unitCost !== undefined ? { unitCost: m.unitCost } : {}), ...(m.note ? { note: m.note } : {}) });
   }
   return { lines: Array.from(merged.values()), matched, unknown, supplierName: suppliers.size === 1 ? Array.from(suppliers)[0] : undefined, columns };
-}
-
-// ---- suggestions -------------------------------------------------------------
-
-export interface PoSuggestion {
-  supplierId?: string;
-  supplier: string;
-  leadTimeDays?: number;
-  lines: Array<{ item: Item; qty: number; unitCost: number }>;
-  total: number;
-}
-
-/** Items below their low-stock line, grouped by primary supplier, at reorder quantity and the supplier's last cost. */
-export function suggestPurchaseOrders(items: Item[], suppliers: Supplier[], rule?: StockAlertRule): PoSuggestion[] {
-  const groups = new Map<string, PoSuggestion>();
-  for (const item of items) {
-    if (item.status !== "active" || !isLowStock(item, rule)) continue;
-    const qty = Math.max(reorderQty(item), 1);
-    const supplier = item.supplierId ? suppliers.find((s) => s.id === item.supplierId) : undefined;
-    const key = supplier?.id ?? "";
-    const group = groups.get(key) ?? { supplierId: supplier?.id, supplier: supplier?.name ?? "No supplier set", leadTimeDays: supplier?.leadTimeDays, lines: [], total: 0 };
-    const unitCost = unitCostFor(item, supplier?.id);
-    group.lines.push({ item, qty, unitCost });
-    group.total = round(group.total + qty * unitCost);
-    groups.set(key, group);
-  }
-  return Array.from(groups.values())
-    .map((g) => ({ ...g, lines: g.lines.sort((a, b) => a.item.sku.localeCompare(b.item.sku)) }))
-    .sort((a, b) => (a.supplierId ? 0 : 1) - (b.supplierId ? 0 : 1) || a.supplier.localeCompare(b.supplier));
 }

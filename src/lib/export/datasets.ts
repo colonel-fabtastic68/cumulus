@@ -161,8 +161,8 @@ export const DATASETS: Dataset[] = [
     count: (s, sc) => s.data.lots.filter((l) => inScope(sc, l.itemId)).length,
     build: (src, scope) => {
       const items = byId(src.data.items);
-      const rows = src.data.lots.filter((l) => inScope(scope, l.itemId)).map((l) => [items.get(l.itemId)?.sku ?? l.itemId, items.get(l.itemId)?.name ?? "", day(l.receivedAt), l.qtyReceived, l.qtyRemaining, l.unitCost, round(l.qtyRemaining * l.unitCost)]);
-      return { headers: ["SKU", "Name", "Received", "Qty received", "Qty remaining", "Unit cost", "Remaining value"], rows };
+      const rows = src.data.lots.filter((l) => inScope(scope, l.itemId)).map((l) => [l.number ?? l.id, l.supplierLot ?? "", items.get(l.itemId)?.sku ?? l.itemId, items.get(l.itemId)?.name ?? "", l.source ?? (l.receiptId ? "receipt" : l.buildId ? "build" : ""), day(l.receivedAt), l.expiresAt ? day(l.expiresAt) : "", l.qtyReceived, l.qtyRemaining, l.unitCost, round(l.qtyRemaining * l.unitCost)]);
+      return { headers: ["Lot", "Supplier lot", "SKU", "Name", "Source", "Received", "Expires", "Qty received", "Qty remaining", "Unit cost", "Remaining value"], rows };
     },
   },
   {

@@ -9,6 +9,7 @@ import { applyTracking } from "@/lib/integrations/tracking";
 import { adminApp } from "@/lib/mcp/adminStore";
 import { nowIso } from "@/lib/utils";
 import { autoBackup } from "@/lib/server/backups";
+import { autoReplenish } from "@/lib/replenishment";
 
 export const maxDuration = 300;
 
@@ -56,6 +57,16 @@ export async function GET(req: Request) {
         await ctx.store.patch("integrations", integration.id, { lastError: message });
         report.push({ workspace: wsRef.id, integration: integration.id, outcome: `error: ${message}` });
       }
+    }
+  }
+  // Replenishment: items on automatic rules whose forecast fell below min get a draft order.
+  for (const wsRef of workspaces) {
+    try {
+      const ctx = systemContext(wsRef.id, sa);
+      const outcome = await autoReplenish(ctx.store, ctx.actor);
+      if (outcome !== "nothing to order") report.push({ workspace: wsRef.id, integration: "replenishment", outcome });
+    } catch (e) {
+      report.push({ workspace: wsRef.id, integration: "replenishment", outcome: `error: ${e instanceof Error ? e.message : String(e)}` });
     }
   }
   // Time Machine: one automatic backup a day for every workspace that changed.

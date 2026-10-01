@@ -1,16 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { BookmarkPlus, Plus, Trash2 } from "lucide-react";
+import { BookmarkPlus, ChevronDown, Lightbulb, ListPlus, Plus, Trash2 } from "lucide-react";
 import type { Item, PurchaseOrder, PurchaseOrderTemplate } from "@/lib/types";
 import { upsertSupplier } from "@/lib/inventory";
-import { createPurchaseOrder, savePurchaseOrderTemplate, unitCostFor, updatePurchaseOrder, type PoSuggestion } from "@/lib/purchaseOrders";
+import { createPurchaseOrder, savePurchaseOrderTemplate, unitCostFor, updatePurchaseOrder } from "@/lib/purchaseOrders";
 import { useCollection, useSettings, useStore } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, pluralize } from "@/lib/format";
 import { cn, newId, round, sum } from "@/lib/utils";
-import { Button, Checkbox, Combobox, FormGrid, IconButton, Modal, TextArea, TextField, useToast } from "@/components/ui";
+import { Button, Checkbox, Combobox, FormGrid, IconButton, Menu, Modal, TextArea, TextField, useToast } from "@/components/ui";
 import { ItemPicker } from "@/components/inventory";
+import { useReplenishmentPlan } from "@/components/replenishment/useReplenishmentPlan";
 import { currencySymbol } from "./poUtils";
 
 interface Props {
@@ -19,8 +20,6 @@ interface Props {
   onCreated?: (po: PurchaseOrder) => void;
   /** Start pre-filled from a saved template. */
   template?: PurchaseOrderTemplate | null;
-  /** Start pre-filled from a low-stock suggestion. */
-  suggestion?: PoSuggestion | null;
   /** Edit an open order that has nothing received yet. */
   editing?: PurchaseOrder | null;
 }
@@ -28,7 +27,7 @@ interface Props {
 /** Mounts the form only while open so every opening starts from a clean state. */
 export function NewPurchaseOrderModal(props: Props) {
   if (!props.open) return null;
-  return <PurchaseOrderForm key={props.editing?.id ?? props.template?.id ?? (props.suggestion ? `s-${props.suggestion.supplier}` : "new")} {...props} />;
+  return <PurchaseOrderForm key={props.editing?.id ?? props.template?.id ?? "new"} {...props} />;
 }
 
 interface LineState {
@@ -41,17 +40,19 @@ interface LineState {
 
 const newLine = (): LineState => ({ key: newId("ln"), item: null, qty: "1", unitCost: "", costTouched: false });
 
-function PurchaseOrderForm({ open, onClose, onCreated, template, suggestion, editing }: Props) {
+function PurchaseOrderForm({ open, onClose, onCreated, template, editing }: Props) {
   const store = useStore();
   const user = useCurrentUser();
   const toast = useToast();
   const suppliers = useCollection("suppliers");
+  const templates = useCollection("purchaseOrderTemplates");
   const allItems = useCollection("items");
+  const plan = useReplenishmentPlan();
   const { currency } = useSettings();
   const symbol = currencySymbol(currency);
 
-  const initialSupplier = editing?.supplier ?? template?.supplier ?? suggestion?.supplier ?? "";
-  const [supplier, setSupplier] = useState(initialSupplier === "No supplier set" ? "" : initialSupplier);
+  const initialSupplier = editing?.supplier ?? template?.supplier ?? "";
+  const [supplier, setSupplier] = useState(initialSupplier);
   const supplierRecord = useMemo(() => suppliers.find((s) => s.name.toLowerCase() === supplier.trim().toLowerCase()), [suppliers, supplier]);
   const [number, setNumber] = useState(editing?.number ?? "");
   const [expectedAt, setExpectedAt] = useState(editing?.expectedAt ?? "");
@@ -60,14 +61,8 @@ function PurchaseOrderForm({ open, onClose, onCreated, template, suggestion, edi
   const [note, setNote] = useState(editing?.note ?? template?.note ?? "");
   const [send, setSend] = useState(false);
   const [lines, setLines] = useState<LineState[]>(() => {
-    const supplierId = editing?.supplierId ?? template?.supplierId ?? suggestion?.supplierId;
-    const from = editing
-      ? editing.lines.map((l) => ({ itemId: l.itemId, qty: l.qty, unitCost: l.unitCost as number | undefined }))
-      : template
-        ? template.lines
-        : suggestion
-          ? suggestion.lines.map((l) => ({ itemId: l.item.id, qty: l.qty, unitCost: l.unitCost as number | undefined }))
-          : [];
+    const supplierId = editing?.supplierId ?? template?.supplierId;
+    const from = editing ? editing.lines.map((l) => ({ itemId: l.itemId, qty: l.qty, unitCost: l.unitCost as number | undefined })) : template ? template.lines : [];
     const built = from.flatMap((l) => {
       const item = allItems.find((i) => i.id === l.itemId);
       if (!item) return [];
@@ -102,6 +97,31 @@ function PurchaseOrderForm({ open, onClose, onCreated, template, suggestion, edi
   const validLines = lines.filter((l) => l.item && Number(l.qty) > 0);
   const total = round(sum(validLines.map(lineTotal)));
 
+  /** Lines from another document (a template, the replenishment plan) join the order: an item already on it gets the quantity added. */
+  const appendLines = (entries: Array<{ itemId: string; qty: number; unitCost?: number }>, from: string) => {
+    let added = 0;
+    let merged = 0;
+    setLines((prev) => {
+      const next = prev.filter((l) => l.item || l.qty.trim() !== "1" || l.unitCost.trim() !== "").map((l) => ({ ...l }));
+      for (const e of entries) {
+        const item = allItems.find((i) => i.id === e.itemId);
+        if (!item || !(e.qty > 0)) continue;
+        const existing = next.find((l) => l.item?.id === item.id);
+        if (existing) {
+          existing.qty = String(round((Number(existing.qty) || 0) + e.qty, 4));
+          merged++;
+        } else {
+          next.push({ key: newId("ln"), item, qty: String(e.qty), unitCost: String(e.unitCost ?? unitCostFor(item, supplierRecord?.id)), costTouched: e.unitCost !== undefined });
+          added++;
+        }
+      }
+      return next.length ? next : [newLine()];
+    });
+    toast(`${from}: ${pluralize(added, "line")} added${merged ? `, ${merged} merged into existing lines` : ""}`, "success");
+  };
+  const sortedTemplates = useMemo(() => [...templates].sort((a, b) => a.name.localeCompare(b.name)), [templates]);
+  const lowForSupplier = useMemo(() => plan.filter((r) => r.status === "order" && r.route === "buy" && (supplierRecord ? r.supplier?.id === supplierRecord.id : !r.supplier)), [plan, supplierRecord]);
+
   const resolveSupplierId = async (): Promise<string | undefined> => {
     if (supplierRecord) return supplierRecord.id;
     if (!supplier.trim()) return undefined;
@@ -126,7 +146,7 @@ function PurchaseOrderForm({ open, onClose, onCreated, template, suggestion, edi
         toast(`Updated ${po.number}`, "success");
         onCreated?.(po);
       } else {
-        const po = await createPurchaseOrder(store, user, { supplierId, supplier: supplier.trim(), number: number.trim() || undefined, lines: payload, expectedAt, terms, reference, note, templateId: template?.id, source: template ? "template" : suggestion ? "suggestion" : "manual", send });
+        const po = await createPurchaseOrder(store, user, { supplierId, supplier: supplier.trim(), number: number.trim() || undefined, lines: payload, expectedAt, terms, reference, note, templateId: template?.id, source: template ? "template" : "manual", send });
         toast(`${send ? "Sent" : "Created"} ${po.number} to ${po.supplier}`, "success");
         onCreated?.(po);
       }
@@ -162,7 +182,7 @@ function PurchaseOrderForm({ open, onClose, onCreated, template, suggestion, edi
       open={open}
       onClose={onClose}
       title={editing ? `Edit ${editing.number}` : "New purchase order"}
-      subtitle={editing ? "Nothing has been received yet, so the lines can still change." : template ? `From template “${template.name}”. Check quantities and costs, then create.` : suggestion ? `Everything below minimum from ${suggestion.supplier}, at reorder quantity.` : "Stock lands when the delivery is received against the order."}
+      subtitle={editing ? "Nothing has been received yet, so the lines can still change." : template ? `From template “${template.name}”. Check quantities and costs, then create.` : "Stock lands when the delivery is received against the order."}
       size="lg"
       footer={
         <>
@@ -190,11 +210,51 @@ function PurchaseOrderForm({ open, onClose, onCreated, template, suggestion, edi
         </FormGrid>
 
         <div>
-          <div className="mb-1.5 flex items-center justify-between">
+          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
             <span className="text-[12.5px] font-medium text-text">Lines</span>
-            <Button size="sm" variant="plain" icon={<Plus />} onClick={() => setLines((prev) => [...prev, newLine()])}>
-              Add line
-            </Button>
+            <div className="flex items-center gap-1">
+              <Menu
+                align="right"
+                menuClassName="w-72"
+                trigger={
+                  <Button size="sm" variant="plain" icon={<ListPlus />} iconRight={<ChevronDown />}>
+                    Add lines from
+                  </Button>
+                }
+                items={[
+                  {
+                    label: (
+                      <span className="block min-w-0">
+                        <span className="block">Below their line{supplierRecord ? ` from ${supplierRecord.name}` : " with no supplier"}</span>
+                        <span className="block text-[11px] text-text-tertiary">{lowForSupplier.length ? `${pluralize(lowForSupplier.length, "item")} the forecast says to order` : "Nothing to order right now"}</span>
+                      </span>
+                    ),
+                    icon: <Lightbulb />,
+                    disabled: lowForSupplier.length === 0,
+                    onSelect: () => appendLines(lowForSupplier.map((r) => ({ itemId: r.item.id, qty: r.toOrder, unitCost: r.unitCost })), "Replenishment"),
+                  },
+                  "divider",
+                  ...(sortedTemplates.length
+                    ? sortedTemplates.map((t) => ({
+                        label: (
+                          <span className="block min-w-0">
+                            <span className="block truncate">{t.name}</span>
+                            <span className="block text-[11px] text-text-tertiary">
+                              {t.supplier ? `${t.supplier} · ` : ""}
+                              {pluralize(t.lines.length, "line")}
+                            </span>
+                          </span>
+                        ),
+                        icon: <BookmarkPlus />,
+                        onSelect: () => appendLines(t.lines, `Template “${t.name}”`),
+                      }))
+                    : [{ label: <span className="text-text-tertiary">No saved templates</span>, disabled: true }]),
+                ]}
+              />
+              <Button size="sm" variant="plain" icon={<Plus />} onClick={() => setLines((prev) => [...prev, newLine()])}>
+                Add line
+              </Button>
+            </div>
           </div>
           <div className="rounded-[var(--radius)] border border-border">
             <div className="hidden grid-cols-[minmax(0,1fr)_84px_120px_100px_32px] gap-2 border-b border-border bg-surface-subdued px-3 py-1.5 text-[12px] font-medium text-text-secondary sm:grid">

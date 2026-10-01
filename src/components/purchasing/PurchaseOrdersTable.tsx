@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { ClipboardCheck, Eye, MoreHorizontal, PackageCheck, Send, XCircle } from "lucide-react";
+import { ClipboardCheck, Eye, Merge, MoreHorizontal, PackageCheck, Send, XCircle } from "lucide-react";
 import type { PurchaseOrder } from "@/lib/types";
-import { poIsOpen, poIsOverdue, poOrderedUnits, poReceivedUnits, poTotal } from "@/lib/purchaseOrders";
+import { mergeBlocker, poIsOpen, poIsOverdue, poOrderedUnits, poReceivedUnits, poTotal, sameSupplier } from "@/lib/purchaseOrders";
 import { useItemsById, useSettings } from "@/lib/store/provider";
 import { formatDate, formatDateTime, formatMoney, formatRelative } from "@/lib/format";
 import { matches } from "@/lib/utils";
@@ -16,8 +16,9 @@ interface Props {
   busyId?: string | null;
   onSelect: (po: PurchaseOrder) => void;
   onSend: (po: PurchaseOrder) => void;
-  onReceive: (po: PurchaseOrder) => void;
+  onReceive: (pos: PurchaseOrder[]) => void;
   onCancel: (po: PurchaseOrder) => void;
+  onMerge?: (pos: PurchaseOrder[]) => void;
   onNew?: () => void;
 }
 
@@ -27,27 +28,30 @@ const FILTERS: Array<{ value: PoFilter; label: string }> = [
   { value: "sent", label: "Sent" },
   { value: "partial", label: "Partly received" },
   { value: "received", label: "Received" },
-  { value: "cancelled", label: "Cancelled" },
+  { value: "cancelled", label: "Closed" },
   { value: "all", label: "All" },
 ];
 
-export function PurchaseOrdersTable({ purchaseOrders, canWrite, busyId, onSelect, onSend, onReceive, onCancel, onNew }: Props) {
+export function PurchaseOrdersTable({ purchaseOrders, canWrite, busyId, onSelect, onSend, onReceive, onCancel, onMerge, onNew }: Props) {
   const byId = useItemsById();
   const { currency } = useSettings();
   const [filter, setFilter] = useState<PoFilter>("open");
   const [q, setQ] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
 
   const counts = useMemo(() => {
     const c: Record<PoFilter, number> = { open: 0, draft: 0, sent: 0, partial: 0, received: 0, cancelled: 0, all: purchaseOrders.length };
     for (const p of purchaseOrders) {
-      c[p.status]++;
+      // Cancelled and merged orders share the Closed tab.
+      const key: PoFilter = p.status === "merged" ? "cancelled" : p.status;
+      c[key]++;
       if (poIsOpen(p)) c.open++;
     }
     return c;
   }, [purchaseOrders]);
 
   const rows = useMemo(() => {
-    let list = filter === "all" ? purchaseOrders : filter === "open" ? purchaseOrders.filter(poIsOpen) : purchaseOrders.filter((p) => p.status === filter);
+    let list = filter === "all" ? purchaseOrders : filter === "open" ? purchaseOrders.filter(poIsOpen) : filter === "cancelled" ? purchaseOrders.filter((p) => p.status === "cancelled" || p.status === "merged") : purchaseOrders.filter((p) => p.status === filter);
     if (q.trim()) list = list.filter((p) => matches(q, p.number, p.supplier, p.reference) || p.lines.some((l) => matches(q, byId.get(l.itemId)?.sku, l.supplierSku)));
     return [...list].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }, [purchaseOrders, filter, q, byId]);
@@ -91,7 +95,17 @@ export function PurchaseOrdersTable({ purchaseOrders, canWrite, busyId, onSelect
         hideBelow: "md",
       },
       { key: "created", header: "Created", render: (p) => <span className="text-text-secondary" title={formatDateTime(p.createdAt)}>{formatRelative(p.createdAt)}</span>, sortValue: (p) => p.createdAt, hideBelow: "lg" },
-      { key: "status", header: "Status", render: (p) => <PoStatusBadge status={p.status} />, sortValue: (p) => p.status },
+      {
+        key: "status",
+        header: "Status",
+        render: (p) => (
+          <span className="inline-flex items-center gap-1.5">
+            <PoStatusBadge status={p.status} />
+            {p.status === "merged" && p.mergedInto && <span className="text-[12px] text-text-tertiary">into {purchaseOrders.find((x) => x.id === p.mergedInto)?.number ?? "another order"}</span>}
+          </span>
+        ),
+        sortValue: (p) => p.status,
+      },
       {
         key: "actions",
         header: "",
@@ -111,7 +125,7 @@ export function PurchaseOrdersTable({ purchaseOrders, canWrite, busyId, onSelect
                   ? ([
                       "divider",
                       ...(p.status === "draft" ? [{ label: "Mark as sent", icon: <Send />, onSelect: () => onSend(p), disabled: busyId === p.id }] : []),
-                      { label: p.status === "partial" ? "Receive the rest" : "Receive", icon: <PackageCheck />, onSelect: () => onReceive(p), disabled: busyId === p.id },
+                      { label: p.status === "partial" ? "Receive the rest" : "Receive", icon: <PackageCheck />, onSelect: () => onReceive([p]), disabled: busyId === p.id },
                       { label: "Cancel order", icon: <XCircle />, destructive: true, onSelect: () => onCancel(p), disabled: busyId === p.id },
                     ] as const)
                   : []),
@@ -121,7 +135,7 @@ export function PurchaseOrdersTable({ purchaseOrders, canWrite, busyId, onSelect
         ),
       },
     ],
-    [currency, canWrite, busyId, onSelect, onSend, onReceive, onCancel],
+    [currency, canWrite, busyId, onSelect, onSend, onReceive, onCancel, purchaseOrders],
   );
 
   let empty: ReactNode;
@@ -131,11 +145,50 @@ export function PurchaseOrdersTable({ purchaseOrders, canWrite, busyId, onSelect
       <EmptyState
         icon={<ClipboardCheck />}
         title={purchaseOrders.length ? "No open purchase orders" : "No purchase orders yet"}
-        description="Order from a supplier here, then receive the delivery against the order so stock, lots and costs land in one step. Strato can draft orders from everything below minimum."
+        description="Order from a supplier here, then receive the delivery against the order so stock, lots and costs land in one step. Replenishment drafts orders from the forecast; Strato can too."
         action={onNew ? <Button variant="primary" size="sm" onClick={onNew}>New purchase order</Button> : undefined}
       />
     );
-  else empty = <EmptyState icon={<ClipboardCheck />} title={`No ${FILTERS.find((f) => f.value === filter)?.label.toLowerCase() ?? ""} orders`} description="Orders move through draft, sent, partly received and received." />;
+  else empty = <EmptyState icon={<ClipboardCheck />} title={`No ${FILTERS.find((f) => f.value === filter)?.label.toLowerCase() ?? ""} orders`} description="Orders move through draft, sent, partly received and received; cancelled and merged orders are closed." />;
+
+  const bulkActions = (sel: Set<string>) => {
+    const chosen = purchaseOrders.filter((p) => sel.has(p.id));
+    const open = chosen.filter(poIsOpen);
+    const blocker = mergeBlocker(chosen);
+    const receivable = open.length >= 1 && open.length === chosen.length && sameSupplier(chosen);
+    const receiveWhy = chosen.length !== open.length ? "Only open orders can be received" : !sameSupplier(chosen) ? "One delivery comes from one supplier" : undefined;
+    return (
+      <>
+        <Button
+          size="sm"
+          icon={<PackageCheck />}
+          disabled={!receivable}
+          title={receiveWhy}
+          onClick={() => {
+            onReceive(open);
+            setSelected(new Set());
+          }}
+        >
+          Receive together
+        </Button>
+        {onMerge && (
+          <Button
+            size="sm"
+            icon={<Merge />}
+            disabled={!!blocker}
+            title={blocker ?? undefined}
+            onClick={() => {
+              onMerge(chosen);
+              setSelected(new Set());
+            }}
+          >
+            Merge into one order
+          </Button>
+        )}
+        {(blocker || receiveWhy) && chosen.length > 1 && <span className="text-[12px] text-text-tertiary">{blocker ?? receiveWhy}</span>}
+      </>
+    );
+  };
 
   return (
     <Table
@@ -143,6 +196,10 @@ export function PurchaseOrdersTable({ purchaseOrders, canWrite, busyId, onSelect
       columns={columns}
       rowKey={(p) => p.id}
       onRowClick={onSelect}
+      selectable={canWrite}
+      selected={selected}
+      onSelectedChange={setSelected}
+      bulkActions={canWrite ? bulkActions : undefined}
       defaultSort={{ key: "created", dir: "desc" }}
       pageSize={25}
       emptyState={empty}
@@ -152,7 +209,7 @@ export function PurchaseOrdersTable({ purchaseOrders, canWrite, busyId, onSelect
           <SearchField value={q} onChange={setQ} placeholder="Search number, supplier or SKU" className="w-full sm:ml-auto sm:w-72" />
         </div>
       }
-      footer={`${rows.length} ${rows.length === 1 ? "order" : "orders"}${rows.length ? ` · ${formatMoney(rows.reduce((t, p) => t + poTotal(p), 0), currency)}` : ""}`}
+      footer={`${rows.length} ${rows.length === 1 ? "order" : "orders"}${rows.length ? ` · ${formatMoney(rows.reduce((t, p) => t + poTotal(p), 0), currency)}` : ""}${canWrite ? " · select orders to receive them together or merge them" : ""}`}
     />
   );
 }

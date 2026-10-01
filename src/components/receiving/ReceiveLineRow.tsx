@@ -5,7 +5,7 @@ import type { Item, Supplier } from "@/lib/types";
 import { supplierLinkFor } from "@/lib/suppliers";
 import { formatMoney, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { IconButton, TextField } from "@/components/ui";
+import { Badge, IconButton, TextField } from "@/components/ui";
 import { ItemPicker } from "@/components/inventory";
 
 export interface LineDraft {
@@ -15,6 +15,15 @@ export interface LineDraft {
   unitCost: string;
   /** Aisle / rack / bin to put the line away in. */
   bin: string;
+  /** The supplier's lot / batch code on the goods, written on the batch. */
+  supplierLot: string;
+  /** Expiry date (yyyy-mm-dd), written on the batch. */
+  expiresAt: string;
+  /** Set when the line came off an open purchase order; the receipt closes that order's line. */
+  purchaseOrderId?: string;
+  poNumber?: string;
+  /** Units still open on that order's line, so the quantity can be checked. */
+  open?: number;
   /** Focus the picker when the row mounts (rows added after the first). */
   autoFocus: boolean;
 }
@@ -29,13 +38,15 @@ interface ReceiveLineRowProps {
   supplierId?: string;
   suppliersById: Map<string, Supplier>;
   filter: (item: Item) => boolean;
+  /** Show the lot number and expiry fields under the line. */
+  trackLots: boolean;
   onPick: (item: Item | null) => void;
   onChange: (patch: Partial<LineDraft>) => void;
   onRemove: () => void;
   qtyRef: (el: HTMLInputElement | null) => void;
 }
 
-export function ReceiveLineRow({ line, currency, symbol, supplierId, suppliersById, filter, onPick, onChange, onRemove, qtyRef }: ReceiveLineRowProps) {
+export function ReceiveLineRow({ line, currency, symbol, supplierId, suppliersById, filter, trackLots, onPick, onChange, onRemove, qtyRef }: ReceiveLineRowProps) {
   const qty = Number(line.qty);
   const cost = line.unitCost.trim() === "" ? (line.item?.unitCost ?? 0) : Number(line.unitCost);
   const total = line.item && qty > 0 && Number.isFinite(cost) ? qty * cost : 0;
@@ -45,13 +56,22 @@ export function ReceiveLineRow({ line, currency, symbol, supplierId, suppliersBy
     <div className="rounded-[var(--radius-sm)] border border-border p-2 sm:rounded-none sm:border-0 sm:p-0">
       <div className={cn("grid gap-2 sm:items-center", LINE_GRID)}>
         <div className="min-w-0">
-          <ItemPicker value={line.item} onChange={onPick} filter={filter} autoFocus={line.autoFocus} placeholder="Search SKU or name" />
+          {line.purchaseOrderId ? (
+            <div className="flex h-8 min-w-0 items-center gap-2">
+              <span className="truncate font-mono text-[12.5px] text-text">{line.item?.sku}</span>
+              <span className="truncate text-[12px] text-text-secondary">{line.item?.name}</span>
+              <Badge tone="info">{line.poNumber}</Badge>
+            </div>
+          ) : (
+            <ItemPicker value={line.item} onChange={onPick} filter={filter} autoFocus={line.autoFocus} placeholder="Search SKU or name" />
+          )}
         </div>
         <div className="grid grid-cols-[1fr_1fr_1fr_1fr_32px] items-center gap-2 sm:contents">
           <TextField
             ref={qtyRef}
             type="number"
             min={0}
+            max={line.open}
             step="any"
             placeholder="Qty"
             aria-label="Quantity"
@@ -78,6 +98,12 @@ export function ReceiveLineRow({ line, currency, symbol, supplierId, suppliersBy
           </IconButton>
         </div>
       </div>
+      {trackLots && line.item && (
+        <div className="mt-1.5 grid grid-cols-2 gap-2 sm:w-[60%]">
+          <TextField placeholder="Supplier lot / batch #" aria-label="Supplier lot" value={line.supplierLot} onChange={(e) => onChange({ supplierLot: e.target.value })} />
+          <TextField type="date" aria-label="Expires" value={line.expiresAt} onChange={(e) => onChange({ expiresAt: e.target.value })} />
+        </div>
+      )}
       {hint && <p className={cn("mt-1 text-[12px]", hint.tone === "warning" ? "text-warning" : "text-text-tertiary")}>{hint.text}</p>}
     </div>
   );
@@ -88,6 +114,12 @@ function lineHint(line: LineDraft, supplierId: string | undefined, suppliersById
   if (!item) return null;
   const parts: string[] = [];
   let tone: "default" | "warning" = "default";
+  if (line.open !== undefined) parts.push(`${line.open} open on ${line.poNumber}`);
+  const qty = Number(line.qty);
+  if (line.open !== undefined && Number.isFinite(qty) && qty > line.open) {
+    parts.push(`more than the ${line.open} still open`);
+    tone = "warning";
+  }
   const link = supplierId ? supplierLinkFor(item, supplierId) : undefined;
   if (supplierId && item.supplierId && !link) {
     parts.push(`Usually from ${suppliersById.get(item.supplierId)?.name ?? "another supplier"} · will be added as a supplier`);
@@ -98,7 +130,7 @@ function lineHint(line: LineDraft, supplierId: string | undefined, suppliersById
   const cost = Number(line.unitCost);
   if (line.unitCost.trim() !== "" && Number.isFinite(cost) && item.unitCost > 0 && Math.abs(cost - item.unitCost) > 0.0001) {
     const pct = ((cost - item.unitCost) / item.unitCost) * 100;
-    parts.push(`Standard ${formatMoney(item.unitCost, currency)} (${pct > 0 ? "+" : ""}${formatPercent(pct, 1)})`);
+    parts.push(`Current cost ${formatMoney(item.unitCost, currency)} (${pct > 0 ? "+" : ""}${formatPercent(pct, 1)})`);
   }
   return parts.length ? { text: parts.join(" · "), tone } : null;
 }

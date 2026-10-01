@@ -12,3 +12,4 @@ export * from "./KpiReport";
 export * from "./BackorderReport";
 export * from "./PurchaseOrdersReport";
 export * from "./MarginReport";
+export * from "./TraceabilityReport";

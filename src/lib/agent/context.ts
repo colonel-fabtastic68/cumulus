@@ -1,8 +1,10 @@
 import type { WorkspaceSnapshot } from "@/lib/types";
-import { inventoryValue, isLowStock, reorderQty } from "@/lib/inventory";
+import { costingMethod, inventoryValue, isLowStock, reorderQty } from "@/lib/inventory";
+import { replenishmentPlan, replenishmentSummary } from "@/lib/replenishment";
+import { COSTING_LABELS } from "@/lib/valuation";
 
 /** Compact text snapshot of the workspace for Strato's system prompt. */
-export function buildAgentContext(ws: Pick<WorkspaceSnapshot, "items" | "suppliers" | "orders" | "rmas" | "settings" | "members"> & Partial<Pick<WorkspaceSnapshot, "integrations" | "purchaseOrders" | "purchaseOrderTemplates">>, extra: { page?: string; selectedSkus?: string[] } = {}): string {
+export function buildAgentContext(ws: Pick<WorkspaceSnapshot, "items" | "suppliers" | "orders" | "rmas" | "settings" | "members"> & Partial<Pick<WorkspaceSnapshot, "integrations" | "purchaseOrders" | "purchaseOrderTemplates" | "movements">>, extra: { page?: string; selectedSkus?: string[] } = {}): string {
   const settings = ws.settings[0];
   const active = ws.items.filter((i) => i.status === "active");
   const low = ws.items.filter((i) => isLowStock(i, ws.settings?.[0]?.stockAlerts)).sort((a, b) => a.onHand / (a.minQty || 1) - b.onHand / (b.minQty || 1));
@@ -11,7 +13,7 @@ export function buildAgentContext(ws: Pick<WorkspaceSnapshot, "items" | "supplie
   const openOrders = ws.orders.filter((o) => o.status === "open");
   const openRmas = ws.rmas.filter((r) => r.status === "open" || r.status === "inspecting");
   const lines: string[] = [];
-  lines.push(`Company: ${settings?.companyName ?? "Unknown"} · Currency: ${settings?.currency ?? "USD"} · Relieve components: ${settings?.relievePolicy ?? "on_build"} · Track in-use: ${settings?.trackInUse ? "yes" : "no"} · Inactivity window: ${settings?.inactivityDays ?? 120} days`);
+  lines.push(`Company: ${settings?.companyName ?? "Unknown"} · Currency: ${settings?.currency ?? "USD"} · Costing: ${COSTING_LABELS[costingMethod(settings)]} · Relieve components: ${settings?.relievePolicy ?? "on_build"} · Track in-use: ${settings?.trackInUse ? "yes" : "no"} · Inactivity window: ${settings?.inactivityDays ?? 120} days`);
   lines.push(`Items: ${ws.items.length} total (${active.length} active, ${ws.items.filter((i) => i.type === "assembly").length} assemblies) · Inventory value: ${inventoryValue(ws.items).toFixed(2)} · Below min: ${low.length}`);
   lines.push(`Categories: ${Array.from(cats.entries()).map(([c, n]) => `${c} (${n})`).join(", ")}`);
   lines.push(`Suppliers: ${ws.suppliers.map((s) => `${s.name}${s.leadTimeDays ? ` [${s.leadTimeDays}d]` : ""}`).join(", ") || "none"}`);
@@ -34,7 +36,13 @@ export function buildAgentContext(ws: Pick<WorkspaceSnapshot, "items" | "supplie
       : "Connections: none connected (Shopify, WooCommerce, Shippo and EasyPost connect under Integrations)",
   );
   if (low.length) {
-    lines.push(`Below minimum (top ${Math.min(12, low.length)}): ${low.slice(0, 12).map((i) => `${i.sku} ${i.onHand}/${i.minQty} reorder ${reorderQty(i)}`).join("; ")}`);
+    lines.push(`Below minimum on the shelf (top ${Math.min(12, low.length)}): ${low.slice(0, 12).map((i) => `${i.sku} ${i.onHand}/${i.minQty} reorder ${reorderQty(i)}`).join("; ")}`);
+  }
+  if (ws.purchaseOrders && ws.movements) {
+    const plan = replenishmentPlan({ items: ws.items, suppliers: ws.suppliers, purchaseOrders: ws.purchaseOrders, orders: ws.orders, movements: ws.movements, rule: settings?.stockAlerts });
+    const s = replenishmentSummary(plan);
+    const toOrder = plan.filter((r) => r.status === "order");
+    lines.push(`Replenishment (forecast = on hand + on order − open sales orders): ${s.toOrder} to order${s.late ? ` (${s.late} late)` : ""}, est. ${s.estCost.toFixed(2)} across ${s.suppliers} supplier${s.suppliers === 1 ? "" : "s"}${s.builds ? `, ${s.builds} to build` : ""}; ${s.covered} covered by incoming; ${s.snoozed} snoozed; ${s.auto} on automatic rules${toOrder.length ? `. Top: ${toOrder.slice(0, 8).map((r) => `${r.item.sku} forecast ${r.forecast}/${r.min ?? "?"} ${r.route} ${r.toOrder}${r.supplier ? ` from ${r.supplier.name}` : ""}`).join("; ")}` : ""}`);
   }
   if (extra.page) lines.push(`User is viewing: ${extra.page}`);
   if (extra.selectedSkus?.length) lines.push(`User has selected these SKUs in the table: ${extra.selectedSkus.join(", ")}`);

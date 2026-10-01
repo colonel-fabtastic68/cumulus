@@ -10,11 +10,13 @@ import type { StockAlertRule,
   ActivityType,
   Address,
   Build,
+  CostingMethod,
   IntegrationId,
   Item,
   ItemStock,
   Location,
   Lot,
+  LotAllocation,
   Member,
   MovementType,
   OrderLine,
@@ -69,6 +71,7 @@ export function itemDefaults(partial: Partial<Item> & { sku: string; name: strin
     minQty: partial.minQty,
     maxQty: partial.maxQty,
     leadTimeDays: partial.leadTimeDays,
+    replenishment: partial.replenishment,
     unitCost: partial.unitCost ?? 0,
     price: partial.price ?? 0,
     salePrice: partial.salePrice,
@@ -442,15 +445,65 @@ async function loadSettings(store: Store): Promise<WorkspaceSettings> {
   return (await store.get("settings", "default")) ?? seedSettings();
 }
 
-export async function nextNumber(store: Store, kind: keyof WorkspaceSettings["counters"]): Promise<{ number: string; ops: WriteOp[] }> {
+type CounterKind = keyof WorkspaceSettings["counters"];
+
+const NUMBER_PREFIXES: Record<CounterKind, string> = { receipt: "RCV-", build: "BLD-", order: "SO-", rma: "RMA-", transfer: "TR-", shipment: "SH-", quote: "QT-", purchaseOrder: "PO-", cycleCount: "CC-", lot: "LOT-" };
+
+/**
+ * Reserves document numbers of several kinds in ONE settings patch. A batch
+ * that needs a receipt number and three lot numbers must take them together:
+ * two separate patches would each spread the counters they read and the
+ * second would undo the first.
+ */
+export async function nextNumbers(store: Store, wanted: Partial<Record<CounterKind, number>>): Promise<{ numbers: Record<CounterKind, string[]>; ops: WriteOp[] }> {
   const settings = await loadSettings(store);
-  const n = settings.counters[kind] ?? 1001;
-  const defaults = { receipt: "RCV-", build: "BLD-", order: "SO-", rma: "RMA-", transfer: "TR-", shipment: "SH-", quote: "QT-", purchaseOrder: "PO-", cycleCount: "CC-" };
-  const prefix = kind === "order" && settings.numbering?.orderPrefix !== undefined ? settings.numbering.orderPrefix : kind === "purchaseOrder" && settings.numbering?.purchaseOrderPrefix !== undefined ? settings.numbering.purchaseOrderPrefix : defaults[kind];
-  const ops: WriteOp[] = [
-    { op: "patch", collection: "settings", id: "default", patch: { counters: { ...settings.counters, [kind]: n + 1 }, updatedAt: nowIso() } },
-  ];
-  return { number: `${prefix}${n}`, ops };
+  const counters = { ...settings.counters };
+  const numbers = {} as Record<CounterKind, string[]>;
+  for (const kind of Object.keys(NUMBER_PREFIXES) as CounterKind[]) {
+    const count = wanted[kind] ?? 0;
+    const prefix = kind === "order" && settings.numbering?.orderPrefix !== undefined ? settings.numbering.orderPrefix : kind === "purchaseOrder" && settings.numbering?.purchaseOrderPrefix !== undefined ? settings.numbering.purchaseOrderPrefix : NUMBER_PREFIXES[kind];
+    const start = counters[kind] ?? 1001;
+    numbers[kind] = Array.from({ length: count }, (_, i) => `${prefix}${start + i}`);
+    if (count > 0) counters[kind] = start + count;
+  }
+  const ops: WriteOp[] = Object.values(wanted).some((n) => n && n > 0) ? [{ op: "patch", collection: "settings", id: "default", patch: { counters, updatedAt: nowIso() } }] : [];
+  return { numbers, ops };
+}
+
+export async function nextNumber(store: Store, kind: CounterKind): Promise<{ number: string; ops: WriteOp[] }> {
+  const { numbers, ops } = await nextNumbers(store, { [kind]: 1 });
+  return { number: numbers[kind][0]!, ops };
+}
+
+/** The workspace's costing method (standard cost unless set otherwise under Settings → Inventory policy). */
+export function costingMethod(settings: Pick<WorkspaceSettings, "costing"> | undefined | null): CostingMethod {
+  return settings?.costing?.method ?? "standard";
+}
+
+/** Quantity-weighted unit cost of the batches still on the shelf, or undefined when none remain. */
+export function remainingLotCost(lots: Lot[]): number | undefined {
+  let qty = 0;
+  let value = 0;
+  for (const l of lots) {
+    if (l.qtyRemaining <= 0) continue;
+    qty += l.qtyRemaining;
+    value += l.qtyRemaining * l.unitCost;
+  }
+  return qty > 0 ? round(value / qty, 4) : undefined;
+}
+
+/**
+ * What an item's unit cost becomes when `qty` units arrive at `cost`:
+ * standard keeps the standard cost unless the caller updates it, average moves
+ * to the weighted average of what is on hand, FIFO follows the layers.
+ */
+export function costAfterReceipt(method: CostingMethod, item: Pick<Item, "onHand" | "unitCost">, lotsAfter: Lot[], qty: number, cost: number, updateStandard: boolean): number {
+  if (method === "average") {
+    const have = Math.max(0, item.onHand);
+    return have > 0 ? round((have * item.unitCost + qty * cost) / (have + qty), 4) : round(cost, 4);
+  }
+  if (method === "fifo") return remainingLotCost(lotsAfter) ?? round(cost, 4);
+  return updateStandard ? cost : item.unitCost;
 }
 
 /** Splits "WEB-6767" into its prefix and number, or null when the number has no digits at the end. */
@@ -486,6 +539,8 @@ export interface MovementInput {
   occurredAt?: string;
   /** Location the stock moves in or out of. Defaults to the workspace's default location. */
   locationId?: string;
+  /** Consumption: take from these batches first (e.g. voiding a receipt takes back its own lots), then the oldest. */
+  fromLotIds?: string[];
 }
 
 /** Id of the location created on first use when a workspace has none. */
@@ -530,9 +585,11 @@ export async function movementOps(
   const items = await store.list("items");
   const lots = await store.list("lots");
   const locations = await store.list("locations");
+  const method = costingMethod(await loadSettings(store));
   const byId = new Map(items.map((i) => [i.id, { ...i }]));
   const lotById = new Map(lots.map((l) => [l.id, { ...l }]));
   const touchedLots = new Set<string>();
+  const costChanged = new Set<string>();
   const movements: StockMovement[] = [];
   const now = nowIso();
   const home = defaultLocation(locations);
@@ -575,22 +632,39 @@ export async function movementOps(
       createdAt: now,
       createdBy: actor.id,
     };
-    movements.push(m);
 
-    // Lot bookkeeping (FIFO relief on consumption; explicit lot on receipt).
-    if (input.qty < 0) {
+    // Lot bookkeeping: consumption takes the oldest batches first and remembers which ones, so a
+    // sale or build can be traced back to its receipt. Under FIFO costing the movement is costed at
+    // those batches. A transfer moves stock between locations without consuming it, so batches stay.
+    if (input.qty < 0 && input.type !== "transfer_out") {
       let remaining = -input.qty;
+      const allocations: LotAllocation[] = [];
+      const preferred = input.fromLotIds ?? [];
+      const rank = (l: Lot) => (preferred.includes(l.id) ? preferred.indexOf(l.id) : preferred.length);
       const candidates = Array.from(lotById.values())
         .filter((l) => l.itemId === item.id && l.qtyRemaining > 0)
-        .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt));
+        .sort((a, b) => rank(a) - rank(b) || a.receivedAt.localeCompare(b.receivedAt));
       for (const lot of candidates) {
-        if (remaining <= 0) break;
-        const take = Math.min(lot.qtyRemaining, remaining);
+        if (remaining <= 1e-9) break;
+        const take = round(Math.min(lot.qtyRemaining, remaining), 3);
         lot.qtyRemaining = round(lot.qtyRemaining - take, 3);
-        remaining -= take;
+        remaining = round(remaining - take, 3);
         touchedLots.add(lot.id);
+        allocations.push({ lotId: lot.id, qty: take, unitCost: lot.unitCost });
+      }
+      if (allocations.length) m.lots = allocations;
+      if (method === "fifo") {
+        // Units no batch covers (stock that pre-dates batches) are costed at the item's cost.
+        const covered = sum(allocations.map((a) => a.qty * a.unitCost)) + Math.max(0, remaining) * item.unitCost;
+        m.unitCost = round(covered / -input.qty, 4);
+        const layerCost = remainingLotCost(Array.from(lotById.values()).filter((l) => l.itemId === item.id));
+        if (layerCost !== undefined && layerCost !== item.unitCost) {
+          item.unitCost = layerCost;
+          costChanged.add(item.id);
+        }
       }
     }
+    movements.push(m);
   }
 
   const ops: WriteOp[] = [];
@@ -599,7 +673,7 @@ export async function movementOps(
   for (const m of movements) ops.push({ op: "put", collection: "movements", doc: m });
   for (const id of new Set(movements.map((m) => m.itemId))) {
     const it = byId.get(id)!;
-    const patch: Partial<Item> = { onHand: it.onHand, stock: it.stock, updatedAt: it.updatedAt, updatedBy: it.updatedBy };
+    const patch: Partial<Item> = { onHand: it.onHand, stock: it.stock, updatedAt: it.updatedAt, updatedBy: it.updatedBy, ...(costChanged.has(id) ? { unitCost: it.unitCost } : {}) };
     itemPatches.set(id, patch);
     ops.push({ op: "patch", collection: "items", id, patch });
   }
@@ -623,6 +697,8 @@ export interface AdjustInput {
   refId?: string;
   /** Count or adjust one location; defaults to the workspace default. */
   locationId?: string;
+  /** Negative changes: take from these batches first. */
+  fromLotIds?: string[];
 }
 
 /** Factor 12: adjustments, counts and write-offs. */
@@ -647,16 +723,21 @@ export async function adjustStock(store: Store, actor: Actor, inputs: AdjustInpu
       refType: a.refType ?? "manual",
       refId: a.refId,
       locationId: a.locationId,
+      fromLotIds: a.fromLotIds,
     });
   }
   if (movementInputs.length === 0) return [];
   const { ops, movements } = await movementOps(store, actor, movementInputs);
-  // Positive adjustments create a lot so shelf-life stays meaningful.
-  for (const m of movements) {
-    if (m.qty > 0) {
-      const lot: Lot = { id: newId("lot"), itemId: m.itemId, qtyReceived: m.qty, qtyRemaining: m.qty, unitCost: m.unitCost ?? 0, receivedAt: m.occurredAt };
+  // Positive adjustments create a lot so shelf-life and traceability stay meaningful.
+  const positives = movements.filter((m) => m.qty > 0);
+  if (positives.length) {
+    const { numbers, ops: numberOps } = await nextNumbers(store, { lot: positives.length });
+    ops.push(...numberOps);
+    positives.forEach((m, i) => {
+      const lot: Lot = { id: newId("lot"), number: numbers.lot[i], itemId: m.itemId, source: m.refType === "import" ? "import" : "adjustment", qtyReceived: m.qty, qtyRemaining: m.qty, unitCost: m.unitCost ?? 0, receivedAt: m.occurredAt };
+      m.lotId = lot.id;
       ops.push({ op: "put", collection: "lots", doc: lot });
-    }
+    });
   }
   const writeOffs = movements.filter((m) => m.type === "write_off");
   const others = movements.filter((m) => m.type !== "write_off");
@@ -682,13 +763,29 @@ function describeMovements(actor: Actor, byId: Map<string, Item>, ms: StockMovem
   return `${actor.name} ${verb} stock on ${ms.length} items`;
 }
 
+export interface ReceiveLineInput {
+  itemId: string;
+  qty: number;
+  unitCost?: number;
+  locationId?: string;
+  bin?: string;
+  /** The supplier's lot / batch code on the goods. */
+  supplierLot?: string;
+  /** Expiry date (YYYY-MM-DD or ISO). */
+  expiresAt?: string;
+  /** The purchase order this line was ordered on, when the delivery is booked against orders. */
+  purchaseOrderId?: string;
+}
+
 export interface ReceiveInput {
   supplierId?: string;
   reference?: string;
   receivedAt?: string;
   note?: string;
-  lines: Array<{ itemId: string; qty: number; unitCost?: number; locationId?: string; bin?: string }>;
-  /** Update the item's standard cost to the received cost. Default true. */
+  lines: ReceiveLineInput[];
+  /** Every purchase order the delivery covers (defaults to the orders named on the lines). */
+  purchaseOrderIds?: string[];
+  /** Standard costing only: update the item's standard cost to the received cost. Default true. */
   updateStandardCost?: boolean;
 }
 
@@ -703,7 +800,9 @@ export async function voidReceipt(store: Store, actor: Actor, receiptId: string,
   if (!receipt) throw new InventoryError("Receipt not found");
   if (receipt.status === "voided") throw new InventoryError(`${receipt.number} is already voided`);
   const movements = (await store.list("movements")).filter((m) => m.refType === "receipt" && m.refId === receipt.id && m.type === "receipt");
-  const inputs: AdjustInput[] = (movements.length ? movements.map((m) => ({ itemId: m.itemId, qtyDelta: -m.qty, locationId: m.locationId })) : receipt.lines.map((l) => ({ itemId: l.itemId, qtyDelta: -l.qty }))).map((a) => ({ ...a, type: "adjustment" as const, reason: `Voided ${receipt.number}${reason ? `: ${reason}` : ""}` }));
+  // The receipt's own batches go back out first, so the audit trail points at them.
+  const lotIds = receipt.lines.map((l) => l.lotId).filter((id): id is string => !!id);
+  const inputs: AdjustInput[] = (movements.length ? movements.map((m) => ({ itemId: m.itemId, qtyDelta: -m.qty, locationId: m.locationId, fromLotIds: m.lotId ? [m.lotId] : lotIds })) : receipt.lines.map((l) => ({ itemId: l.itemId, qtyDelta: -l.qty, fromLotIds: l.lotId ? [l.lotId] : undefined }))).map((a) => ({ ...a, type: "adjustment" as const, reason: `Voided ${receipt.number}${reason ? `: ${reason}` : ""}`, refType: "receipt" as const, refId: receipt.id }));
   await adjustStock(store, actor, inputs);
   const now = nowIso();
   await store.batch([
@@ -712,17 +811,29 @@ export async function voidReceipt(store: Store, actor: Actor, receiptId: string,
   ]);
 }
 
+/** A date typed as YYYY-MM-DD becomes an ISO timestamp; anything else is kept as given. */
+function isoDate(value: string | undefined): string | undefined {
+  const v = value?.trim();
+  if (!v) return undefined;
+  return /^\d{4}-\d{2}-\d{2}$/.test(v) ? new Date(`${v}T12:00:00`).toISOString() : v;
+}
+
 export async function receiveStock(store: Store, actor: Actor, input: ReceiveInput): Promise<Receipt> {
   if (input.lines.length === 0) throw new InventoryError("A receipt needs at least one line");
-  const items = await store.list("items");
-  const byId = new Map(items.map((i) => [i.id, i]));
-  const { number, ops: counterOps } = await nextNumber(store, "receipt");
+  const [items, lots, settings] = await Promise.all([store.list("items"), store.list("lots"), loadSettings(store)]);
+  const method = costingMethod(settings);
+  const byId = new Map(items.map((i) => [i.id, { ...i }]));
+  const lotsByItem = new Map<string, Lot[]>();
+  for (const l of lots) if (l.qtyRemaining > 0) (lotsByItem.get(l.itemId) ?? lotsByItem.set(l.itemId, []).get(l.itemId)!).push(l);
+  const { numbers, ops: counterOps } = await nextNumbers(store, { receipt: 1, lot: input.lines.length });
   const receivedAt = input.receivedAt ?? nowIso();
+  const purchaseOrderIds = Array.from(new Set([...(input.purchaseOrderIds ?? []), ...input.lines.map((l) => l.purchaseOrderId).filter((id): id is string => !!id)]));
   const receipt: Receipt = {
     id: newId("rcv"),
-    number,
+    number: numbers.receipt[0]!,
     supplierId: input.supplierId,
     reference: input.reference,
+    ...(purchaseOrderIds.length ? { purchaseOrderIds } : {}),
     status: "received",
     receivedAt,
     lines: [],
@@ -732,24 +843,50 @@ export async function receiveStock(store: Store, actor: Actor, input: ReceiveInp
   };
   const ops: WriteOp[] = [...counterOps];
   const movementInputs: MovementInput[] = [];
-  for (const line of input.lines) {
+  const itemCostPatches = new Map<string, Partial<Item>>();
+  input.lines.forEach((line, i) => {
     const item = byId.get(line.itemId);
     if (!item) throw new InventoryError(`Unknown item ${line.itemId}`);
     if (line.qty <= 0) throw new InventoryError(`Quantity for ${item.sku} must be positive`);
     const unitCost = line.unitCost ?? item.unitCost;
-    const lot: Lot = { id: newId("lot"), itemId: item.id, receiptId: receipt.id, qtyReceived: line.qty, qtyRemaining: line.qty, unitCost, receivedAt };
+    const supplierLot = line.supplierLot?.trim() || undefined;
+    const expiresAt = isoDate(line.expiresAt);
+    const lot: Lot = {
+      id: newId("lot"),
+      number: numbers.lot[i],
+      itemId: item.id,
+      source: "receipt",
+      receiptId: receipt.id,
+      ...(line.purchaseOrderId ? { purchaseOrderId: line.purchaseOrderId } : {}),
+      ...(input.supplierId ? { supplierId: input.supplierId } : {}),
+      ...(supplierLot ? { supplierLot } : {}),
+      qtyReceived: line.qty,
+      qtyRemaining: line.qty,
+      unitCost,
+      receivedAt,
+      ...(expiresAt ? { expiresAt } : {}),
+    };
     ops.push({ op: "put", collection: "lots", doc: lot });
-    receipt.lines.push({ itemId: item.id, qty: line.qty, unitCost, lotId: lot.id });
+    (lotsByItem.get(item.id) ?? lotsByItem.set(item.id, []).get(item.id)!).push(lot);
+    receipt.lines.push({ itemId: item.id, qty: line.qty, unitCost, lotId: lot.id, ...(supplierLot ? { supplierLot } : {}), ...(expiresAt ? { expiresAt } : {}), ...(line.purchaseOrderId ? { purchaseOrderId: line.purchaseOrderId } : {}) });
     movementInputs.push({ itemId: item.id, type: "receipt", qty: line.qty, unitCost, lotId: lot.id, refType: "receipt", refId: receipt.id, occurredAt: receivedAt, locationId: line.locationId });
-    const patch: Partial<Item> = {};
-    if (input.updateStandardCost !== false && unitCost !== item.unitCost) patch.unitCost = unitCost;
+    const patch: Partial<Item> = itemCostPatches.get(item.id) ?? {};
+    // Costing: standard cost follows the receipt when asked; average and FIFO follow their own rules.
+    const next = costAfterReceipt(method, item, lotsByItem.get(item.id) ?? [], line.qty, unitCost, input.updateStandardCost !== false);
+    if (next !== item.unitCost) {
+      patch.unitCost = next;
+      item.unitCost = next;
+    }
+    // Several lines of the same item in one delivery: the average must see the earlier line's units.
+    item.onHand = round(Math.max(0, item.onHand) + line.qty, 3);
     // A delivery from a supplier the part did not list yet links them, so the next reorder knows.
-    if (input.supplierId && item.supplierId !== input.supplierId && !(item.suppliers ?? []).some((s) => s.supplierId === input.supplierId)) {
+    if (input.supplierId && item.supplierId !== input.supplierId && !(item.suppliers ?? []).some((s) => s.supplierId === input.supplierId) && !patch.suppliers && !patch.supplierId) {
       if (!item.supplierId) patch.supplierId = input.supplierId;
       else patch.suppliers = [...(item.suppliers ?? []), { supplierId: input.supplierId, unitCost }];
     }
-    if (Object.keys(patch).length) ops.push({ op: "patch", collection: "items", id: item.id, patch });
-  }
+    if (Object.keys(patch).length) itemCostPatches.set(item.id, patch);
+  });
+  for (const [id, patch] of itemCostPatches) ops.push({ op: "patch", collection: "items", id, patch });
   const mv = await movementOps(store, actor, movementInputs);
   // Put-away: remember the bin each line landed in.
   for (const line of input.lines) {
@@ -798,33 +935,40 @@ export async function buildAssembly(store: Store, actor: Actor, input: BuildInpu
       { shortages: short.map((r) => ({ sku: r.item.sku, required: r.required, available: r.available })) },
     );
   }
-  const { number, ops: counterOps } = await nextNumber(store, "build");
+  const { numbers, ops: counterOps } = await nextNumbers(store, { build: 1, lot: 1 });
   const occurredAt = input.occurredAt ?? nowIso();
+  const lotId = newId("lot");
   const build: Build = {
     id: newId("bld"),
-    number,
+    number: numbers.build[0]!,
     assemblyId: assembly.id,
     qty: input.qty,
     status: "completed",
     consumeSubassemblies: consumeSub,
     components: reqs.map((r) => ({ itemId: r.item.id, qtyPer: round(r.required / input.qty, 4), qtyConsumed: r.required })),
+    lotId,
     note: input.note,
     completedAt: occurredAt,
     createdAt: nowIso(),
     createdBy: actor.id,
   };
-  const movementInputs: MovementInput[] = reqs.map((r) => ({ itemId: r.item.id, type: "build_consume", locationId: input.locationId, qty: -r.required, refType: "build", refId: build.id, occurredAt }));
-  const cost = rolledUpCost(items, assembly);
-  movementInputs.push({ itemId: assembly.id, type: "build_produce", locationId: input.locationId, qty: input.qty, unitCost: cost, refType: "build", refId: build.id, occurredAt });
-  const mv = await movementOps(store, actor, movementInputs);
-  const lot: Lot = { id: newId("lot"), itemId: assembly.id, qtyReceived: input.qty, qtyRemaining: input.qty, unitCost: cost, receivedAt: occurredAt };
+  // Components first: what they actually cost (their batches under FIFO, the moving average, or
+  // standard cost) is what the finished units are worth.
+  const consume = await movementOps(store, actor, reqs.map((r) => ({ itemId: r.item.id, type: "build_consume" as const, locationId: input.locationId, qty: -r.required, refType: "build" as const, refId: build.id, occurredAt })));
+  const consumed = sum(consume.movements.map((m) => -m.qty * (m.unitCost ?? 0)));
+  const cost = consumed > 0 ? round(consumed / input.qty, 4) : rolledUpCost(items, assembly);
+  const produce = await movementOps(store, actor, [{ itemId: assembly.id, type: "build_produce", locationId: input.locationId, qty: input.qty, unitCost: cost, lotId, refType: "build", refId: build.id, occurredAt }]);
+  const lot: Lot = { id: lotId, number: numbers.lot[0], itemId: assembly.id, source: "build", buildId: build.id, qtyReceived: input.qty, qtyRemaining: input.qty, unitCost: cost, receivedAt: occurredAt };
+  const [lots, settings] = await Promise.all([store.list("lots"), loadSettings(store)]);
+  const unitCost = costAfterReceipt(costingMethod(settings), assembly, [...lots.filter((l) => l.itemId === assembly.id), lot], input.qty, cost, true);
   const ops: WriteOp[] = [
     ...counterOps,
-    ...mv.ops,
+    ...consume.ops,
+    ...produce.ops,
     { op: "put", collection: "lots", doc: lot },
-    { op: "patch", collection: "items", id: assembly.id, patch: { unitCost: cost } },
+    { op: "patch", collection: "items", id: assembly.id, patch: { unitCost } },
     { op: "put", collection: "builds", doc: build },
-    activityOp(actor, "build.completed", `${actor.name} built ${input.qty} × ${assembly.sku} (${build.number})`, { entityType: "build", entityId: build.id, meta: { qty: input.qty } }),
+    activityOp(actor, "build.completed", `${actor.name} built ${input.qty} × ${assembly.sku} (${build.number})`, { entityType: "build", entityId: build.id, meta: { qty: input.qty, lot: lot.number } }),
   ];
   await store.batch(ops);
   return build;
@@ -1140,10 +1284,13 @@ export async function resolveRma(
   const ops: WriteOp[] = [];
   if (movementInputs.length) {
     const mv = await movementOps(store, actor, movementInputs);
-    ops.push(...mv.ops);
-    for (const m of mv.movements) {
-      ops.push({ op: "put", collection: "lots", doc: { id: newId("lot"), itemId: m.itemId, qtyReceived: m.qty, qtyRemaining: m.qty, unitCost: m.unitCost ?? 0, receivedAt: resolvedAt } });
-    }
+    const { numbers, ops: numberOps } = await nextNumbers(store, { lot: mv.movements.length });
+    ops.push(...numberOps, ...mv.ops);
+    mv.movements.forEach((m, i) => {
+      const lot: Lot = { id: newId("lot"), number: numbers.lot[i], itemId: m.itemId, source: "rma", qtyReceived: m.qty, qtyRemaining: m.qty, unitCost: m.unitCost ?? 0, receivedAt: resolvedAt };
+      m.lotId = lot.id;
+      ops.push({ op: "put", collection: "lots", doc: lot });
+    });
   }
   const status: Rma["status"] = restock.length ? "restocked" : lines.some((l) => l.disposition === "scrap") ? "scrapped" : "refunded";
   ops.push({ op: "patch", collection: "rmas", id: rma.id, patch: { status, lines, resolvedAt, note: note ?? rma.note } });

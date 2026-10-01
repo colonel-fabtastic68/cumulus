@@ -1,25 +1,24 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { BookmarkPlus, ChevronDown, FileUp, Lightbulb, Plus, Sparkles, Trash2 } from "lucide-react";
+import { BookmarkPlus, ChevronDown, FileText, FileUp, Lightbulb, Merge, Plus, Sparkles, Trash2 } from "lucide-react";
 import type { PurchaseOrder, PurchaseOrderTemplate } from "@/lib/types";
-import { cancelPurchaseOrder, deletePurchaseOrderTemplate, markPurchaseOrderSent, savePurchaseOrderTemplate, suggestPurchaseOrders, templateFromPurchaseOrder, type PoSuggestion } from "@/lib/purchaseOrders";
+import { cancelPurchaseOrder, deletePurchaseOrderTemplate, markPurchaseOrderSent, mergePurchaseOrders, poTotal, savePurchaseOrderTemplate, templateFromPurchaseOrder } from "@/lib/purchaseOrders";
+import { replenishmentSummary } from "@/lib/replenishment";
 import { formatDate, formatMoney, pluralize } from "@/lib/format";
-import { useCollection, useItems, useItemsById, useSettings, useStore } from "@/lib/store/provider";
+import { useCollection, useItemsById, useSettings, useStore } from "@/lib/store/provider";
 import { canWrite, useCurrentUser } from "@/lib/auth";
 import { useAgent } from "@/components/agent/AgentProvider";
-import { Button, ConfirmDialog, EmptyState, Menu, Modal, Page, QueryParamEffect, TextField, useToast } from "@/components/ui";
+import { Button, ConfirmDialog, EmptyState, Menu, Modal, Page, QueryParamEffect, Select, TextField, useToast } from "@/components/ui";
 import { NewPurchaseOrderModal, PurchaseOrderDetailModal, PurchaseOrderStats, PurchaseOrdersTable, ReceivePurchaseOrderModal, UploadPoTemplateModal } from "@/components/purchasing";
+import { useReplenishmentPlan } from "@/components/replenishment/useReplenishmentPlan";
 import { useDocuments } from "@/lib/documents";
-import { FileText } from "lucide-react";
 
 export default function PurchaseOrdersPage() {
   const purchaseOrders = useCollection("purchaseOrders");
   const templates = useCollection("purchaseOrderTemplates");
   const docs = useDocuments();
   const documentTemplates = docs.templatesFor("purchase-orders");
-  const suppliers = useCollection("suppliers");
-  const items = useItems();
   const itemsById = useItemsById();
   const settings = useSettings();
   const store = useStore();
@@ -27,18 +26,21 @@ export default function PurchaseOrdersPage() {
   const toast = useToast();
   const writable = canWrite(user);
   const { open: openAgent, setPageContext } = useAgent();
+  const plan = useReplenishmentPlan();
+  const toOrder = useMemo(() => replenishmentSummary(plan).toOrder, [plan]);
 
   const [creating, setCreating] = useState(false);
   const [templateId, setTemplateId] = useState<string | null>(null);
-  const [suggestion, setSuggestion] = useState<PoSuggestion | null>(null);
   const [editing, setEditing] = useState<PurchaseOrder | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [manageTemplates, setManageTemplates] = useState(false);
   const [deletingTemplate, setDeletingTemplate] = useState<PurchaseOrderTemplate | null>(null);
-  const [suggestOpen, setSuggestOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [receiveTarget, setReceiveTarget] = useState<PurchaseOrder | null>(null);
+  const [receiveTargets, setReceiveTargets] = useState<PurchaseOrder[] | null>(null);
   const [cancelTarget, setCancelTarget] = useState<PurchaseOrder | null>(null);
+  const [mergeTargets, setMergeTargets] = useState<PurchaseOrder[] | null>(null);
+  const [mergeInto, setMergeInto] = useState("");
+  const [merging, setMerging] = useState(false);
   const [templateFrom, setTemplateFrom] = useState<PurchaseOrder | null>(null);
   const [templateName, setTemplateName] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -46,8 +48,12 @@ export default function PurchaseOrdersPage() {
   const sortedTemplates = useMemo(() => [...templates].sort((a, b) => a.name.localeCompare(b.name)), [templates]);
   const template = useMemo(() => (templateId ? (templates.find((t) => t.id === templateId) ?? null) : null), [templates, templateId]);
   const selected = useMemo(() => (selectedId ? (purchaseOrders.find((p) => p.id === selectedId) ?? null) : null), [purchaseOrders, selectedId]);
-  const suggestions = useMemo(() => suggestPurchaseOrders(items, suppliers, settings.stockAlerts), [items, suppliers, settings.stockAlerts]);
   const selectedSkus = useMemo(() => selected?.lines.map((l) => itemsById.get(l.itemId)?.sku).filter((s): s is string => !!s), [selected, itemsById]);
+  const mergePreview = useMemo(() => {
+    if (!mergeTargets) return null;
+    const items = new Set(mergeTargets.flatMap((p) => p.lines.map((l) => l.itemId)));
+    return { lines: items.size, total: mergeTargets.reduce((t, p) => t + poTotal(p), 0), sent: mergeTargets.filter((p) => p.status !== "draft") };
+  }, [mergeTargets]);
 
   useEffect(() => {
     setPageContext({ page: "Purchase orders", selectedSkus });
@@ -55,30 +61,25 @@ export default function PurchaseOrdersPage() {
 
   const startFromTemplate = (id: string) => {
     setManageTemplates(false);
-    setSuggestion(null);
     setEditing(null);
     setTemplateId(id);
     setCreating(true);
   };
-  const startFromSuggestion = (s: PoSuggestion) => {
-    setSuggestOpen(false);
-    setTemplateId(null);
-    setEditing(null);
-    setSuggestion(s);
-    setCreating(true);
-  };
   const startNew = () => {
     setTemplateId(null);
-    setSuggestion(null);
     setEditing(null);
     setCreating(true);
   };
   const edit = (po: PurchaseOrder) => {
     setSelectedId(null);
     setTemplateId(null);
-    setSuggestion(null);
     setEditing(po);
     setCreating(true);
+  };
+  const startMerge = (pos: PurchaseOrder[]) => {
+    const sorted = [...pos].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    setMergeTargets(sorted);
+    setMergeInto(sorted[0]?.id ?? "");
   };
 
   const send = useCallback(
@@ -110,6 +111,26 @@ export default function PurchaseOrdersPage() {
       toast(e instanceof Error ? e.message : String(e), "critical");
     } finally {
       setBusyId(null);
+    }
+  };
+
+  const confirmMerge = async () => {
+    if (!mergeTargets || !mergeInto) return;
+    setMerging(true);
+    try {
+      const merged = await mergePurchaseOrders(
+        store,
+        user,
+        mergeTargets.map((p) => p.id),
+        { into: mergeInto },
+      );
+      toast(`Merged ${pluralize(mergeTargets.length, "order")} into ${merged.number}`, "success");
+      setMergeTargets(null);
+      setSelectedId(merged.id);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), "critical");
+    } finally {
+      setMerging(false);
     }
   };
 
@@ -188,12 +209,10 @@ export default function PurchaseOrdersPage() {
               ]}
             />
           )}
-          {writable && (
-            <Button icon={<Lightbulb />} onClick={() => setSuggestOpen(true)}>
-              Suggest{suggestions.length ? ` (${suggestions.length})` : ""}
-            </Button>
-          )}
-          <Button icon={<Sparkles />} onClick={() => openAgent("Draft purchase orders for everything below its minimum, one per supplier, and show me the totals before creating them.")}>
+          <Button icon={<Lightbulb />} href="/orders/replenishment">
+            Replenishment{toOrder ? ` (${toOrder})` : ""}
+          </Button>
+          <Button icon={<Sparkles />} onClick={() => openAgent("Check the replenishment plan and draft purchase orders for everything the forecast says to order, one per supplier, merging into any open drafts. Show me the totals before creating them.")}>
             Ask Strato
           </Button>
         </>
@@ -205,18 +224,16 @@ export default function PurchaseOrdersPage() {
       </Suspense>
       <div className="flex flex-col gap-4">
         <PurchaseOrderStats purchaseOrders={purchaseOrders} />
-        <PurchaseOrdersTable purchaseOrders={purchaseOrders} canWrite={writable} busyId={busyId} onSelect={(p) => setSelectedId(p.id)} onSend={send} onReceive={setReceiveTarget} onCancel={setCancelTarget} onNew={writable ? startNew : undefined} />
+        <PurchaseOrdersTable purchaseOrders={purchaseOrders} canWrite={writable} busyId={busyId} onSelect={(p) => setSelectedId(p.id)} onSend={send} onReceive={setReceiveTargets} onCancel={setCancelTarget} onMerge={startMerge} onNew={writable ? startNew : undefined} />
       </div>
 
       <NewPurchaseOrderModal
         open={creating}
         template={template}
-        suggestion={suggestion}
         editing={editing}
         onClose={() => {
           setCreating(false);
           setTemplateId(null);
-          setSuggestion(null);
           setEditing(null);
         }}
         onCreated={(po) => setSelectedId(po.id)}
@@ -234,7 +251,7 @@ export default function PurchaseOrdersPage() {
         canWrite={writable}
         busy={!!selected && busyId === selected.id}
         onSend={send}
-        onReceive={(po) => setReceiveTarget(po)}
+        onReceive={(po) => setReceiveTargets([po])}
         onEdit={edit}
         onCancel={setCancelTarget}
         onSaveTemplate={(po) => {
@@ -242,29 +259,46 @@ export default function PurchaseOrdersPage() {
           setTemplateName(`${po.supplier} reorder`);
         }}
       />
-      <ReceivePurchaseOrderModal po={receiveTarget} onClose={() => setReceiveTarget(null)} onReceived={(po) => setSelectedId(po.id)} />
+      <ReceivePurchaseOrderModal pos={receiveTargets} onClose={() => setReceiveTargets(null)} onReceived={(pos) => setSelectedId(pos[0]?.id ?? null)} />
 
-      <Modal open={suggestOpen} onClose={() => setSuggestOpen(false)} size="md" title="Suggested purchase orders" subtitle="Items below their low-stock line, grouped by primary supplier, at reorder quantity and the supplier's last cost." footer={<Button onClick={() => setSuggestOpen(false)}>Close</Button>}>
-        {suggestions.length === 0 ? (
-          <EmptyState icon={<Lightbulb />} title="Nothing to reorder" description="No active item is below its low-stock line right now." />
-        ) : (
-          <ul className="divide-y divide-border">
-            {suggestions.map((s) => (
-              <li key={s.supplierId ?? "none"} className="flex items-center gap-3 py-2.5">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13px] font-medium text-text">{s.supplier}</div>
-                  <div className="truncate text-[12px] text-text-secondary">
-                    {pluralize(s.lines.length, "item")} · {formatMoney(s.total, settings.currency)}
-                    {s.leadTimeDays ? ` · ${s.leadTimeDays} day lead time` : ""} · {s.lines.slice(0, 4).map((l) => `${l.item.sku} × ${l.qty}`).join(", ")}
-                    {s.lines.length > 4 ? "…" : ""}
-                  </div>
-                </div>
-                <Button size="sm" variant="primary" onClick={() => startFromSuggestion(s)}>
-                  Draft PO
-                </Button>
-              </li>
-            ))}
-          </ul>
+      <Modal
+        open={!!mergeTargets}
+        onClose={() => setMergeTargets(null)}
+        size="md"
+        title="Merge into one order"
+        subtitle={mergeTargets ? `${mergeTargets.map((p) => p.number).join(", ")} to ${mergeTargets[0]?.supplier}. Lines move onto the order you keep; the others close as merged.` : undefined}
+        footer={
+          <>
+            <Button onClick={() => setMergeTargets(null)}>Cancel</Button>
+            <Button variant="primary" icon={<Merge />} onClick={() => void confirmMerge()} loading={merging} disabled={!mergeInto}>
+              Merge orders
+            </Button>
+          </>
+        }
+      >
+        {mergeTargets && mergePreview && (
+          <div className="flex flex-col gap-4">
+            <Select label="Keep" value={mergeInto} onChange={(e) => setMergeInto(e.target.value)} options={mergeTargets.map((p) => ({ value: p.id, label: `${p.number} · ${p.status} · created ${formatDate(p.createdAt)}` }))} help="This order keeps its number, terms and expected date, and takes the others' lines." />
+            <ul className="divide-y divide-border rounded-[var(--radius)] border border-border text-[13px]">
+              {mergeTargets.map((p) => (
+                <li key={p.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                  <span>
+                    <span className="font-mono font-medium text-text">{p.number}</span>
+                    <span className="text-text-secondary">
+                      {" "}
+                      · {pluralize(p.lines.length, "line")} · {p.status}
+                      {p.expectedAt ? ` · expected ${formatDate(p.expectedAt)}` : ""}
+                    </span>
+                  </span>
+                  <span className="tabular text-text-secondary">{formatMoney(poTotal(p), settings.currency)}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-[12.5px] text-text-secondary">
+              Result: <span className="font-medium text-text">{pluralize(mergePreview.lines, "line")}</span> · <span className="font-medium text-text tabular">{formatMoney(mergePreview.total, settings.currency)}</span>. An item on more than one order gets its quantities added at the quantity-weighted cost.
+              {mergePreview.sent.length > 0 && <span className="text-warning"> {mergePreview.sent.map((p) => p.number).join(", ")} already went to the supplier; let them know which order to fill.</span>}
+            </p>
+          </div>
         )}
       </Modal>
 

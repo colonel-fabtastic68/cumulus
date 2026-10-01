@@ -10,7 +10,7 @@ export interface SettingsSectionDef {
 /** The sections of the Settings page, in page order. Search links to them by id. */
 export const SETTINGS_SECTIONS: SettingsSectionDef[] = [
   { id: "company", title: "Company", description: "Name, currency and timezone used across the workspace.", keywords: "name currency timezone" },
-  { id: "inventory-policy", title: "Inventory policy", description: "How stock buckets and builds behave. Changes apply to future movements only.", keywords: "in use bucket relieve build fulfill inactivity dead stock" },
+  { id: "inventory-policy", title: "Inventory policy", description: "How stock buckets, builds and costing behave. Changes apply to future movements only.", keywords: "in use bucket relieve build fulfill inactivity dead stock costing method fifo average standard cost valuation" },
   { id: "catalog", title: "Catalog", description: "Your own item types, customer price groups, and custom fields for items, customers and suppliers.", keywords: "item types price groups dealer distributor custom fields attributes" },
   { id: "locations", title: "Locations", description: "Warehouses, stores, trucks and trailers that hold stock. Transfers move stock between them.", keywords: "warehouse store truck trailer bins" },
   { id: "shipping", title: "Shipping and scanning", description: "Ship-from address and default parcel for carrier rates, and keyboard scanner behavior.", keywords: "parcel address carrier barcode scanner wedge" },

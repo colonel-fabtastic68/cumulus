@@ -112,7 +112,8 @@ export function AgentChat({ onClose, pending, consumePending, pendingSession, co
   // Latest context for the request body.
   const purchaseOrders = useCollection("purchaseOrders");
   const purchaseOrderTemplates = useCollection("purchaseOrderTemplates");
-  const context = useMemo(() => buildAgentContext({ items, suppliers, orders, rmas, settings: [settings], members, integrations, purchaseOrders, purchaseOrderTemplates }, pageContext), [items, suppliers, orders, rmas, settings, members, integrations, purchaseOrders, purchaseOrderTemplates, pageContext]);
+  const movements = useCollection("movements");
+  const context = useMemo(() => buildAgentContext({ items, suppliers, orders, rmas, settings: [settings], members, integrations, purchaseOrders, purchaseOrderTemplates, movements }, pageContext), [items, suppliers, orders, rmas, settings, members, integrations, purchaseOrders, purchaseOrderTemplates, movements, pageContext]);
   useEffect(() => {
     latestBody.context = context;
     latestBody.userName = user.name;

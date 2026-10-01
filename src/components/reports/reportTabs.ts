@@ -1,5 +1,5 @@
 /** Tab keys for /reports. The key doubles as the `?tab=` query value. */
-export type ReportTab = "kpis" | "margins" | "lowStock" | "backorders" | "purchaseOrders" | "valuation" | "shelfLife" | "deadStock" | "consumption" | "seasonality" | "writeOffs";
+export type ReportTab = "kpis" | "margins" | "lowStock" | "backorders" | "purchaseOrders" | "valuation" | "traceability" | "shelfLife" | "deadStock" | "consumption" | "seasonality" | "writeOffs";
 
 export const REPORT_TABS: Array<{ value: ReportTab; label: string }> = [
   { value: "kpis", label: "KPIs" },
@@ -8,6 +8,7 @@ export const REPORT_TABS: Array<{ value: ReportTab; label: string }> = [
   { value: "backorders", label: "Backorders" },
   { value: "purchaseOrders", label: "Open purchase orders" },
   { value: "valuation", label: "Valuation" },
+  { value: "traceability", label: "Traceability" },
   { value: "shelfLife", label: "Shelf life" },
   { value: "deadStock", label: "Dead stock" },
   { value: "consumption", label: "Consumption" },

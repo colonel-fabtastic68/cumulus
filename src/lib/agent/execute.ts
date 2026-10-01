@@ -41,9 +41,45 @@ import { storeProductLabel, suggestSkus } from "@/lib/skus";
 import { itemSupplierLinks, supplierItems } from "@/lib/suppliers";
 import { kpiReport } from "@/lib/kpis";
 import { completeCycleCount, describeScope, lineVariance, recordCounts, startCycleCount, suggestCountItems } from "@/lib/cycleCounts";
-import { defaultLocation } from "@/lib/inventory";
-import { createPurchaseOrder, findTemplate, poIsOpen, poLineOpenQty, poTotal, receivePurchaseOrder, savePurchaseOrderTemplate, suggestPurchaseOrders } from "@/lib/purchaseOrders";
+import { costingMethod, defaultLocation } from "@/lib/inventory";
+import { createPurchaseOrder, findTemplate, mergePurchaseOrders, poIsOpen, poLineOpenQty, poTotal, receivePurchaseOrders, savePurchaseOrderTemplate } from "@/lib/purchaseOrders";
+import { loadReplenishmentPlan, replenish, snoozeReplenishment, type ReplenishmentRow } from "@/lib/replenishment";
+import { customersFor, findLots, lotLabel, lotSourceLabel, traceLot, upstreamLots, type TraceSource } from "@/lib/traceability";
+import { cogsBetween, COSTING_LABELS, inventoryValueAt, receiptsBetween, totalValue, valueItems } from "@/lib/valuation";
 import type { AgentToolName } from "./tools";
+
+function planRow(r: ReplenishmentRow) {
+  return {
+    sku: r.item.sku,
+    name: r.item.name,
+    status: r.status,
+    route: r.route,
+    supplier: r.supplier?.name,
+    leadTimeDays: r.leadTimeDays,
+    onHand: r.onHand,
+    incoming: r.incoming,
+    outgoing: r.outgoing,
+    forecast: r.forecast,
+    min: r.min,
+    max: r.max,
+    usagePerDay: r.dailyUsage,
+    daysOfCover: r.daysOfCover,
+    orderBy: r.orderBy,
+    late: r.late || undefined,
+    toOrder: r.toOrder,
+    unitCost: r.unitCost,
+    estCost: r.estCost,
+    multiple: r.multiple,
+    auto: r.auto || undefined,
+    snoozedUntil: r.snoozedUntil,
+    openPurchaseOrders: r.openPos.length ? r.openPos.map((p) => p.number) : undefined,
+  };
+}
+
+async function traceSource(store: Store): Promise<TraceSource> {
+  const [items, lots, movements, receipts, purchaseOrders, suppliers, builds, orders, shipments, customers] = await Promise.all([store.list("items"), store.list("lots"), store.list("movements"), store.list("receipts"), store.list("purchaseOrders"), store.list("suppliers"), store.list("builds"), store.list("orders"), store.list("shipments"), store.list("customers")]);
+  return { items, lots, movements, receipts, purchaseOrders, suppliers, builds, orders, shipments, customers };
+}
 
 export interface ExecContext {
   store: Store;
@@ -347,7 +383,8 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
         bom: item.bom.map((l) => ({ sku: byId.get(l.itemId)?.sku, name: byId.get(l.itemId)?.name, qty: l.qty, wastePct: l.wastePct, onHand: byId.get(l.itemId)?.onHand })),
         buildable: item.type === "assembly" ? buildableQty(items, item) : undefined,
         whereUsed: whereUsed(items, item.id).map((w) => ({ sku: w.assembly.sku, name: w.assembly.name, qtyPer: w.qtyPer })),
-        lotsOnShelf: lots.filter((l) => l.itemId === item.id && l.qtyRemaining > 0).map((l) => ({ receivedAt: l.receivedAt.slice(0, 10), qtyRemaining: l.qtyRemaining, unitCost: l.unitCost })),
+        replenishment: item.replenishment,
+        lotsOnShelf: lots.filter((l) => l.itemId === item.id && l.qtyRemaining > 0).map((l) => ({ lot: lotLabel(l), supplierLot: l.supplierLot, source: lotSourceLabel(l), receivedAt: l.receivedAt.slice(0, 10), expiresAt: l.expiresAt?.slice(0, 10), qtyRemaining: l.qtyRemaining, unitCost: l.unitCost })),
         recentMovements: movements
           .filter((m) => m.itemId === item.id)
           .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
@@ -394,15 +431,29 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
         case "lowStock":
           return lowStockReport(items, suppliers, movements).slice(0, limit).map((r) => ({ sku: r.item.sku, name: r.item.name, onHand: r.item.onHand, min: r.item.minQty, max: r.item.maxQty, reorder: r.reorder, daysOfCover: r.daysOfCover, supplier: r.supplier?.name, leadTimeDays: r.item.leadTimeDays ?? r.supplier?.leadTimeDays, unitCost: r.item.unitCost }));
         case "valuation": {
+          const method = costingMethod((await store.list("settings"))[0]);
+          const valued = valueItems(items, lots, method);
           const cats: Record<string, { items: number; units: number; value: number }> = {};
-          for (const i of items) {
-            const c = i.category ?? "Uncategorized";
+          for (const v of valued) {
+            const c = v.item.category ?? "Uncategorized";
             cats[c] ??= { items: 0, units: 0, value: 0 };
             cats[c].items++;
-            cats[c].units = round(cats[c].units + i.onHand);
-            cats[c].value = round(cats[c].value + i.onHand * i.unitCost);
+            cats[c].units = round(cats[c].units + v.onHand);
+            cats[c].value = round(cats[c].value + v.value);
           }
-          return { total: inventoryValue(items), byCategory: cats, topItems: [...items].sort((a, b) => b.onHand * b.unitCost - a.onHand * a.unitCost).slice(0, 15).map((i) => ({ sku: i.sku, onHand: i.onHand, unitCost: i.unitCost, value: round(i.onHand * i.unitCost) })) };
+          const days = Number(input.days) || 30;
+          const from = new Date(Date.now() - days * 86_400_000).toISOString();
+          const to = new Date().toISOString();
+          const asOf = typeof input.asOf === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input.asOf) ? input.asOf : undefined;
+          const at = asOf ? inventoryValueAt(items, movements, `${asOf}T23:59:59.999Z`) : undefined;
+          return {
+            method: COSTING_LABELS[method],
+            total: totalValue(valued),
+            byCategory: cats,
+            topItems: valued.slice(0, 15).map((v) => ({ sku: v.item.sku, onHand: v.onHand, unitValue: v.unitValue, value: v.value, layers: method === "fifo" ? v.layers.length : undefined })),
+            [`last${days}Days`]: { cogs: cogsBetween(movements, from, to).cogs, received: receiptsBetween(movements, from, to).value },
+            ...(at ? { asOf, valueAsOf: round(at.reduce((t, r) => t + r.value, 0)) } : {}),
+          };
         }
         case "shelfLife":
           return shelfLifeReport(items, lots).slice(0, limit).map((r) => ({ sku: r.item.sku, name: r.item.name, onHand: r.item.onHand, oldestDays: r.oldestDays, avgAgeDays: r.avgAgeDays, lots: r.lots.map((l) => ({ receivedAt: l.receivedAt.slice(0, 10), remaining: l.qtyRemaining })) }));
@@ -610,10 +661,69 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
     }
 
     case "suggestPurchaseOrders": {
-      const [items, suppliers, settingsRows] = await Promise.all([store.list("items"), store.list("suppliers"), store.list("settings")]);
+      const plan = (await loadReplenishmentPlan(store)).filter((r) => r.status === "order" && r.route === "buy");
       const sup = input.supplierName ? String(input.supplierName) : "";
-      const suggestions = suggestPurchaseOrders(items, suppliers, settingsRows[0]?.stockAlerts).filter((s) => (sup ? matches(sup, s.supplier) : true));
-      return { count: suggestions.length, suggestions: suggestions.map((s) => ({ supplier: s.supplier, leadTimeDays: s.leadTimeDays, total: s.total, lines: s.lines.map((l) => ({ sku: l.item.sku, name: l.item.name, onHand: l.item.onHand, minQty: l.item.minQty, qty: l.qty, unitCost: l.unitCost })) })) };
+      const groups = new Map<string, { supplier: string; leadTimeDays?: number; total: number; lines: Array<Record<string, unknown>> }>();
+      for (const r of plan) {
+        const name = r.supplier?.name ?? "No supplier set";
+        if (sup && !matches(sup, name)) continue;
+        const g = groups.get(name) ?? { supplier: name, leadTimeDays: r.leadTimeDays, total: 0, lines: [] };
+        g.lines.push({ sku: r.item.sku, name: r.item.name, onHand: r.onHand, forecast: r.forecast, minQty: r.min, qty: r.toOrder, unitCost: r.unitCost });
+        g.total = round(g.total + r.estCost);
+        groups.set(name, g);
+      }
+      return { count: groups.size, suggestions: Array.from(groups.values()), note: "Based on the forecast (getReplenishment). Place them with replenish, which merges into each supplier's open draft." };
+    }
+
+    case "getReplenishment": {
+      const plan = await loadReplenishmentPlan(store);
+      const status = String(input.status ?? "order");
+      const sup = input.supplierName ? String(input.supplierName) : "";
+      const route = input.route ? String(input.route) : "";
+      const rows = plan.filter((r) => (status === "all" ? true : r.status === status)).filter((r) => (sup ? matches(sup, r.supplier?.name) : true)).filter((r) => (route ? r.route === route : true));
+      const limit = Math.min(200, Number(input.limit) || 100);
+      const order = plan.filter((r) => r.status === "order");
+      return {
+        summary: { toOrder: order.length, late: order.filter((r) => r.late).length, estCost: round(order.filter((r) => r.route === "buy").reduce((t, r) => t + r.estCost, 0)), covered: plan.filter((r) => r.status === "covered").length, snoozed: plan.filter((r) => r.status === "snoozed").length, automatic: plan.filter((r) => r.auto).length },
+        count: rows.length,
+        rows: rows.slice(0, limit).map(planRow),
+        note: "forecast = onHand + incoming − outgoing. toOrder brings the forecast to max (or 2×min), rounded to the item's multiple. orderBy = when to order so the goods land before the forecast reaches min at the recent usage rate; late means that date has passed.",
+      };
+    }
+
+    case "traceLot": {
+      const src = await traceSource(store);
+      const query = String(input.query ?? "");
+      const found = findLots(src, query);
+      if (found.length === 0) return { matches: 0, note: `No batch matches “${query}”. Batches are numbered LOT-xxxx; the supplier's code, a SKU or a receipt / PO / build number also work.` };
+      const exact = found.length === 1 || found.some((l) => l.number?.toLowerCase() === query.trim().toLowerCase());
+      if (!exact) {
+        const limit = Math.min(50, Number(input.limit) || 10);
+        return { matches: found.length, batches: found.sort((a, b) => b.receivedAt.localeCompare(a.receivedAt)).slice(0, limit).map((l) => ({ lot: lotLabel(l), sku: src.items.find((i) => i.id === l.itemId)?.sku, supplierLot: l.supplierLot, source: lotSourceLabel(l), receivedAt: l.receivedAt.slice(0, 10), qtyRemaining: l.qtyRemaining, qtyReceived: l.qtyReceived, expiresAt: l.expiresAt?.slice(0, 10) })), note: "Call traceLot again with one lot number for the full trace." };
+      }
+      const lot = found.find((l) => l.number?.toLowerCase() === query.trim().toLowerCase()) ?? found[0]!;
+      const t = traceLot(src, lot);
+      const origin = t.origin.kind === "receipt"
+        ? { kind: "receipt", receipt: t.origin.receipt?.number, reference: t.origin.receipt?.reference, purchaseOrder: t.origin.purchaseOrder?.number, supplier: t.origin.supplier?.name }
+        : t.origin.kind === "build"
+          ? { kind: "build", build: t.origin.build?.number, components: upstreamLots(src, lot).map((u) => ({ depth: u.depth, lot: lotLabel(u.lot), sku: u.item?.sku, qty: u.qty, from: lotSourceLabel(u.lot), receipt: u.trace.origin.kind === "receipt" ? u.trace.origin.receipt?.number : undefined, supplier: u.trace.origin.kind === "receipt" ? u.trace.origin.supplier?.name : undefined })) }
+          : { kind: t.origin.label };
+      return {
+        lot: lotLabel(lot),
+        sku: t.item?.sku,
+        name: t.item?.name,
+        supplierLot: lot.supplierLot,
+        source: lotSourceLabel(lot),
+        receivedAt: lot.receivedAt.slice(0, 10),
+        expiresAt: lot.expiresAt?.slice(0, 10),
+        qtyReceived: lot.qtyReceived,
+        qtyUsed: t.used,
+        qtyRemaining: lot.qtyRemaining,
+        unitCost: lot.unitCost,
+        origin,
+        uses: t.uses.map((u) => ({ date: u.movement.occurredAt.slice(0, 10), type: u.movement.type, qty: u.qty, order: u.order?.number, customer: u.order?.customer, tracking: u.shipments.find((s) => s.trackingNumber)?.trackingNumber, build: u.build?.number, produced: u.producedLot ? `${lotLabel(u.producedLot)} (${u.producedItem?.sku ?? "?"})` : undefined, reason: u.movement.reason })),
+        customers: customersFor(src, lot).map((c) => ({ order: c.order.number, customer: c.order.customer, qty: c.qty, viaBatch: c.via ? lotLabel(c.via) : undefined })),
+      };
     }
 
     case "createPurchaseOrder": {
@@ -635,18 +745,85 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
 
     case "receivePurchaseOrder": {
       const [pos, items] = await Promise.all([store.list("purchaseOrders"), store.list("items")]);
-      const po = pos.find((p) => p.number.toUpperCase() === String(input.poNumber ?? "").trim().toUpperCase());
-      if (!po) throw new InventoryError(`No purchase order ${input.poNumber}`);
+      const findPo = (n: unknown) => {
+        const po = pos.find((p) => p.number.toUpperCase() === String(n ?? "").trim().toUpperCase());
+        if (!po) throw new InventoryError(`No purchase order ${n}`);
+        return po;
+      };
+      const numbers = [...(input.poNumber ? [String(input.poNumber)] : []), ...((input.poNumbers as string[] | undefined) ?? [])];
+      if (numbers.length === 0) throw new InventoryError("Name the purchase order(s) to receive against");
+      const targets = numbers.map(findPo);
       const given = input.lines as Array<Record<string, unknown>> | undefined;
       const lines = given?.length
         ? given.map((l) => {
             const item = findItem(items, String(l.sku));
             if (!item) throw new InventoryError(`Unknown SKU ${l.sku}`);
-            return { itemId: item.id, qty: Number(l.qty), unitCost: l.unitCost as number | undefined };
+            return { itemId: item.id, qty: Number(l.qty), unitCost: l.unitCost as number | undefined, purchaseOrderId: l.poNumber ? findPo(l.poNumber).id : undefined, supplierLot: l.supplierLot as string | undefined, expiresAt: l.expiresAt as string | undefined };
           })
         : undefined;
-      const { po: next, receipt } = await receivePurchaseOrder(store, actor, po.id, { lines, receivedAt: input.receivedAt as string | undefined, note: input.note as string | undefined });
-      return { ok: true, receipt: receipt.number, purchaseOrder: next.number, status: next.status, summary: `Received ${receipt.number} against ${next.number} · now ${next.status}` };
+      const { purchaseOrders: next, receipt } = await receivePurchaseOrders(
+        store,
+        actor,
+        targets.map((p) => p.id),
+        { lines, receivedAt: input.receivedAt as string | undefined, note: input.note as string | undefined },
+      );
+      return { ok: true, receipt: receipt.number, purchaseOrders: next.map((p) => ({ number: p.number, status: p.status })), summary: `Received ${receipt.number} against ${next.map((p) => `${p.number} (now ${p.status})`).join(", ")}` };
+    }
+
+    case "replenish": {
+      const items = await store.list("items");
+      let selections: Array<{ itemId: string; qty?: number; supplierId?: string }>;
+      if (input.all) {
+        selections = (await loadReplenishmentPlan(store)).filter((r) => r.status === "order").map((r) => ({ itemId: r.item.id }));
+        if (selections.length === 0) return { ok: true, created: [], updated: [], builds: [], summary: "Nothing to order: every forecast is above its minimum or already covered." };
+      } else {
+        const suppliers = await store.list("suppliers");
+        selections = ((input.lines as Array<Record<string, unknown>> | undefined) ?? []).map((l) => {
+          const item = findItem(items, String(l.sku));
+          if (!item) throw new InventoryError(`Unknown SKU ${l.sku}`);
+          const supplier = l.supplierName ? suppliers.find((s) => matches(String(l.supplierName), s.name)) : undefined;
+          if (l.supplierName && !supplier) throw new InventoryError(`Unknown supplier ${l.supplierName}`);
+          return { itemId: item.id, qty: l.qty !== undefined ? Number(l.qty) : undefined, supplierId: supplier?.id };
+        });
+        if (selections.length === 0) throw new InventoryError("Pass lines or all: true");
+      }
+      const res = await replenish(store, actor, selections, { source: "strato", send: Boolean(input.send), mergeIntoDrafts: input.mergeIntoDrafts !== false });
+      const brief = (p: (typeof res.created)[number]) => ({ number: p.number, supplier: p.supplier, status: p.status, lines: p.lines.length, total: poTotal(p) });
+      const n = res.created.length + res.updated.length;
+      return {
+        ok: true,
+        created: res.created.map(brief),
+        updated: res.updated.map(brief),
+        builds: res.builds.map((b) => ({ sku: b.item.sku, qty: b.qty })),
+        skipped: res.skipped.map((s) => ({ sku: s.item.sku, reason: s.reason })),
+        summary: `${res.created.length} order${res.created.length === 1 ? "" : "s"} drafted${res.updated.length ? `, ${res.updated.length} open draft${res.updated.length === 1 ? "" : "s"} extended` : ""}${res.builds.length ? `, ${res.builds.length} to build` : ""}${res.skipped.length ? `, ${res.skipped.length} skipped` : ""}${n === 0 ? " (nothing ordered)" : ""}`,
+      };
+    }
+
+    case "snoozeReplenishment": {
+      const items = await store.list("items");
+      const ids = ((input.skus as string[]) ?? []).map((s) => {
+        const it = findItem(items, s);
+        if (!it) throw new InventoryError(`Unknown SKU ${s}`);
+        return it.id;
+      });
+      const until = input.until === null || input.until === undefined ? null : String(input.until);
+      if (until && !/^\d{4}-\d{2}-\d{2}$/.test(until)) throw new InventoryError("until must be YYYY-MM-DD or null");
+      const n = await snoozeReplenishment(store, actor, ids, until);
+      return { ok: true, updated: n, summary: until ? `Snoozed ${n} item${n === 1 ? "" : "s"} until ${until}` : `Cleared the snooze on ${n} item${n === 1 ? "" : "s"}` };
+    }
+
+    case "mergePurchaseOrders": {
+      const pos = await store.list("purchaseOrders");
+      const byNumber = (n: unknown) => {
+        const po = pos.find((p) => p.number.toUpperCase() === String(n ?? "").trim().toUpperCase());
+        if (!po) throw new InventoryError(`No purchase order ${n}`);
+        return po;
+      };
+      const targets = ((input.poNumbers as string[]) ?? []).map(byNumber);
+      const keep = input.keepNumber ? byNumber(input.keepNumber) : undefined;
+      const merged = await mergePurchaseOrders(store, actor, targets.map((p) => p.id), { into: keep?.id });
+      return { ok: true, purchaseOrder: merged.number, supplier: merged.supplier, lines: merged.lines.length, total: poTotal(merged), mergedFrom: targets.filter((p) => p.id !== merged.id).map((p) => p.number), summary: `Merged ${targets.filter((p) => p.id !== merged.id).map((p) => p.number).join(", ")} into ${merged.number} · ${merged.lines.length} line${merged.lines.length === 1 ? "" : "s"} · ${poTotal(merged).toFixed(2)}` };
     }
 
     case "savePurchaseOrderTemplate": {
@@ -947,7 +1124,23 @@ export async function describeProposal(name: AgentToolName, rawInput: unknown, c
       }
       case "receivePurchaseOrder": {
         const lines = (input.lines as Array<Record<string, unknown>>) ?? [];
-        return { title: `Receive against ${input.poNumber}`, lines: lines.length ? lines.map((l) => `${skuOf(l.sku)} × ${l.qty}`) : ["Everything still open on the order"] };
+        const numbers = [...(input.poNumber ? [String(input.poNumber)] : []), ...((input.poNumbers as string[] | undefined) ?? [])];
+        return { title: `Receive against ${numbers.join(", ") || "a purchase order"}${numbers.length > 1 ? " on one receipt" : ""}`, lines: lines.length ? lines.map((l) => `${skuOf(l.sku)} × ${l.qty}${l.poNumber ? ` (${l.poNumber})` : ""}${l.supplierLot ? ` · lot ${l.supplierLot}` : ""}`) : [`Everything still open on the order${numbers.length > 1 ? "s" : ""}`] };
+      }
+      case "replenish": {
+        const lines = (input.lines as Array<Record<string, unknown>>) ?? [];
+        return {
+          title: input.all ? "Draft purchase orders for everything the forecast says to order" : `Draft purchase orders for ${lines.length} item${lines.length === 1 ? "" : "s"}`,
+          lines: [input.mergeIntoDrafts === false ? "A new order per supplier" : "One draft per supplier; lines join a supplier's open draft when there is one", ...(input.send ? ["New orders are marked sent"] : []), ...lines.slice(0, 30).map((l) => `${skuOf(l.sku)}${l.qty !== undefined ? ` × ${l.qty}` : " (planned quantity)"}${l.supplierName ? ` from ${l.supplierName}` : ""}`)],
+        };
+      }
+      case "snoozeReplenishment": {
+        const skus = (input.skus as string[]) ?? [];
+        return { title: input.until ? `Snooze ${skus.length} item${skus.length === 1 ? "" : "s"} until ${input.until}` : `Clear the replenishment snooze on ${skus.length} item${skus.length === 1 ? "" : "s"}`, lines: skus.slice(0, 30).map((s) => skuOf(s)) };
+      }
+      case "mergePurchaseOrders": {
+        const numbers = (input.poNumbers as string[]) ?? [];
+        return { title: `Merge ${numbers.join(", ")} into one order${input.keepNumber ? ` (keep ${input.keepNumber})` : ""}`, lines: ["Lines move onto the surviving order; the others close as merged. Nothing moves in stock."] };
       }
       case "savePurchaseOrderTemplate": {
         const lines = (input.lines as Array<Record<string, unknown>>) ?? [];

@@ -15,9 +15,10 @@ export const PO_STATUS_LABEL: Record<PurchaseOrderStatus, string> = {
   partial: "Partly received",
   received: "Received",
   cancelled: "Cancelled",
+  merged: "Merged",
 };
 
-const TONE: Record<PurchaseOrderStatus, BadgeTone> = { draft: "default", sent: "info", partial: "attention", received: "success", cancelled: "default" };
+const TONE: Record<PurchaseOrderStatus, BadgeTone> = { draft: "default", sent: "info", partial: "attention", received: "success", cancelled: "default", merged: "default" };
 
 export function PoStatusBadge({ status }: { status: PurchaseOrderStatus }) {
   return <Badge tone={TONE[status]}>{PO_STATUS_LABEL[status]}</Badge>;

@@ -46,6 +46,15 @@ const itemFields = z
     supplierSku: z.string().optional(),
     expectedWastePct: z.number().nullable().optional(),
     barcode: z.string().optional(),
+    replenishment: z
+      .object({
+        route: z.enum(["buy", "build"]).optional().describe("buy = purchase order; build = from the BOM (assemblies)"),
+        auto: z.boolean().optional().describe("true = a draft purchase order is created daily without asking when the forecast dips below min"),
+        multiple: z.number().nullable().optional().describe("Order quantities round up to a multiple of this (case size)"),
+        snoozedUntil: z.string().nullable().optional().describe("YYYY-MM-DD; hidden from Replenishment until then"),
+      })
+      .optional()
+      .describe("Replenishment rule (replaces the whole rule)"),
   })
   .describe("Fields to set. Only include fields that should change.");
 
@@ -117,13 +126,22 @@ export const agentTools = {
     inputSchema: z.object({ sku: z.string() }),
   }),
   getReport: tool({
-    description: "Run a built-in report. lowStock: items below min with reorder qty and days of cover. valuation: inventory value by category. shelfLife: oldest batches on the shelf. deadStock: no consumption in N days. consumption: usage by layer (sold / consumed in builds / written off) over N days. seasonality: monthly sales & consumption. backorders: open order lines short on stock with when they could ship. kpis: turnover, days on hand, fill rate, stockouts over N days. transfers: stock moving between locations. openOrders, openRmas, recentActivity, suppliers.",
+    description: "Run a built-in report. lowStock: items below min with reorder qty and days of cover (shelf count only; getReplenishment uses the forecast). valuation: inventory value under the workspace's costing method (standard / average / FIFO), by category, with COGS and receipts over N days and the value on a past date (asOf). shelfLife: oldest batches on the shelf. deadStock: no consumption in N days. consumption: usage by layer (sold / consumed in builds / written off) over N days. seasonality: monthly sales & consumption. backorders: open order lines short on stock with when they could ship. kpis: turnover, days on hand, fill rate, stockouts over N days. transfers: stock moving between locations. openOrders, openRmas, recentActivity, suppliers, recentReceipts, recentBuilds.",
     inputSchema: z.object({
       report: z.enum(["lowStock", "valuation", "shelfLife", "deadStock", "consumption", "seasonality", "backorders", "kpis", "transfers", "openOrders", "openRmas", "recentActivity", "suppliers", "recentReceipts", "recentBuilds"]),
-      days: z.number().optional().describe("Window in days for consumption/deadStock (default 90 / 120)"),
+      days: z.number().optional().describe("Window in days for consumption/deadStock/valuation COGS (default 90 / 120 / 30)"),
       sku: z.string().optional().describe("Restrict seasonality/consumption to one item"),
+      asOf: z.string().optional().describe("valuation: YYYY-MM-DD to value the stock as it stood at the end of that day"),
       limit: z.number().optional(),
     }),
+  }),
+  getReplenishment: tool({
+    description: "The replenishment plan, forecast-based: for every item with a min/max or a replenishment rule, on hand, incoming (open purchase orders, transfers in transit), outgoing (open sales orders, components for suggested builds), forecast, min/max, usage per day, days of cover, the date to order by, the suggested quantity and route (buy from the supplier or build from the BOM). status 'order' = forecast below min; 'covered' = below min on the shelf but incoming covers it; 'snoozed'; 'ok'. Read-only; use replenish to act. Prefer this over suggestPurchaseOrders.",
+    inputSchema: z.object({ status: z.enum(["order", "covered", "snoozed", "ok", "all"]).optional().describe("Default: order"), supplierName: z.string().optional(), route: z.enum(["buy", "build"]).optional(), limit: z.number().optional() }),
+  }),
+  traceLot: tool({
+    description: "Trace a batch (lot): where it came from (the receipt, purchase order and supplier, or the build and the component batches that went into it) and where every unit went (sales with order and customer, builds with the batch they produced, write-offs). query is a lot number (LOT-1001), a supplier's batch code, a SKU, or a receipt / purchase order / build number; several matches come back as a list to choose from.",
+    inputSchema: z.object({ query: z.string(), limit: z.number().optional().describe("Max batches to return when several match (default 10)") }),
   }),
   previewBulkUpdate: tool({
     description: "Dry-run of bulkUpdateItems with the same arguments: which items match and what would change on each. Use it to confirm scope before a large change.",
@@ -229,8 +247,25 @@ export const agentTools = {
     inputSchema: z.object({ status: z.enum(["open", "draft", "sent", "partial", "received", "cancelled", "all"]).optional(), supplierName: z.string().optional(), limit: z.number().optional() }),
   }),
   suggestPurchaseOrders: tool({
-    description: "Draft purchase orders from items below their low-stock line, grouped by supplier, with reorder quantities and each supplier's last cost. Read-only: use createPurchaseOrder to place one.",
+    description: "Draft purchase orders from the replenishment plan (forecast below min), grouped by supplier, with quantities and each supplier's last cost. Read-only: use replenish (preferred, merges into open drafts) or createPurchaseOrder to place them.",
     inputSchema: z.object({ supplierName: z.string().optional() }),
+  }),
+  replenish: tool({
+    description: "Act on the replenishment plan: creates draft purchase orders, one per supplier, adding lines to a supplier's open draft instead of raising a second order. Pass lines (SKU, optional qty to override the plan, optional supplierName) or all: true for everything the plan says to order. Assemblies routed to build are reported back, not ordered. send=true marks new orders sent.",
+    inputSchema: z.object({
+      lines: z.array(z.object({ sku: z.string(), qty: z.number().optional(), supplierName: z.string().optional() })).optional(),
+      all: z.boolean().optional().describe("Every item whose status is 'order'"),
+      send: z.boolean().optional(),
+      mergeIntoDrafts: z.boolean().optional().describe("Default true. false always raises a new order."),
+    }),
+  }),
+  snoozeReplenishment: tool({
+    description: "Hide items from the replenishment plan until a date (YYYY-MM-DD), or clear the snooze with until = null.",
+    inputSchema: z.object({ skus: skuList, until: z.string().nullable() }),
+  }),
+  mergePurchaseOrders: tool({
+    description: "Fold several open purchase orders to the same supplier, with nothing received yet, into one. The oldest (or keepNumber) keeps its number, terms and expected date and takes the others' lines (same item: quantities added at the weighted cost); the rest close as merged. Nothing moves in stock.",
+    inputSchema: z.object({ poNumbers: z.array(z.string()).min(2), keepNumber: z.string().optional() }),
   }),
   createPurchaseOrder: tool({
     description: "Create a purchase order to a supplier. Lines take SKUs; unit cost defaults to the supplier's last cost for the item. It is a draft unless send=true. fromTemplate names a saved PO template; its lines are used when no lines are given.",
@@ -246,8 +281,14 @@ export const agentTools = {
     }),
   }),
   receivePurchaseOrder: tool({
-    description: "Receive goods against a purchase order by number (e.g. PO-1001). Omit lines to receive everything still open; give lines for a partial delivery. Books a receipt, so stock, lots and costs update.",
-    inputSchema: z.object({ poNumber: z.string(), lines: z.array(z.object({ sku: z.string(), qty: z.number(), unitCost: z.number().optional() })).optional(), receivedAt: z.string().optional(), note: z.string().optional() }),
+    description: "Receive goods against one purchase order (poNumber) or several from the same supplier that arrived together (poNumbers): ONE receipt closes lines on all of them. Omit lines to receive everything still open; give lines for a partial delivery (a line may name its poNumber; otherwise the oldest order with that item open is used). Optional supplierLot / expiresAt per line go on the batch for traceability. Books a receipt, so stock, batches and costs update.",
+    inputSchema: z.object({
+      poNumber: z.string().optional(),
+      poNumbers: z.array(z.string()).optional(),
+      lines: z.array(z.object({ sku: z.string(), qty: z.number(), unitCost: z.number().optional(), poNumber: z.string().optional(), supplierLot: z.string().optional(), expiresAt: z.string().optional() })).optional(),
+      receivedAt: z.string().optional(),
+      note: z.string().optional(),
+    }),
   }),
   savePurchaseOrderTemplate: tool({
     description: "Save a reusable purchase order template (supplier and lines) under a name so the same order can be placed again later.",
@@ -289,8 +330,11 @@ export const agentTools = {
 export type AgentTools = typeof agentTools;
 export type AgentToolName = keyof AgentTools;
 
-export const READ_TOOLS: AgentToolName[] = ["getWorkspaceSummary", "getConnections", "listStoreProductsWithoutSku", "searchItems", "getItem", "explodeBom", "whereUsed", "getReport", "previewBulkUpdate", "listPurchaseOrders", "suggestPurchaseOrders", "proposeCycleCount", "getCycleCount"];
+export const READ_TOOLS: AgentToolName[] = ["getWorkspaceSummary", "getConnections", "listStoreProductsWithoutSku", "searchItems", "getItem", "explodeBom", "whereUsed", "getReport", "getReplenishment", "traceLot", "previewBulkUpdate", "listPurchaseOrders", "suggestPurchaseOrders", "proposeCycleCount", "getCycleCount"];
 export const WRITE_TOOLS: AgentToolName[] = [
+  "replenish",
+  "snoozeReplenishment",
+  "mergePurchaseOrders",
   "bulkUpdateItems",
   "createItems",
   "adjustStock",
@@ -330,6 +374,11 @@ export const TOOL_LABELS: Record<AgentToolName, string> = {
   explodeBom: "Explode BOM",
   whereUsed: "Where used",
   getReport: "Report",
+  getReplenishment: "Replenishment plan",
+  traceLot: "Trace batch",
+  replenish: "Replenish",
+  snoozeReplenishment: "Snooze replenishment",
+  mergePurchaseOrders: "Merge purchase orders",
   previewBulkUpdate: "Preview bulk update",
   bulkUpdateItems: "Bulk update items",
   createItems: "Create items",

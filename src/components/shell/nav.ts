@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Boxes, CalendarDays, ClipboardList, ClipboardCheck, FolderOpen, ListChecks, Contact, Download, FileBarChart2, FileText, Hammer, Home, MessageSquare, PackageCheck, Plug, Receipt, RotateCcw, Settings, ShoppingCart, Sparkles, TrendingUp, Truck, Upload, UserRound, Users, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, Boxes, CalendarDays, ClipboardList, ClipboardCheck, FolderOpen, ListChecks, Contact, Download, FileBarChart2, FileText, Hammer, Home, MessageSquare, PackageCheck, Plug, Receipt, Repeat, RotateCcw, Settings, ShoppingCart, Sparkles, TrendingUp, Truck, Upload, UserRound, Users, type LucideIcon } from "lucide-react";
 
 export interface NavItem {
   href: string;
@@ -29,6 +29,7 @@ export const NAV: NavItem[] = [
     children: [
       { href: "/orders", label: "Sales orders", icon: Receipt },
       { href: "/orders/purchase", label: "Purchase orders", icon: ClipboardCheck },
+      { href: "/orders/replenishment", label: "Replenishment", icon: Repeat },
     ],
   },
   { href: "/rmas", label: "Returns", icon: RotateCcw },
