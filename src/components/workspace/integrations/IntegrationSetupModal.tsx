@@ -4,10 +4,10 @@ import { useState } from "react";
 import { isDemo } from "@/lib/firebase-config";
 import { ArrowRight, Download, ExternalLink, Plug, RefreshCw, Sparkles, Unplug } from "lucide-react";
 import type { Integration, IntegrationSettings } from "@/lib/types";
-import { Badge, Banner, Button, ConfirmDialog, DescriptionList, Modal, StatusBadge, TextField, Toggle, useToast } from "@/components/ui";
+import { Badge, Banner, Button, ConfirmDialog, DescriptionList, Modal, Select, StatusBadge, TextField, Toggle, useToast } from "@/components/ui";
 import { useLocations } from "@/lib/locations";
 import { useSession } from "@/lib/session";
-import { useApi } from "@/lib/api-client";
+import { ApiError, useApi } from "@/lib/api-client";
 import { useCollection, useStore } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
 import { useAgent } from "@/components/agent/AgentProvider";
@@ -123,11 +123,11 @@ function SettingsToggles({ def, value, onChange, disabled }: { def: IntegrationD
 function ConnectForm({ def, integration, onClose }: { def: IntegrationDef; integration?: Integration; onClose: () => void }) {
   const api = useApi();
   const toast = useToast();
-  const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(def.fields.map((f) => [f.key, integration?.config?.[f.key] ?? ""])));
+  const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(def.fields.map((f) => [f.key, integration?.config?.[f.key] ?? f.default ?? ""])));
   const [settings, setSettings] = useState<IntegrationSettings>(() => ({ ...defaultSettings(def), ...(integration?.settings ?? {}) }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const complete = def.fields.every((f) => f.optional || values[f.key]?.trim());
+  const complete = def.fields.every((f) => f.optional || f.choices || values[f.key]?.trim());
 
   const connect = async () => {
     setBusy(true);
@@ -147,9 +147,13 @@ function ConnectForm({ def, integration, onClose }: { def: IntegrationDef; integ
     <>
       <SetupSteps def={def} />
       <div className="flex flex-col gap-3">
-        {def.fields.map((f) => (
-          <TextField key={f.key} label={f.label} hint={f.optional ? "(optional)" : undefined} type={f.secret ? "password" : "text"} autoComplete="off" placeholder={f.placeholder} value={values[f.key] ?? ""} onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))} help={f.help} />
-        ))}
+        {def.fields.map((f) =>
+          f.choices ? (
+            <Select key={f.key} label={f.label} options={f.choices} value={values[f.key] ?? f.default ?? ""} onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))} help={f.help} containerClassName="sm:max-w-[280px]" />
+          ) : (
+            <TextField key={f.key} label={f.label} hint={f.optional ? "(optional)" : undefined} type={f.secret ? "password" : "text"} autoComplete="off" placeholder={f.placeholder} value={values[f.key] ?? ""} onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))} help={f.help} />
+          ),
+        )}
       </div>
       {def.settings && (
         <div>
@@ -178,8 +182,8 @@ function OAuthConnect({ def, integration, onClose }: { def: IntegrationDef; inte
   const [refreshToken, setRefreshToken] = useState("");
   const [shop, setShop] = useState(integration?.config?.shop ?? "");
   const needsShop = def.id === "shopify";
-  // Shopify and the carriers also take a pasted key; QuickBooks only in the sandbox.
-  const pasteForm = needsShop || def.kind === "carrier";
+  // Shopify, Square and the carriers also take a pasted key; QuickBooks only in the sandbox.
+  const pasteForm = needsShop || def.kind === "carrier" || def.id === "square";
 
   const paste = async () => {
     setBusy(true);
@@ -203,6 +207,8 @@ function OAuthConnect({ def, integration, onClose }: { def: IntegrationDef; inte
       window.location.assign(res.url);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not start the sign-in");
+      // Sign-in not set up on this server (503): open the paste form, which works without it.
+      if (pasteForm && e instanceof ApiError && e.status === 503) setManual(true);
       setBusy(false);
     }
   };
@@ -214,7 +220,7 @@ function OAuthConnect({ def, integration, onClose }: { def: IntegrationDef; inte
       {error && <Banner tone="critical">{error}</Banner>}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Button variant="plain" size="sm" onClick={() => setManual((v) => !v)}>
-          {manual ? (pasteForm ? `Back to Connect to ${def.name}` : "Hide sandbox token entry") : needsShop ? "Use an Admin API access token instead" : def.kind === "carrier" ? "Paste an API token instead" : def.id === "quickbooks" ? "Sandbox: paste tokens from Intuit's playground instead" : ""}
+          {manual ? (pasteForm ? `Back to Connect to ${def.name}` : "Hide sandbox token entry") : needsShop ? "Use an Admin API access token instead" : def.kind === "carrier" ? "Paste an API token instead" : def.id === "square" ? "Use your own Square application's access token instead" : def.id === "quickbooks" ? "Sandbox: paste tokens from Intuit's playground instead" : ""}
         </Button>
         <Button variant="primary" icon={<ExternalLink />} onClick={() => void start()} loading={busy && !manual} disabled={needsShop && !shop.trim()}>
           Connect to {def.name.replace(/ Online$/, "")}
@@ -333,6 +339,7 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
   if (integration.config?.locationNames) rows.push({ label: "Locations", value: integration.config.locationNames });
   if (integration.config?.realmId) rows.push({ label: "Company ID", value: <span className="font-mono text-[12px]">{integration.config.realmId}</span> });
   if (integration.config?.environment) rows.push({ label: "Environment", value: <Badge tone={integration.config.environment === "sandbox" ? "attention" : "success"}>{integration.config.environment === "sandbox" ? "Sandbox" : "Production"}</Badge> });
+  if (integration.config?.auth) rows.push({ label: "Access", value: integration.config.auth === "token" ? `Access token from your own ${def.name} application (revoke it there to cut access)` : `Signed in with ${def.name}` });
   if (integration.config?.account) rows.push({ label: "Account", value: integration.config.account });
   if (integration.config?.mode) rows.push({ label: "Key", value: <Badge tone={integration.config.mode === "test" ? "attention" : "success"}>{integration.config.mode === "test" ? "Test" : "Live"}</Badge> });
   if (integration.config?.currency) rows.push({ label: "Currency", value: integration.config.currency });
@@ -433,7 +440,7 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
         </Button>
       </div>
       {replace && (def.oauth ? <OAuthConnect def={def} integration={integration} onClose={onClose} /> : <ConnectForm def={def} integration={integration} onClose={onClose} />)}
-      <ConfirmDialog open={confirm} onClose={() => setConfirm(false)} onConfirm={() => void disconnect()} destructive title={`Disconnect ${def.name}?`} confirmLabel="Disconnect" loading={busy === "disconnect"} message={def.oauth ? <>Access is revoked with {def.name} and the stored tokens are deleted. Items already in cumulusOS stay as they are.</> : <>The stored credentials are deleted and the webhooks removed. Items, orders and shipments already in cumulusOS stay as they are.</>} />
+      <ConfirmDialog open={confirm} onClose={() => setConfirm(false)} onConfirm={() => void disconnect()} destructive title={`Disconnect ${def.name}?`} confirmLabel="Disconnect" loading={busy === "disconnect"} message={integration.config?.auth === "token" ? <>The stored access token is deleted here. To cut the application&apos;s access on the {def.name} side as well, revoke the token from its Credentials page. Items already in cumulusOS stay as they are.</> : def.oauth ? <>Access is revoked with {def.name} and the stored tokens are deleted. Items already in cumulusOS stay as they are.</> : <>The stored credentials are deleted and the webhooks removed. Items, orders and shipments already in cumulusOS stay as they are.</>} />
     </>
   );
 }

@@ -159,25 +159,53 @@ async function reconnectQuickbooks(ctx: ServerContext, body: ConnectBody): Promi
   return doc;
 }
 
-/** Square connects through OAuth (see /api/integrations/square/authorize); "connect" re-checks the stored tokens and saves settings. */
+/**
+ * Square connects either through OAuth (see /api/integrations/square/authorize)
+ * or with the access token of an application the seller creates in their own
+ * Developer Console, pasted here. Without a pasted token, "connect" re-checks
+ * the stored credentials and saves settings.
+ */
 async function reconnectSquare(ctx: ServerContext, body: ConnectBody): Promise<Integration> {
   const existing = await ctx.store.get("integrations", "square");
-  const { merchant, locations, secrets } = await square.verifySquareConnection(ctx);
+  const pasted = clean(body.credentials?.accessToken);
   const now = nowIso();
+  let merchant: square.SquareMerchant;
+  let locations: square.SquareLocation[];
+  let environment: string;
+  let auth: "oauth" | "token";
+  if (pasted) {
+    const env: square.SquareEnvironment = /^sand/i.test(clean(body.credentials?.environment)) ? "sandbox" : "production";
+    ({ merchant, locations } = await square.verifySquareAccessToken(env, pasted));
+    // The seller's own application: nothing to refresh, revoked from their Developer Console. A previous OAuth grant is replaced.
+    const previous = await readSecrets(ctx, "square");
+    if (previous?.refreshToken && previous.accessToken) {
+      const config = square.squareConfig();
+      if (config) await square.revokeSquare(config, previous).catch((e) => console.warn("[square] revoke failed:", e instanceof Error ? e.message : e));
+    }
+    await writeSecrets(ctx, "square", { accessToken: pasted, environment: env, tokenKind: "personal" });
+    environment = env;
+    auth = "token";
+  } else {
+    const verified = await square.verifySquareConnection(ctx);
+    ({ merchant, locations } = verified);
+    environment = verified.secrets.environment ?? "sandbox";
+    auth = square.isPersonalToken(verified.secrets) ? "token" : "oauth";
+  }
   const active = locations.filter((l) => l.status !== "INACTIVE");
   const doc: Integration = {
     id: "square",
     status: "connected",
-    config: { ...(existing?.config ?? {}), merchantId: merchant.id, businessName: merchant.business_name ?? merchant.id, environment: secrets.environment ?? "sandbox", locationIds: active.map((l) => l.id).join(","), locationNames: active.map((l) => l.name ?? l.id).join(", ") },
+    config: { ...(existing?.config ?? {}), merchantId: merchant.id, businessName: merchant.business_name ?? merchant.id, environment, auth, locationIds: active.map((l) => l.id).join(","), locationNames: active.map((l) => l.name ?? l.id).join(", "), ...(merchant.currency ? { currency: merchant.currency } : {}), ...(merchant.country ? { country: merchant.country } : {}) },
     settings: { ...(existing?.settings ?? {}), ...(body.settings ?? {}) },
-    connectedAt: existing?.connectedAt ?? now,
-    connectedBy: existing?.connectedBy ?? ctx.actor.id,
+    connectedAt: pasted ? now : (existing?.connectedAt ?? now),
+    connectedBy: pasted ? ctx.actor.id : (existing?.connectedBy ?? ctx.actor.id),
     lastSyncAt: existing?.lastSyncAt,
     lastSyncSummary: existing?.lastSyncSummary,
     webhooks: [],
     createdAt: existing?.createdAt ?? now,
   };
-  await ctx.store.put("integrations", doc);
+  if (pasted) await ctx.store.batch([{ op: "put", collection: "integrations", doc }, activityOp(ctx.actor, "integration.connected", `Connected Square (${doc.config!.businessName})`, { entityType: "integration", entityId: "square" })]);
+  else await ctx.store.put("integrations", doc);
   return doc;
 }
 
@@ -200,7 +228,8 @@ export async function disconnectIntegration(ctx: ServerContext, id: IntegrationI
   let secrets = await readSecrets(ctx, id);
   if (id === "shopify" && existing && secrets) secrets = await freshShopifySecrets(ctx, existing, secrets).catch(() => secrets);
   await removeWebhooks(existing, secrets, id);
-  if (id === "square" && secrets?.accessToken) {
+  // Only a token this server's OAuth app was granted can be revoked here; a pasted one is revoked in the seller's own Developer Console.
+  if (id === "square" && secrets?.accessToken && secrets.refreshToken) {
     const config = square.squareConfig();
     if (config) await square.revokeSquare(config, secrets).catch((e) => console.warn("[square] revoke failed:", e instanceof Error ? e.message : e));
   }

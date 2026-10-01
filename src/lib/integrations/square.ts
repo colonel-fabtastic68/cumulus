@@ -5,9 +5,13 @@ import { OAUTH_STATES, consumeState } from "./quickbooks";
 import { HttpError, USER_AGENT, fetchJson, readSecrets, writeSecrets, type Secrets, type ServerContext } from "./server";
 
 /**
- * Square: OAuth 2.0 authorization code grant plus the Catalog, Inventory and
- * Locations APIs. Access tokens last 30 days and are refreshed with the
- * (non-expiring) refresh token a week before the edge or on a 401.
+ * Square: the Catalog, Inventory and Locations APIs behind either of two
+ * credentials. OAuth 2.0 (authorization code grant, this server's own Square
+ * application) gives 30-day access tokens refreshed with the non-expiring
+ * refresh token a week before the edge or on a 401. A seller can instead paste
+ * the access token of an application they create in their own Developer
+ * Console: it never expires, needs no server-side app, and is revoked from
+ * that console.
  */
 
 export type SquareEnvironment = "sandbox" | "production";
@@ -35,8 +39,13 @@ export function squareConfig(): SquareConfig | null {
 
 export function requireSquareConfig(): SquareConfig {
   const config = squareConfig();
-  if (!config) throw new HttpError(503, "Square is not configured on this server. Add SQUARE_APPLICATION_ID and SQUARE_APPLICATION_SECRET to the deployment's environment.");
+  if (!config) throw new HttpError(503, "Square sign-in is not configured on this server. Add SQUARE_APPLICATION_ID and SQUARE_APPLICATION_SECRET to the deployment's environment, or paste the access token from your own Square application instead.");
   return config;
+}
+
+/** A token the seller pasted from their own Square application, as opposed to one this server's OAuth app was granted. */
+export function isPersonalToken(secrets: Secrets): boolean {
+  return secrets.tokenKind === "personal" || (!secrets.refreshToken && !!secrets.accessToken);
 }
 
 export function squareBase(environment: SquareEnvironment): string {
@@ -119,8 +128,21 @@ export async function revokeSquare(config: SquareConfig, secrets: Secrets): Prom
   });
 }
 
-/** Runs `fn` with a live token: refreshes a week before expiry, and once more on a 401; a dead refresh token asks for a reconnect. */
+/**
+ * Runs `fn` with a live token. OAuth tokens are refreshed a week before expiry
+ * and once more on a 401; a dead refresh token asks for a reconnect. A pasted
+ * token has nothing to refresh, so a 401 means it was revoked or replaced.
+ */
 export async function withSquareToken<T>(ctx: ServerContext, secrets: Secrets, fn: (accessToken: string, environment: SquareEnvironment) => Promise<T>): Promise<T> {
+  if (isPersonalToken(secrets)) {
+    const environment = (secrets.environment as SquareEnvironment | undefined) ?? "production";
+    try {
+      return await fn(secrets.accessToken, environment);
+    } catch (e) {
+      if (e instanceof HttpError && e.status === 401) throw await needsReconnect(ctx, "Square no longer accepts the access token (revoked or replaced in the Developer Console). Paste the current one to connect again.");
+      throw e;
+    }
+  }
   const config = requireSquareConfig();
   const environment = (secrets.environment as SquareEnvironment | undefined) ?? config.environment;
   let current = secrets;
@@ -237,7 +259,18 @@ export async function inventoryCounts(environment: SquareEnvironment, token: str
 /** Reads the stored secrets and confirms the connection still works, returning the merchant and locations for the card. */
 export async function verifySquareConnection(ctx: ServerContext): Promise<{ merchant: SquareMerchant; locations: SquareLocation[]; secrets: Secrets }> {
   const secrets = await readSecrets(ctx, "square");
-  if (!secrets?.refreshToken) throw new HttpError(409, "Square is not connected yet. Use Connect to Square first.");
+  if (!secrets?.accessToken) throw new HttpError(409, "Square is not connected yet. Use Connect to Square, or paste an access token from your own Square application.");
   const result = await withSquareToken(ctx, secrets, async (token, environment) => ({ merchant: await merchant(environment, token), locations: await locations(environment, token) }));
   return { ...result, secrets };
+}
+
+/** Checks a token the seller pasted from their own application against the environment it was copied from. */
+export async function verifySquareAccessToken(environment: SquareEnvironment, accessToken: string): Promise<{ merchant: SquareMerchant; locations: SquareLocation[] }> {
+  try {
+    const [m, locs] = await Promise.all([merchant(environment, accessToken), locations(environment, accessToken)]);
+    return { merchant: m, locations: locs };
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 401) throw new HttpError(400, `Square rejected that access token for the ${environment} environment. Copy it from the application's Credentials page with the toggle at the top set to ${environment === "sandbox" ? "Sandbox" : "Production"}, and paste the whole token.`);
+    throw e;
+  }
 }

@@ -16,6 +16,9 @@ export interface CredentialField {
   /** Secrets are never echoed back; config fields show on the card once connected. */
   secret?: boolean;
   optional?: boolean;
+  /** A fixed set of values rendered as a select instead of a text field. */
+  choices?: Array<{ value: string; label: string }>;
+  default?: string;
 }
 
 export interface SettingDef {
@@ -133,12 +136,23 @@ export const INTEGRATIONS: IntegrationDef[] = [
     stage: "in_progress",
     oauth: true,
     description: "The Square item library comes in as items by SKU with prices and categories, and in-stock counts across your locations can seed opening quantities.",
-    fields: [],
+    fields: [
+      { key: "accessToken", label: "Access token", placeholder: "EAAA…", secret: true, help: "From the Credentials page of an application you create in the Square Developer Console (steps below). It only ever reaches the server." },
+      { key: "environment", label: "Environment", choices: [{ value: "production", label: "Production" }, { value: "sandbox", label: "Sandbox (testing)" }], default: "production", help: "Match the toggle at the top of the application page when you copied the token." },
+    ],
     settings: [
       { key: "syncProducts", label: "Pull the item library in", help: "Create or update items by SKU on every sync and in the nightly pass.", default: true },
       { key: "takeStockOnFirstSync", label: "Take Square counts for new items", help: "Items that do not exist here yet arrive with Square's in-stock count as the opening quantity. Existing counts are never changed by a pull.", default: false },
     ],
-    setup: { steps: ["Press Connect to Square and sign in to your Square account", "Approve the access cumulusOS asks for (items, inventory, orders, locations)", "You come straight back here, connected; press Sync now to pull the item library in"], docsUrl: "https://squareup.com/help/us/en/article/5106-manage-your-item-library" },
+    setup: {
+      steps: [
+        "Press Connect to Square, sign in to your Square account and approve the access cumulusOS asks for (items, inventory, orders, locations); you come straight back here, connected",
+        "Or use your own application: at developer.squareup.com/apps create an application (name it cumulusOS), set the toggle at the top to Production, open Credentials and copy the access token",
+        "Paste the token here with the matching environment and press Connect; it never expires, and you can revoke it from that same Credentials page at any time",
+        "Press Sync now to pull the item library in",
+      ],
+      docsUrl: "https://developer.squareup.com/docs/devtools/developer-dashboard",
+    },
     export: {
       steps: ["In Square Dashboard open Items & orders → Items", "Choose Actions → Export library and download the CSV", "Upload the file on the Import page"],
       headers: ["Item Name", "SKU", "Description", "Category", "Price", "Current Quantity <Location>", "Stock Alert Count <Location>"],

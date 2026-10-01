@@ -39,7 +39,7 @@ export async function GET(req: Request) {
     const doc: Integration = {
       id: "square",
       status: "connected",
-      config: { merchantId: m.id, businessName: m.business_name ?? m.id, environment: config.environment, locationIds: active.map((l) => l.id).join(","), locationNames: active.map((l) => l.name ?? l.id).join(", "), ...(m.currency ? { currency: m.currency } : {}), ...(m.country ? { country: m.country } : {}) },
+      config: { merchantId: m.id, businessName: m.business_name ?? m.id, environment: config.environment, auth: "oauth", locationIds: active.map((l) => l.id).join(","), locationNames: active.map((l) => l.name ?? l.id).join(", "), ...(m.currency ? { currency: m.currency } : {}), ...(m.country ? { country: m.country } : {}) },
       settings: existing?.settings ?? { syncProducts: true, takeStockOnFirstSync: false },
       connectedAt: now,
       connectedBy: issued.uid,
