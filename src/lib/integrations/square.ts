@@ -69,7 +69,13 @@ export function squareRedirectUri(base: string): string {
   return `${base}/api/integrations/square/callback`;
 }
 
-/** Stores a single-use state and returns Square's consent URL (session=false so the seller signs in to the right account). */
+/**
+ * Stores a single-use state and returns Square's consent URL. A seller who is
+ * already signed in goes straight to the permission form; `session=false`
+ * would route everyone through app.squareup.com/login first, and Safari's
+ * fingerprinting protection stops that page reading the parameters that
+ * carry the flow forward, stranding the seller on their dashboard.
+ */
 export async function beginSquareAuthorization(ctx: Pick<ServerContext, "db" | "workspaceId" | "actor">, base: string, config = requireSquareConfig()): Promise<string> {
   const state = randomBytes(24).toString("base64url");
   const doc: OAuthState = { workspaceId: ctx.workspaceId, uid: ctx.actor.id, provider: "square", createdAt: new Date().toISOString() };
@@ -77,7 +83,6 @@ export async function beginSquareAuthorization(ctx: Pick<ServerContext, "db" | "
   const url = new URL(`${squareBase(config.environment)}/oauth2/authorize`);
   url.searchParams.set("client_id", config.applicationId);
   url.searchParams.set("scope", SQUARE_SCOPES.join(" "));
-  url.searchParams.set("session", "false");
   url.searchParams.set("state", state);
   url.searchParams.set("redirect_uri", squareRedirectUri(base));
   return url.toString();
