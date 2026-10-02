@@ -30,11 +30,24 @@ function envValue(name: string): string {
   return (process.env[name] ?? "").trim().replace(/^["']+|["']+$/g, "").trim();
 }
 
+/**
+ * Square credentials name their own environment: production application ids
+ * start with `sq0idp-`, Sandbox ones with `sandbox-`. The id decides which
+ * host the consent page and the API live on; SQUARE_ENVIRONMENT only breaks
+ * a tie when the id has an unfamiliar shape. Sending a production app to the
+ * Sandbox host strands the seller on Square's dashboard after they log in.
+ */
+export function squareEnvironmentFor(applicationId: string, explicit = envValue("SQUARE_ENVIRONMENT")): SquareEnvironment {
+  if (/^sandbox-/i.test(applicationId)) return "sandbox";
+  if (/^sq0idp-/i.test(applicationId)) return "production";
+  return /^prod/i.test(explicit) ? "production" : "sandbox";
+}
+
 export function squareConfig(): SquareConfig | null {
   const applicationId = envValue("SQUARE_APPLICATION_ID");
   const applicationSecret = envValue("SQUARE_APPLICATION_SECRET");
   if (!applicationId || !applicationSecret) return null;
-  return { applicationId, applicationSecret, environment: /^prod/i.test(envValue("SQUARE_ENVIRONMENT")) ? "production" : "sandbox" };
+  return { applicationId, applicationSecret, environment: squareEnvironmentFor(applicationId) };
 }
 
 export function requireSquareConfig(): SquareConfig {
