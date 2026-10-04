@@ -39,7 +39,7 @@ export function AvailableNowCards() {
         icon={<FileSpreadsheet />}
         title="CSV import"
         badge={<Badge tone="success">Available now</Badge>}
-        description="Upload a spreadsheet or a Shopify, WooCommerce, QuickBooks or Square export. Columns are mapped with AI help, previewed, then upserted by SKU."
+        description="Upload a spreadsheet or a Shopify, WooCommerce, QuickBooks, Square or Clover export. Columns are mapped with AI help, previewed, then upserted by SKU."
         action={
           <Button size="sm" href="/import" iconRight={<ArrowRight />}>
             Import a CSV

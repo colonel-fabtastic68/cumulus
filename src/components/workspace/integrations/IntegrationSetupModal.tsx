@@ -182,8 +182,8 @@ function OAuthConnect({ def, integration, onClose }: { def: IntegrationDef; inte
   const [refreshToken, setRefreshToken] = useState("");
   const [shop, setShop] = useState(integration?.config?.shop ?? "");
   const needsShop = def.id === "shopify";
-  // Shopify, Square and the carriers also take a pasted key; QuickBooks only in the sandbox.
-  const pasteForm = needsShop || def.kind === "carrier" || def.id === "square";
+  // Shopify, Square, Clover and the carriers also take a pasted key; QuickBooks only in the sandbox.
+  const pasteForm = needsShop || def.kind === "carrier" || def.id === "square" || def.id === "clover";
 
   const paste = async () => {
     setBusy(true);
@@ -220,7 +220,7 @@ function OAuthConnect({ def, integration, onClose }: { def: IntegrationDef; inte
       {error && <Banner tone="critical">{error}</Banner>}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Button variant="plain" size="sm" onClick={() => setManual((v) => !v)}>
-          {manual ? (pasteForm ? `Back to Connect to ${def.name}` : "Hide sandbox token entry") : needsShop ? "Use an Admin API access token instead" : def.kind === "carrier" ? "Paste an API token instead" : def.id === "square" ? "Use your own Square application's access token instead" : def.id === "quickbooks" ? "Sandbox: paste tokens from Intuit's playground instead" : ""}
+          {manual ? (pasteForm ? `Back to Connect to ${def.name}` : "Hide sandbox token entry") : needsShop ? "Use an Admin API access token instead" : def.kind === "carrier" ? "Paste an API token instead" : def.id === "square" ? "Use your own Square application's access token instead" : def.id === "clover" ? "Use an API token from your Clover dashboard instead" : def.id === "quickbooks" ? "Sandbox: paste tokens from Intuit's playground instead" : ""}
         </Button>
         <Button variant="primary" icon={<ExternalLink />} onClick={() => void start()} loading={busy && !manual} disabled={needsShop && !shop.trim()}>
           Connect to {def.name.replace(/ Online$/, "")}
@@ -336,10 +336,12 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
   if (integration.config?.shopName || integration.config?.siteName) rows.push({ label: "Name", value: integration.config.shopName ?? integration.config.siteName });
   if (integration.config?.companyName) rows.push({ label: "Company", value: integration.config.companyName });
   if (integration.config?.businessName) rows.push({ label: "Business", value: integration.config.businessName });
+  if (def.id === "clover" && integration.config?.merchantId) rows.push({ label: "Merchant ID", value: <span className="font-mono text-[12px]">{integration.config.merchantId}</span> });
   if (integration.config?.locationNames) rows.push({ label: "Locations", value: integration.config.locationNames });
   if (integration.config?.realmId) rows.push({ label: "Company ID", value: <span className="font-mono text-[12px]">{integration.config.realmId}</span> });
   if (integration.config?.environment) rows.push({ label: "Environment", value: <Badge tone={integration.config.environment === "sandbox" ? "attention" : "success"}>{integration.config.environment === "sandbox" ? "Sandbox" : "Production"}</Badge> });
-  if (integration.config?.auth) rows.push({ label: "Access", value: integration.config.auth === "token" ? `Access token from your own ${def.name} application (revoke it there to cut access)` : `Signed in with ${def.name}` });
+  if (integration.config?.regionName) rows.push({ label: "Region", value: integration.config.regionName });
+  if (integration.config?.auth) rows.push({ label: "Access", value: integration.config.auth !== "token" ? `Signed in with ${def.name}` : def.id === "clover" ? "API token created in your Clover dashboard (delete it there to cut access)" : `Access token from your own ${def.name} application (revoke it there to cut access)` });
   if (integration.config?.account) rows.push({ label: "Account", value: integration.config.account });
   if (integration.config?.mode) rows.push({ label: "Key", value: <Badge tone={integration.config.mode === "test" ? "attention" : "success"}>{integration.config.mode === "test" ? "Test" : "Live"}</Badge> });
   if (integration.config?.currency) rows.push({ label: "Currency", value: integration.config.currency });
@@ -440,7 +442,7 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
         </Button>
       </div>
       {replace && (def.oauth ? <OAuthConnect def={def} integration={integration} onClose={onClose} /> : <ConnectForm def={def} integration={integration} onClose={onClose} />)}
-      <ConfirmDialog open={confirm} onClose={() => setConfirm(false)} onConfirm={() => void disconnect()} destructive title={`Disconnect ${def.name}?`} confirmLabel="Disconnect" loading={busy === "disconnect"} message={integration.config?.auth === "token" ? <>The stored access token is deleted here. To cut the application&apos;s access on the {def.name} side as well, revoke the token from its Credentials page. Items already in cumulusOS stay as they are.</> : def.oauth ? <>Access is revoked with {def.name} and the stored tokens are deleted. Items already in cumulusOS stay as they are.</> : <>The stored credentials are deleted and the webhooks removed. Items, orders and shipments already in cumulusOS stay as they are.</>} />
+      <ConfirmDialog open={confirm} onClose={() => setConfirm(false)} onConfirm={() => void disconnect()} destructive title={`Disconnect ${def.name}?`} confirmLabel="Disconnect" loading={busy === "disconnect"} message={def.id === "clover" ? (integration.config?.auth === "token" ? <>The stored API token is deleted here. To cut access on the Clover side as well, delete the token under Settings → API tokens in your Clover dashboard. Items already in cumulusOS stay as they are.</> : <>The stored tokens are deleted here. Clover has no way to revoke them early, so to cut access on the Clover side as well, uninstall cumulusOS from your Clover dashboard. Items already in cumulusOS stay as they are.</>) : integration.config?.auth === "token" ? <>The stored access token is deleted here. To cut the application&apos;s access on the {def.name} side as well, revoke the token from its Credentials page. Items already in cumulusOS stay as they are.</> : def.oauth ? <>Access is revoked with {def.name} and the stored tokens are deleted. Items already in cumulusOS stay as they are.</> : <>The stored credentials are deleted and the webhooks removed. Items, orders and shipments already in cumulusOS stay as they are.</>} />
     </>
   );
 }

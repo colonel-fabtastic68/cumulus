@@ -91,6 +91,8 @@ export interface Item {
     quickbooks?: string;
     /** Square catalog variation id. */
     square?: string;
+    /** Clover inventory item id. */
+    clover?: string;
   };
 
   brand?: string;
@@ -826,7 +828,7 @@ export interface ActivityEvent {
   createdAt: string;
 }
 
-export type IntegrationId = "shopify" | "woocommerce" | "quickbooks" | "square" | "shippo" | "easypost";
+export type IntegrationId = "shopify" | "woocommerce" | "quickbooks" | "square" | "clover" | "shippo" | "easypost";
 
 /**
  * Per-connection options. Sales channels (Shopify, WooCommerce) ignore the sync/push flags: the store always

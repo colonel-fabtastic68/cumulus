@@ -86,6 +86,7 @@ Channels and carriers run through the app's own API routes, so they only work in
 - **Shopify**: create a custom app in Shopify admin (Settings → Apps and sales channels → Develop apps) with `read_products`, `read_inventory`, `write_inventory`, `read_orders`, `read_locations`, install it and paste the Admin API access token. The API secret key is optional and lets webhooks be signature-checked.
 - **WooCommerce**: WooCommerce → Settings → Advanced → REST API → Add key (Read/Write); paste the consumer key and secret. The site must be https.
 - **Shippo / EasyPost**: paste the API token (test tokens buy free sample labels). Set a ship-from address and default parcel under Settings → Shipping and scanning.
+- **Clover**: press Connect to Clover (the server needs `CLOVER_APP_ID` and `CLOVER_APP_SECRET` for an app on the Clover developer dashboard; see `.env.example`), or paste an API token created under Settings → API tokens in the Clover dashboard together with the merchant id. The inventory comes in as items by SKU, with Clover's stock counts as opening quantities when asked.
 
 Credentials are verified with the platform on connect, then stored in `workspaces/{ws}/secrets/{integration}`, which `firestore.rules` denies to every client (redeploy the rules after pulling this: `firebase deploy --only firestore:rules`). Webhooks are registered at connect time against `APP_URL` (or the request's origin). `vercel.json` schedules a daily reconciliation at `/api/integrations/cron`; set `CRON_SECRET` on Vercel so only the scheduler can call it. What a channel syncs is per connection: products in, orders in, stock out, accept counts from the store, and which cumulusOS location mirrors it.
 
@@ -102,7 +103,7 @@ src/
   lib/export/           dataset tables, CSV/TSV/JSON/JSONL/Markdown/PDF, dependency-free XLSX + ZIP writers
   lib/gemini.ts         structured Gemini calls (quote drafter, scenario reader) with model fallback
   lib/scan.ts           barcode / SKU / cross-reference matching
-  lib/integrations/     server-side channel + carrier clients (Shopify, WooCommerce, Shippo, EasyPost)
+  lib/integrations/     server-side channel, carrier, accounting and POS clients (Shopify, WooCommerce, Shippo, EasyPost, QuickBooks, Square, Clover)
   app/api/integrations  connect / disconnect / sync / webhook / push-stock / cron routes
   app/api/shipping      rates / buy label / track / carrier webhooks
   lib/agent/tools.ts    tool schemas shared by server and client

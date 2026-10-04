@@ -88,7 +88,7 @@ export interface ExecContext {
   api?: <T = unknown>(path: string, body?: unknown) => Promise<T>;
 }
 
-const CHANNEL_NAMES: Record<string, string> = { shopify: "Shopify", woocommerce: "WooCommerce", shippo: "Shippo", easypost: "EasyPost", quickbooks: "QuickBooks", square: "Square" };
+const CHANNEL_NAMES: Record<string, string> = { shopify: "Shopify", woocommerce: "WooCommerce", shippo: "Shippo", easypost: "EasyPost", quickbooks: "QuickBooks", square: "Square", clover: "Clover" };
 
 type Filter = {
   query?: string;

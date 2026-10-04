@@ -6,6 +6,7 @@ import { isChannel } from "./channelSync";
 import { HttpError, appUrl, deleteSecrets, newToken, readSecrets, writeSecrets, type Secrets, type ServerContext } from "./server";
 import * as qbo from "./quickbooks";
 import * as square from "./square";
+import * as clover from "./clover";
 import * as shopify from "./shopify";
 import { freshShopifySecrets } from "./shopifyOAuth";
 import * as woo from "./woocommerce";
@@ -15,7 +16,7 @@ export interface ConnectBody {
   settings?: IntegrationSettings;
 }
 
-const NAMES: Record<IntegrationId, string> = { shopify: "Shopify", woocommerce: "WooCommerce", quickbooks: "QuickBooks", square: "Square", shippo: "Shippo", easypost: "EasyPost" };
+const NAMES: Record<IntegrationId, string> = { shopify: "Shopify", woocommerce: "WooCommerce", quickbooks: "QuickBooks", square: "Square", clover: "Clover", shippo: "Shippo", easypost: "EasyPost" };
 
 function clean(v: unknown): string {
   return typeof v === "string" ? v.trim() : "";
@@ -28,6 +29,7 @@ function clean(v: unknown): string {
 export async function connectIntegration(ctx: ServerContext, req: Request, id: IntegrationId, body: ConnectBody): Promise<Integration> {
   if (id === "quickbooks") return reconnectQuickbooks(ctx, body);
   if (id === "square") return reconnectSquare(ctx, body);
+  if (id === "clover") return reconnectClover(ctx, body);
   if (!isChannel(id) && !isCarrier(id)) throw new HttpError(501, `${NAMES[id]} is on the roadmap; use the CSV export for now.`);
   const creds = body.credentials ?? {};
   const existing = await ctx.store.get("integrations", id);
@@ -209,6 +211,51 @@ async function reconnectSquare(ctx: ServerContext, body: ConnectBody): Promise<I
   return doc;
 }
 
+/**
+ * Clover connects either through OAuth (see /api/integrations/clover/authorize)
+ * or with an API token the merchant creates in their own Clover dashboard,
+ * pasted here with the merchant id. Without a pasted token, "connect"
+ * re-checks the stored credentials and saves settings.
+ */
+async function reconnectClover(ctx: ServerContext, body: ConnectBody): Promise<Integration> {
+  const existing = await ctx.store.get("integrations", "clover");
+  const pasted = clean(body.credentials?.accessToken);
+  const now = nowIso();
+  let merchant: clover.CloverMerchant;
+  let currency: string | undefined;
+  let site: clover.CloverSite;
+  let auth: "oauth" | "token";
+  if (pasted) {
+    const merchantId = clean(body.credentials?.merchantId) || existing?.config?.merchantId || "";
+    if (!clover.isMerchantId(merchantId)) throw new HttpError(400, "Enter the merchant id: it is under Account & Setup → Business Information in the Clover dashboard.");
+    site = { ...clover.parsePlace(clean(body.credentials?.place)), merchantId };
+    ({ merchant, currency } = await clover.verifyCloverApiToken(site, pasted));
+    // The merchant's own token: nothing to refresh, deleted from their dashboard. A previous OAuth grant is replaced.
+    await writeSecrets(ctx, "clover", { accessToken: pasted, merchantId, environment: site.environment, region: site.region, tokenKind: "personal" });
+    auth = "token";
+  } else {
+    const verified = await clover.verifyCloverConnection(ctx);
+    ({ merchant, currency } = verified);
+    site = clover.siteOf(verified.secrets);
+    auth = clover.isPersonalToken(verified.secrets) ? "token" : "oauth";
+  }
+  const doc: Integration = {
+    id: "clover",
+    status: "connected",
+    config: clover.connectionConfig(site, merchant, currency, auth),
+    settings: { ...(existing?.settings ?? {}), ...(body.settings ?? {}) },
+    connectedAt: pasted ? now : (existing?.connectedAt ?? now),
+    connectedBy: pasted ? ctx.actor.id : (existing?.connectedBy ?? ctx.actor.id),
+    lastSyncAt: existing?.lastSyncAt,
+    lastSyncSummary: existing?.lastSyncSummary,
+    webhooks: [],
+    createdAt: existing?.createdAt ?? now,
+  };
+  if (pasted) await ctx.store.batch([{ op: "put", collection: "integrations", doc }, activityOp(ctx.actor, "integration.connected", `Connected Clover (${doc.config!.businessName})`, { entityType: "integration", entityId: "clover" })]);
+  else await ctx.store.put("integrations", doc);
+  return doc;
+}
+
 async function removeWebhooks(existing: Integration | null, secrets: Secrets | null, id: IntegrationId): Promise<void> {
   if (!existing?.webhooks?.length || !secrets) return;
   for (const hook of existing.webhooks) {
@@ -233,6 +280,7 @@ export async function disconnectIntegration(ctx: ServerContext, id: IntegrationI
     const config = square.squareConfig();
     if (config) await square.revokeSquare(config, secrets).catch((e) => console.warn("[square] revoke failed:", e instanceof Error ? e.message : e));
   }
+  // Clover has no revoke call: the stored tokens are deleted here, and the merchant uninstalls the app or deletes the API token on their side to cut access there.
   if (id === "quickbooks" && secrets?.refreshToken) {
     // Best effort: the tokens are deleted here regardless, and Intuit's own expiry finishes the job if revocation fails.
     const config = qbo.quickbooksConfig();
@@ -240,7 +288,7 @@ export async function disconnectIntegration(ctx: ServerContext, id: IntegrationI
   }
   await deleteSecrets(ctx, id);
   const now = nowIso();
-  const doc: Integration = { id, status: "not_connected", config: existing?.config ? { ...(existing.config.shop ? { shop: existing.config.shop } : {}), ...(existing.config.siteUrl ? { siteUrl: existing.config.siteUrl } : {}), ...(existing.config.realmId ? { realmId: existing.config.realmId } : {}) } : {}, settings: existing?.settings, webhooks: [], createdAt: existing?.createdAt ?? now };
+  const doc: Integration = { id, status: "not_connected", config: existing?.config ? { ...(existing.config.shop ? { shop: existing.config.shop } : {}), ...(existing.config.siteUrl ? { siteUrl: existing.config.siteUrl } : {}), ...(existing.config.realmId ? { realmId: existing.config.realmId } : {}), ...(id === "clover" && existing.config.merchantId ? { merchantId: existing.config.merchantId } : {}) } : {}, settings: existing?.settings, webhooks: [], createdAt: existing?.createdAt ?? now };
   await ctx.store.batch([{ op: "put", collection: "integrations", doc }, activityOp(ctx.actor, "integration.disconnected", `Disconnected ${NAMES[id]}`, { entityType: "integration", entityId: id })]);
 }
 

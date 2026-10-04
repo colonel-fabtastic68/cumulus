@@ -16,7 +16,7 @@ const TOUR: Array<{ title: string; body: string; href: string }> = [
   { title: "Receive a delivery", body: "Book a supplier delivery with the date it really arrived. Lots keep their cost, so valuation stays honest.", href: "/receiving" },
   { title: "Ask Strato for a change", body: "Try \"which parts are below their minimum?\" or \"raise the min on every enclosure by 20%\". Strato drafts the change and waits for your approval.", href: "/strato" },
   { title: "Ship an order", body: "Open orders reserve stock; partial shipments and backorders are tracked per line.", href: "/orders" },
-  { title: "See where your store connects", body: "Integrations shows how Shopify, WooCommerce, QuickBooks and Square plug in: products and orders sync in, stock levels push out.", href: "/integrations" },
+  { title: "See where your store connects", body: "Integrations shows how Shopify, WooCommerce, QuickBooks, Square and Clover plug in: products and orders sync in, stock levels push out.", href: "/integrations" },
 ];
 
 export default function DemoPage() {

@@ -21,7 +21,7 @@ export function buildAgentContext(ws: Pick<WorkspaceSnapshot, "items" | "supplie
   const openPos = (ws.purchaseOrders ?? []).filter((p) => p.status === "draft" || p.status === "sent" || p.status === "partial");
   lines.push(`Open purchase orders: ${openPos.length}${openPos.length ? ` (${openPos.slice(0, 5).map((p) => `${p.number} ${p.supplier} ${p.status}${p.expectedAt ? ` due ${p.expectedAt}` : ""}`).join("; ")})` : ""} · PO templates: ${(ws.purchaseOrderTemplates ?? []).map((t) => t.name).join(", ") || "none"}`);
   lines.push(`Team: ${ws.members.map((m) => `${m.name} (${m.role})`).join(", ")}`);
-  const NAMES: Record<string, string> = { shopify: "Shopify", woocommerce: "WooCommerce", shippo: "Shippo", easypost: "EasyPost", quickbooks: "QuickBooks", square: "Square" };
+  const NAMES: Record<string, string> = { shopify: "Shopify", woocommerce: "WooCommerce", shippo: "Shippo", easypost: "EasyPost", quickbooks: "QuickBooks", square: "Square", clover: "Clover" };
   const connected = (ws.integrations ?? []).filter((c) => c.status === "connected" || c.status === "error");
   lines.push(
     connected.length

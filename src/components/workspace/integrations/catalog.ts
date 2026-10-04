@@ -159,6 +159,48 @@ export const INTEGRATIONS: IntegrationDef[] = [
       note: "SKU, Item Name, Description, Category and Price are recognized; map Current Quantity to Quantity and Stock Alert Count to Min qty in the wizard.",
     },
   },
+  {
+    id: "clover",
+    name: "Clover",
+    kind: "pos",
+    stage: "in_progress",
+    oauth: true,
+    description: "The Clover inventory comes in as items by SKU with prices, costs, product codes and categories, and the stock counts on your Clover devices can seed opening quantities.",
+    fields: [
+      { key: "accessToken", label: "API token", placeholder: "Paste the token from Settings → API tokens", secret: true, help: "Created in the Clover web dashboard under Settings → API tokens (steps below). It only ever reaches the server." },
+      { key: "merchantId", label: "Merchant ID", placeholder: "XKDC2E3WD0VS1", help: "Under Account & Setup → Business Information in the Clover dashboard, or the 13 characters after /m/ in its address bar." },
+      {
+        key: "place",
+        label: "Environment",
+        choices: [
+          { value: "na", label: "Production (North America)" },
+          { value: "eu", label: "Production (Europe)" },
+          { value: "la", label: "Production (Latin America)" },
+          { value: "sandbox", label: "Sandbox (testing)" },
+        ],
+        default: "na",
+        help: "Where the merchant account lives. Sandbox is for test merchants from the Clover developer dashboard.",
+      },
+    ],
+    settings: [
+      { key: "syncProducts", label: "Pull the inventory in", help: "Create or update items by SKU on every sync and in the nightly pass. Items hidden from the register arrive inactive.", default: true },
+      { key: "takeStockOnFirstSync", label: "Take Clover counts for new items", help: "Items that do not exist here yet arrive with Clover's stock count as the opening quantity. Existing counts are never changed by a pull.", default: false },
+    ],
+    setup: {
+      steps: [
+        "Press Connect to Clover, sign in to your Clover account and approve the access cumulusOS asks for (merchant and inventory); you come straight back here, connected",
+        "Or use an API token: in the Clover web dashboard open Settings → API tokens, press Create new token, name it cumulusOS and give it Read permission on Merchant and Inventory",
+        "Paste the token here with your merchant id and environment and press Connect; delete the token from that same page at any time to cut access",
+        "Press Sync now to pull the inventory in",
+      ],
+      docsUrl: "https://docs.clover.com/dev/docs/gdp-create-merchant-specific-api-token",
+    },
+    export: {
+      steps: ["In the Clover web dashboard open Inventory → Items", "Choose Export and download the spreadsheet; save it as CSV if it comes as an Excel file", "Upload the file on the Import page"],
+      headers: ["Name", "Price", "Price Type", "Cost", "Product Code", "SKU", "Quantity", "Hidden", "Labels"],
+      note: "SKU, Name, Price, Cost, Quantity and Labels are recognized; map Product Code to Barcode in the wizard, or let the AI mapper suggest it.",
+    },
+  },
 ];
 
 export function integrationDef(id: string | null | undefined): IntegrationDef | undefined {
