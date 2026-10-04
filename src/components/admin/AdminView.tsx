@@ -10,7 +10,7 @@ import { AccountApiError, accountFetch } from "@/lib/account-fetch";
 import { APP_HOME, signInHref } from "@/lib/auth-routes";
 import { formatDate, formatRelative } from "@/lib/format";
 import { useSession } from "@/lib/session";
-import type { AdminAccount, AdminFeedback, AdminOverview, AdminSubscriber, AdminSubscription, AdminWorkspace } from "@/lib/server/admin";
+import type { AdminAccount, AdminFeedback, AdminOverview, AdminSubscriber, AdminSubscription, AdminWaitlistEntry, AdminWorkspace } from "@/lib/server/admin";
 import type { DeleteUserResult } from "@/lib/server/adminActions";
 
 /** Founder's read-only view of every account, workspace and subscription (ADMIN_EMAILS on the server decides who may open it). */
@@ -178,6 +178,24 @@ function Overview({ data, open, onOpen, selected, onChanged }: { data: AdminOver
     URL.revokeObjectURL(a.href);
   };
 
+  const waitlistColumns: Column<AdminWaitlistEntry>[] = [
+    { key: "email", header: "Email", render: (w) => <span className="font-medium text-text">{w.email}</span>, sortValue: (w) => w.email },
+    { key: "company", header: "Company", render: (w) => <span className="text-text-secondary">{w.company ?? "—"}</span>, sortValue: (w) => w.company ?? "" },
+    { key: "needs", header: "What they need", render: (w) => <span className="whitespace-pre-wrap text-text">{w.needs ?? <span className="text-text-tertiary">—</span>}</span> },
+    { key: "news", header: "News", render: (w) => (w.news ? <Badge tone="success">yes</Badge> : <span className="text-text-tertiary">no</span>), sortValue: (w) => (w.news ? 0 : 1), width: "80px" },
+    { key: "source", header: "Source", render: (w) => <span className="text-text-secondary">{w.source}</span>, sortValue: (w) => w.source },
+    { key: "joined", header: "Joined", render: (w) => <span className="text-text-secondary">{formatRelative(w.createdAt)}</span>, sortValue: (w) => w.createdAt },
+  ];
+  const csvCell = (v: string | undefined) => `"${(v ?? "").replace(/"/g, '""')}"`;
+  const exportWaitlist = () => {
+    const csv = ["email,company,needs,news,source,joined", ...data.waitlist.map((w) => [w.email, w.company, w.needs, w.news ? "yes" : "no", w.source, w.createdAt].map(csvCell).join(","))].join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = `cumulusos-waitlist-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
   const feedbackColumns: Column<AdminFeedback>[] = [
     { key: "kind", header: "Kind", render: (f) => <Badge tone={f.kind === "bug" ? "critical" : f.kind === "feature" ? "info" : "default"}>{f.kind === "feature" ? "feature request" : f.kind}</Badge>, sortValue: (f) => f.kind, width: "140px" },
     { key: "message", header: "Message", render: (f) => <span className="whitespace-pre-wrap text-text">{f.message}</span> },
@@ -199,6 +217,16 @@ function Overview({ data, open, onOpen, selected, onChanged }: { data: AdminOver
         <Heading title="Workspaces" hint="Click a row for members, connections and plan." />
         <Table rows={data.workspaces} columns={workspaceColumns} rowKey={(w) => w.id} onRowClick={(w) => onOpen(w.id)} rowClassName={(w) => (w.id === open ? "bg-surface-selected" : "")} defaultSort={{ key: "created", dir: "desc" }} dense emptyState="No workspaces yet." />
         {selected && <WorkspaceDetail w={selected} onChanged={onChanged} />}
+      </section>
+
+      <section>
+        <div className="mb-2.5 flex flex-wrap items-end justify-between gap-2">
+          <Heading title={`Waitlist (${data.waitlist.length})`} hint="People who asked for a workspace from the home page, with what they need. Newest first." />
+          <Button size="sm" onClick={exportWaitlist} disabled={data.waitlist.length === 0}>
+            Export CSV
+          </Button>
+        </div>
+        <Table rows={data.waitlist} columns={waitlistColumns} rowKey={(w) => w.email} defaultSort={{ key: "joined", dir: "desc" }} dense emptyState="Nobody yet." />
       </section>
 
       <section>

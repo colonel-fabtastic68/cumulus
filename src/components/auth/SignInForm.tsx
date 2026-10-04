@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { MailCheck, Send, UserPlus } from "lucide-react";
+import { MailCheck, Send } from "lucide-react";
 import { Banner, Button, TextField } from "@/components/ui";
 import { describeAuthError, useAuth } from "@/lib/auth";
 import { EMAIL_FOR_SIGN_IN_KEY, finishMagicLink, isMagicLink, scrubMagicLink, sendMagicLink } from "@/lib/auth-link";
-import { signInHref, signUpHref } from "@/lib/auth-routes";
+import { signInHref } from "@/lib/auth-routes";
 import { useSession } from "@/lib/session";
 import { AuthPage, useNextPath } from "./AuthPage";
 import { PasswordField, emailError } from "./fields";
@@ -138,16 +138,13 @@ export function SignInForm() {
       </form>
 
       {!needsEmail && (
-        <>
-          <div className="my-5 flex items-center gap-3 text-[11.5px] uppercase tracking-wide text-text-tertiary">
-            <span className="h-px flex-1 bg-border" />
-            or
-            <span className="h-px flex-1 bg-border" />
-          </div>
-          <Button size="lg" fullWidth icon={<UserPlus />} href={signUpHref(next)}>
-            Create account
-          </Button>
-        </>
+        <p className="mt-5 text-center text-[13px] leading-5 text-text-secondary">
+          New to cumulusOS?{" "}
+          <Link href="/#waitlist" className="font-medium text-accent hover:underline">
+            Join the waitlist
+          </Link>{" "}
+          and we will set up your workspace.
+        </p>
       )}
     </AuthPage>
   );

@@ -11,10 +11,10 @@ type Session = "none" | "signed-out" | "signed-in";
 
 /**
  * Calls to action that know about the visitor: local installs have no accounts,
- * a signed-in visitor gets a shortcut into the workspace, everyone else sees
- * sign in / get started.
+ * a signed-in visitor gets a shortcut into the workspace, everyone else is
+ * pointed at the waitlist, with sign-in for teams that already have a workspace.
  */
-export function SessionCta({ runtimeConfig, placement }: { runtimeConfig: RuntimeConfig; placement: "nav" | "hero" | "band" | "pricing" }) {
+export function SessionCta({ runtimeConfig, placement }: { runtimeConfig: RuntimeConfig; placement: "nav" | "hero" }) {
   setRuntimeConfig(runtimeConfig);
   const accounts = runtimeConfig.firebase !== null;
   const [session, setSession] = useState<Session>(accounts ? "signed-out" : "none");
@@ -37,32 +37,9 @@ export function SessionCta({ runtimeConfig, placement }: { runtimeConfig: Runtim
   const size = placement === "nav" ? "md" : "lg";
 
   if (session !== "signed-out") {
-    const label = session === "signed-in" ? "Open your workspace" : "Open the workspace";
-    if (placement === "pricing") {
-      return (
-        <Button variant="tertiary" size="lg" href={APP_HOME}>
-          {label}
-        </Button>
-      );
-    }
     return (
-      <div className="flex flex-wrap items-center gap-3">
-        <Button variant="primary" size={size} href={APP_HOME} iconRight={placement === "nav" ? undefined : <ArrowRight />}>
-          {label}
-        </Button>
-        {placement === "hero" && (
-          <Button size={size} href="/demo">
-            Try the demo
-          </Button>
-        )}
-      </div>
-    );
-  }
-
-  if (placement === "pricing") {
-    return (
-      <Button variant="tertiary" size="lg" href="/sign-in">
-        Sign in
+      <Button variant="primary" size={size} href={APP_HOME} iconRight={placement === "nav" ? undefined : <ArrowRight />}>
+        {session === "signed-in" ? "Open your workspace" : "Open the workspace"}
       </Button>
     );
   }
@@ -73,8 +50,8 @@ export function SessionCta({ runtimeConfig, placement }: { runtimeConfig: Runtim
         <Button size="md" variant="tertiary" href="/sign-in">
           Sign in
         </Button>
-        <Button size="md" variant="primary" href="/book">
-          Book a demo
+        <Button size="md" variant="primary" href="/#waitlist">
+          Join the waitlist
         </Button>
       </div>
     );
@@ -82,11 +59,11 @@ export function SessionCta({ runtimeConfig, placement }: { runtimeConfig: Runtim
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <Button variant="primary" size="lg" href="/sign-up" iconRight={<ArrowRight />}>
-        Get started
+      <Button variant="primary" size="lg" href="/#waitlist" iconRight={<ArrowRight />}>
+        Join the waitlist
       </Button>
-      <Button size="lg" href={placement === "hero" ? "/demo" : "/sign-in"}>
-        {placement === "hero" ? "Try the demo" : "Sign in"}
+      <Button size="lg" href="/sign-in">
+        Sign in
       </Button>
     </div>
   );

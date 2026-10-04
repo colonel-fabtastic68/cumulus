@@ -2,14 +2,13 @@ import Link from "next/link";
 import { AppIcon } from "@/components/ui";
 import type { RuntimeConfig } from "@/lib/firebase-config";
 import { SessionCta } from "./SessionCta";
-import { IntakeFormButton } from "./IntakeFormButton";
 
+// Absolute paths, so the links work from the legal pages as well as the home page.
 const LINKS = [
-  { href: "#product", label: "Product" },
-  { href: "#strato", label: "Strato" },
-  { href: "#pilot", label: "Pilot" },
-  { href: "#pricing", label: "Pricing" },
-  { href: "/demo", label: "Demo" },
+  { href: "/#product", label: "Product" },
+  { href: "/#strato", label: "Strato" },
+  { href: "/#integrations", label: "Integrations" },
+  { href: "/#waitlist", label: "Waitlist" },
 ];
 
 export function Wordmark({ className }: { className?: string }) {
@@ -48,9 +47,6 @@ export function MarketingFooter() {
         <div>
           <Wordmark />
           <p className="mt-2 text-[13px] text-text-secondary">Agentic inventory for small product teams.</p>
-          <div className="mt-4">
-            <IntakeFormButton size="sm" />
-          </div>
         </div>
         <nav className="flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-text-secondary" aria-label="Footer">
           {LINKS.map((l) => (
@@ -58,9 +54,6 @@ export function MarketingFooter() {
               {l.label}
             </a>
           ))}
-          <Link href="/book" className="hover:text-text">
-            Book a demo
-          </Link>
           <Link href="/sign-in" className="hover:text-text">
             Sign in
           </Link>

@@ -90,6 +90,9 @@ service cloud.firestore {
     match /mailingList/{entryId} {
       allow read, write: if false;
     }
+    match /waitlist/{entryId} {
+      allow read, write: if false;
+    }
     match /subscriptions/{subscriptionId} {
       allow read, write: if false;
     }

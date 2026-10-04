@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
+import Link from "next/link";
 import { MessageCircle, Send, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const STARTERS = ["What does cumulusOS do?", "How does Strato work?", "What does it cost?", "Which stores and carriers connect?"];
+const STARTERS = ["What does cumulusOS do?", "How does Strato work?", "Which stores and carriers connect?", "How does the waitlist work?"];
 
-/** Floating "Ask Baker's assistant" on the marketing pages: a small Gemini-backed chat that only knows the product. */
-export function FounderChat() {
+/** Floating "Ask about cumulusOS" on the marketing pages: a small Gemini-backed chat that only knows the product. */
+export function SiteAssistant() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
@@ -34,22 +35,22 @@ export function FounderChat() {
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        aria-controls="founder-chat"
+        aria-controls="site-assistant"
         className="fixed bottom-5 right-5 z-[70] inline-flex h-12 items-center gap-2 rounded-full bg-primary px-4 text-[14px] font-medium text-text-inverse shadow-[var(--shadow-pop)] hover:opacity-95"
       >
         {open ? <X className="h-4 w-4" /> : <MessageCircle className="h-4 w-4" />}
         {open ? "Close" : "Ask about cumulusOS"}
       </button>
       {open && (
-        <section id="founder-chat" aria-label="Chat with Baker's assistant" className="animate-menu fixed bottom-20 right-5 z-[70] flex h-[min(560px,calc(100dvh-7rem))] w-[min(380px,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-border bg-surface shadow-[var(--shadow-pop)]">
+        <section id="site-assistant" aria-label="Chat with the cumulusOS assistant" className="animate-menu fixed bottom-20 right-5 z-[70] flex h-[min(560px,calc(100dvh-7rem))] w-[min(380px,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-border bg-surface shadow-[var(--shadow-pop)]">
           <header className="border-b border-border px-4 py-3">
-            <div className="text-[14px] font-semibold text-text">Baker&apos;s assistant</div>
-            <p className="text-[12px] text-text-secondary">An AI that answers for Baker Cobb, the founder. For the real Baker, book a demo.</p>
+            <div className="text-[14px] font-semibold text-text">cumulusOS assistant</div>
+            <p className="text-[12px] text-text-secondary">An AI that answers questions about the product. For a person, join the waitlist and we will be in touch.</p>
           </header>
           <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
             {messages.length === 0 && (
               <div className="flex flex-col gap-2">
-                <p className="text-[13px] text-text-secondary">Ask anything about what cumulusOS does, how Strato works, pricing, or connections.</p>
+                <p className="text-[13px] text-text-secondary">Ask anything about what cumulusOS does, how Strato works, or which stores and carriers connect.</p>
                 {STARTERS.map((s) => (
                   <button key={s} type="button" onClick={() => ask(s)} className="rounded-full border border-border bg-surface px-3 py-1.5 text-left text-[12.5px] text-text hover:bg-surface-hover">
                     {s}
@@ -78,7 +79,7 @@ export function FounderChat() {
             </button>
           </form>
           <p className="px-4 pb-2 text-[11px] text-text-tertiary">
-            Want the human version? <a href="/demo" className="text-accent hover:underline">Book a demo</a>.
+            Want to talk to a person? <Link href="/#waitlist" className="text-accent hover:underline">Join the waitlist</Link> and we will be in touch.
           </p>
         </section>
       )}

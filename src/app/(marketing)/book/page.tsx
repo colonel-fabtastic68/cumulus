@@ -6,6 +6,8 @@ import { runtimeConfigFromEnv } from "@/lib/firebase-config";
 export const metadata: Metadata = {
   title: "Book a demo · cumulusOS",
   description: "See cumulusOS on your own parts and BOMs: a walk through inventory, receiving, builds and Strato with the people who build it.",
+  // Reached by a shared link only: not linked from the site and kept out of search results.
+  robots: { index: false, follow: false },
 };
 
 export default function DemoPage() {
@@ -23,10 +25,10 @@ export default function DemoPage() {
       ) : (
         <div className="mt-8 max-w-[640px] rounded-[var(--radius-lg)] bg-surface p-6 shadow-[var(--shadow-card)]">
           <h2 className="text-[16px] font-semibold text-text">Booking is being set up</h2>
-          <p className="mt-2 text-[14px] leading-6 text-text-secondary">The calendar is not connected yet. You can start on your own in the meantime: create an account, import a spreadsheet, and ask Strato for the first change.</p>
+          <p className="mt-2 text-[14px] leading-6 text-text-secondary">The calendar is not connected yet. Join the waitlist in the meantime and we will be in touch to set up a time.</p>
           <div className="mt-5 flex flex-wrap gap-3">
-            <Button variant="primary" size="lg" href="/sign-up">
-              Create an account
+            <Button variant="primary" size="lg" href="/#waitlist">
+              Join the waitlist
             </Button>
             <Button size="lg" href="/sign-in">
               Sign in

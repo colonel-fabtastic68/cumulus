@@ -8,6 +8,8 @@ import { buildSeed } from "@/lib/seed";
 export const metadata: Metadata = {
   title: "Try the demo · cumulusOS",
   description: "Open a sample workspace in your browser: parts, BOMs, receiving, orders, returns and Strato, with nothing to install and no account.",
+  // Reached by a shared link only: not linked from the site and kept out of search results.
+  robots: { index: false, follow: false },
 };
 
 const TOUR: Array<{ title: string; body: string; href: string }> = [
@@ -63,8 +65,8 @@ export default function DemoPage() {
             <Button size="lg" href="/book">
               Book a demo
             </Button>
-            <Link href="/sign-up" className="inline-flex items-center text-[13px] font-medium text-text hover:underline">
-              Create an account
+            <Link href="/#waitlist" className="inline-flex items-center text-[13px] font-medium text-text hover:underline">
+              Join the waitlist
             </Link>
           </div>
         </div>

@@ -1,13 +1,11 @@
-import { ArrowRight, CalendarRange, Check, FileSpreadsheet, GitFork, Layers, Lock, PackageCheck, Plug, RotateCcw, Scale, ShoppingBag, Store, Timer, Users } from "lucide-react";
+import { CalendarRange, Check, FileSpreadsheet, GitFork, Layers, PackageCheck, Plug, RotateCcw, Scale, Timer, Users } from "lucide-react";
 import type { RuntimeConfig } from "@/lib/firebase-config";
-import { Badge, Button } from "@/components/ui";
-import { FOUNDING_PLAN, planSavingsPct } from "@/lib/billing";
-import { formatMoney } from "@/lib/format";
 import { StratoPreview } from "./StratoPreview";
 import { ProductPreview } from "./ProductPreview";
 import { Reveal } from "./Reveal";
-import { MailingListForm } from "./MailingListForm";
+import { BrandMark, type BrandId } from "./IntegrationLogos";
 import { SessionCta } from "./SessionCta";
+import { WaitlistForm } from "./WaitlistForm";
 
 const container = "mx-auto w-full max-w-[1120px] px-6";
 
@@ -22,6 +20,9 @@ export function Hero({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
         <div className="hero-in mt-8" style={{ animationDelay: "160ms" }}>
           <SessionCta runtimeConfig={runtimeConfig} placement="hero" />
         </div>
+        <p className="hero-in mt-5 text-[13.5px] text-text-tertiary" style={{ animationDelay: "240ms" }}>
+          Onboarding a few teams at a time, each with a workspace built around their own stock.
+        </p>
       </div>
       <Reveal className="mt-14 md:mt-20">
         <ProductPreview className="shadow-[var(--shadow-bevel),var(--shadow-400)]" />
@@ -101,11 +102,14 @@ export function StratoSection() {
   );
 }
 
-const INTEGRATIONS = [
-  { icon: ShoppingBag, title: "Shopify exports", body: "Variant SKUs, quantities, prices, cost and images map on their own." },
-  { icon: Store, title: "WooCommerce exports", body: "Stock, sale and regular price, brands, weight and dimensions, plus the product id." },
-  { icon: FileSpreadsheet, title: "CSV and pasted sheets", body: "Any spreadsheet works. Unknown columns become custom fields with one click." },
-  { icon: Plug, title: "MCP for other agents", body: "Every Strato tool is available to any MCP client, gated by a token you set." },
+const CONNECTIONS: Array<{ id: BrandId; name: string; body: string }> = [
+  { id: "shopify", name: "Shopify", body: "Products and orders come in, stock levels and edits go out, and webhooks keep both sides live." },
+  { id: "woocommerce", name: "WooCommerce", body: "The same two-way sync for WordPress stores: categories, prices and status pushed, orders pulled." },
+  { id: "square", name: "Square", body: "The item library comes in by SKU, with in-store counts as opening quantities when you want them." },
+  { id: "clover", name: "Clover", body: "Inventory, prices and product codes from the register, matched by SKU, synced nightly." },
+  { id: "quickbooks", name: "QuickBooks Online", body: "Products and services in by SKU with sales price, purchase cost and reorder point." },
+  { id: "shippo", name: "Shippo", body: "Rates, labels and tracking for every carrier on your Shippo account when you ship an order." },
+  { id: "easypost", name: "EasyPost", body: "Rate-shop the carriers on your account, buy the label and follow the parcel to the door." },
 ];
 
 export function Integrations() {
@@ -113,19 +117,35 @@ export function Integrations() {
     <section id="integrations" className="scroll-mt-16 border-t border-border bg-surface">
       <div className={`${container} py-20 md:py-24`}>
         <Reveal className="max-w-[640px]">
-          <h2 className="text-[30px] font-semibold leading-[1.1] tracking-[-0.02em] text-text md:text-[40px]">Works with what you already run.</h2>
+          <h2 className="text-[30px] font-semibold leading-[1.1] tracking-[-0.02em] text-text md:text-[40px]">Connects to what you already run.</h2>
+          <p className="mt-4 text-[16px] leading-7 text-text-secondary md:text-[17px]">Stores, registers, accounting and carriers plug in under Integrations. Credentials are checked with the platform and kept on the server, never in the browser.</p>
         </Reveal>
-        <div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-          {INTEGRATIONS.map(({ icon: Icon, title, body }, i) => (
-            <Reveal key={title} delay={i * 50}>
+        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {CONNECTIONS.map((c, i) => (
+            <Reveal key={c.id} delay={(i % 4) * 50}>
               <div className="flex h-full flex-col rounded-[var(--radius)] bg-bg p-5 shadow-[var(--shadow-bevel)]">
-                <Icon className="h-5 w-5 text-icon" />
-                <h3 className="mt-4 text-[15px] font-semibold text-text">{title}</h3>
-                <p className="mt-1 text-[13.5px] leading-6 text-text-secondary">{body}</p>
+                <div className="flex items-center gap-3">
+                  <BrandMark id={c.id} size={28} />
+                  <h3 className="text-[15px] font-semibold text-text">{c.name}</h3>
+                </div>
+                <p className="mt-3 text-[13.5px] leading-6 text-text-secondary">{c.body}</p>
               </div>
             </Reveal>
           ))}
+          <Reveal delay={150}>
+            <div className="flex h-full flex-col justify-center gap-3 rounded-[var(--radius)] border border-dashed border-border p-5">
+              <p className="flex items-start gap-3 text-[13.5px] leading-6 text-text-secondary">
+                <FileSpreadsheet className="mt-1 h-4 w-4 shrink-0 text-icon" />
+                Any spreadsheet imports: columns map themselves and unknown ones become custom fields.
+              </p>
+              <p className="flex items-start gap-3 text-[13.5px] leading-6 text-text-secondary">
+                <Plug className="mt-1 h-4 w-4 shrink-0 text-icon" />
+                Other agents reach every Strato tool over MCP, behind a token you set.
+              </p>
+            </div>
+          </Reveal>
         </div>
+        <p className="mt-6 text-[12.5px] text-text-tertiary">Brand names and marks belong to their owners and appear only to show that the connection exists.</p>
       </div>
     </section>
   );
@@ -143,7 +163,7 @@ export function PilotSteps() {
       <div className={`${container} grid gap-10 py-20 md:py-28 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16`}>
         <Reveal>
           <h2 className="text-[30px] font-semibold leading-[1.1] tracking-[-0.02em] text-text md:text-[40px]">From spreadsheet to live workspace in an afternoon.</h2>
-          <p className="mt-4 text-[16px] leading-7 text-text-secondary md:text-[17px]">Pilots start with your own data, not a tutorial.</p>
+          <p className="mt-4 text-[16px] leading-7 text-text-secondary md:text-[17px]">Onboarding starts with your own data, not a tutorial.</p>
         </Reveal>
         <ol className="flex flex-col">
           {STEPS.map(({ icon: Icon, title, body }, i) => (
@@ -165,104 +185,41 @@ export function PilotSteps() {
   );
 }
 
-export function Pricing({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
-  const plan = FOUNDING_PLAN;
-  const price = (n: number) => formatMoney(n, plan.currency).replace(/\.00$/, "");
+const WAITLIST_POINTS = [
+  "Tell us what you make, sell and ship, and what you track it in today.",
+  "We set up a workspace around it, import your data with you, and connect the stores, registers and carriers you use.",
+  "You get a system that fits your business, and a direct line to the people building it.",
+];
+
+export function Waitlist() {
   return (
-    <section id="pricing" className="scroll-mt-16 border-t border-border bg-surface">
+    <section id="waitlist" className="scroll-mt-16 border-t border-border bg-surface">
       <div className={`${container} grid gap-12 py-20 md:py-28 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16`}>
         <Reveal>
-          <div className="text-[12px] font-[550] uppercase tracking-[0.08em] text-text-tertiary">Pricing</div>
-          <h2 className="mt-3 text-[30px] font-semibold leading-[1.1] tracking-[-0.02em] text-text md:text-[40px]">One plan. A founding price for early teams.</h2>
+          <div className="text-[12px] font-[550] uppercase tracking-[0.08em] text-text-tertiary">Waitlist</div>
+          <h2 className="mt-3 text-[30px] font-semibold leading-[1.1] tracking-[-0.02em] text-text md:text-[40px]">Built around your stock, not a template.</h2>
           <p className="mt-4 text-[16px] leading-7 text-text-secondary md:text-[17px]">
-            cumulusOS is {price(plan.listMonthly)} a month for the whole company. Teams that join now pay {price(plan.monthly)}, keep that price for as long as they stay subscribed, and get every version we ship.
+            We are onboarding a few teams at a time and shaping each workspace to the business behind it: your part numbers and BOMs, the stores and registers you sell through, the carriers you ship with, and the reports you actually read.
           </p>
-          <ul className="mt-8 flex flex-col gap-3 text-[14px] text-text-secondary">
-            <li className="flex gap-3">
-              <Check className="mt-1 h-4 w-4 shrink-0 text-success" />
-              No per-seat fees. Add the whole floor, the office and your accountant.
-            </li>
-            <li className="flex gap-3">
-              <Check className="mt-1 h-4 w-4 shrink-0 text-success" />
-              Billed monthly. Cancel any time from Settings.
-            </li>
-            <li className="flex gap-3">
-              <Check className="mt-1 h-4 w-4 shrink-0 text-success" />
-              Create your account free, then subscribe when you set up your company&apos;s workspace.
-            </li>
+          <ul className="mt-8 flex flex-col gap-3 text-[14px] leading-6 text-text-secondary">
+            {WAITLIST_POINTS.map((p) => (
+              <li key={p} className="flex gap-3">
+                <Check className="mt-1 h-4 w-4 shrink-0 text-success" />
+                {p}
+              </li>
+            ))}
           </ul>
         </Reveal>
         <Reveal delay={100}>
           <div className="rounded-[var(--radius-lg)] bg-bg p-6 shadow-[var(--shadow-bevel),var(--shadow-card)] md:p-8">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <Badge tone="accent" size="large">
-                {plan.name}
-              </Badge>
-              <Badge tone="success" size="large">
-                {planSavingsPct(plan)}% off
-              </Badge>
+            <h3 className="text-[20px] font-semibold tracking-[-0.01em] text-text">Join the waitlist</h3>
+            <p className="mt-1.5 text-[14px] leading-6 text-text-secondary">A few lines about your business is plenty. We come back with questions, then build.</p>
+            <div className="mt-6">
+              <WaitlistForm />
             </div>
-            <div className="mt-6 flex flex-wrap items-end gap-x-3 gap-y-1">
-              <span className="text-[52px] font-semibold leading-none tracking-[-0.03em] text-text">{price(plan.monthly)}</span>
-              <span className="pb-1.5 text-[15px] text-text-secondary">per month</span>
-              <span className="pb-1.5 text-[19px] text-text-tertiary line-through decoration-[1.5px]">{price(plan.listMonthly)}</span>
-            </div>
-            <p className="mt-3 text-[15px] font-medium text-text">{plan.blurb}</p>
-            <ul className="mt-6 flex flex-col gap-2.5">
-              {plan.features.map((f) => (
-                <li key={f} className="flex gap-3 text-[14px] leading-6 text-text-secondary">
-                  <Check className="mt-1 h-4 w-4 shrink-0 text-success" />
-                  {f}
-                </li>
-              ))}
-            </ul>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-              <Button variant="primary" size="lg" href="/workspaces/new" iconRight={<ArrowRight />}>
-                Become a founding member
-              </Button>
-              <SessionCta runtimeConfig={runtimeConfig} placement="pricing" />
-            </div>
-            <p className="mt-4 flex items-center gap-1.5 text-[12.5px] text-text-tertiary">
-              <Lock className="h-3.5 w-3.5" /> Billed monthly in {plan.currency}. Card details are handled by Stripe, never by cumulusOS.
-            </p>
           </div>
         </Reveal>
       </div>
     </section>
   );
 }
-
-export function MailingList() {
-  return (
-    <section id="news" className="scroll-mt-16 border-t border-border">
-      <div className={`${container} py-14 md:py-16`}>
-        <Reveal className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
-          <div className="max-w-[520px]">
-            <h2 className="text-[24px] font-semibold leading-[1.15] tracking-[-0.02em] text-text md:text-[28px]">Follow the build.</h2>
-            <p className="mt-3 text-[15px] leading-6 text-text-secondary">New integrations, what Strato learned to do this month, and pilot stories. No more than one email a month; unsubscribe from any of them.</p>
-          </div>
-          <div className="w-full md:max-w-[460px]">
-            <MailingListForm />
-          </div>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
-export function FinalCta({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
-  return (
-    <section id="start" className="scroll-mt-16 border-t border-border bg-surface">
-      <div className={`${container} py-20 md:py-24`}>
-        <Reveal className="flex flex-col items-start gap-8 md:flex-row md:items-end md:justify-between">
-          <div className="max-w-[560px]">
-            <h2 className="text-[30px] font-semibold leading-[1.1] tracking-[-0.02em] text-text md:text-[40px]">Start with your own data.</h2>
-            <p className="mt-4 text-[16px] leading-7 text-text-secondary md:text-[17px]">Create a workspace, import a sheet, and see the first proposal from Strato in minutes.</p>
-          </div>
-          <SessionCta runtimeConfig={runtimeConfig} placement="band" />
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-

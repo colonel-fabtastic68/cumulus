@@ -60,6 +60,15 @@ export interface AdminSubscriber {
   createdAt: string;
 }
 
+export interface AdminWaitlistEntry {
+  email: string;
+  company?: string;
+  needs?: string;
+  source: string;
+  news: boolean;
+  createdAt: string;
+}
+
 export interface AdminOverview {
   generatedAt: string;
   accounts: AdminAccount[];
@@ -67,6 +76,7 @@ export interface AdminOverview {
   subscriptions: AdminSubscription[];
   feedback: AdminFeedback[];
   mailingList: AdminSubscriber[];
+  waitlist: AdminWaitlistEntry[];
 }
 
 async function countOf(db: Firestore, path: string): Promise<number> {
@@ -79,7 +89,7 @@ async function countOf(db: Firestore, path: string): Promise<number> {
 }
 
 export async function buildAdminOverview(db: Firestore): Promise<AdminOverview> {
-  const [users, workspaces, subs, notes, list] = await Promise.all([db.collection("users").get(), db.collection("workspaces").get(), db.collection("subscriptions").get(), db.collection("feedback").orderBy("createdAt", "desc").limit(200).get(), db.collection("mailingList").orderBy("createdAt", "desc").limit(2000).get()]);
+  const [users, workspaces, subs, notes, list, wait] = await Promise.all([db.collection("users").get(), db.collection("workspaces").get(), db.collection("subscriptions").get(), db.collection("feedback").orderBy("createdAt", "desc").limit(200).get(), db.collection("mailingList").orderBy("createdAt", "desc").limit(2000).get(), db.collection("waitlist").orderBy("createdAt", "desc").limit(2000).get()]);
 
   const accounts: AdminAccount[] = users.docs
     .map((d) => d.data() as UserProfile)
@@ -139,5 +149,10 @@ export async function buildAdminOverview(db: Firestore): Promise<AdminOverview> 
     return { email: m.email, subscribed: m.subscribed !== false, source: m.source ?? "landing", createdAt: m.createdAt };
   });
 
-  return { generatedAt: new Date().toISOString(), accounts, workspaces: out, subscriptions, feedback, mailingList };
+  const waitlist: AdminWaitlistEntry[] = wait.docs.map((d) => {
+    const w = d.data() as AdminWaitlistEntry;
+    return { email: w.email, company: w.company, needs: w.needs, source: w.source ?? "landing", news: w.news === true, createdAt: w.createdAt };
+  });
+
+  return { generatedAt: new Date().toISOString(), accounts, workspaces: out, subscriptions, feedback, mailingList, waitlist };
 }

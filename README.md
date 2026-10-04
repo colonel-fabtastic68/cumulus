@@ -90,6 +90,8 @@ Channels and carriers run through the app's own API routes, so they only work in
 
 Credentials are verified with the platform on connect, then stored in `workspaces/{ws}/secrets/{integration}`, which `firestore.rules` denies to every client (redeploy the rules after pulling this: `firebase deploy --only firestore:rules`). Webhooks are registered at connect time against `APP_URL` (or the request's origin). `vercel.json` schedules a daily reconciliation at `/api/integrations/cron`; set `CRON_SECRET` on Vercel so only the scheduler can call it. What a channel syncs is per connection: products in, orders in, stock out, accept counts from the store, and which cumulusOS location mirrors it.
 
+The home page ends in a waitlist instead of a price list: `POST /api/waitlist` keeps one document per address in `waitlist` (server-only, like `mailingList`; redeploy the rules), with the company and what they need, and the admin page lists and exports it. There is no sign-up call to action on the site; `/sign-up` still works for invited teammates. The public demo (`/demo`) and the booking page (`/book`) are no longer linked from the site and are marked noindex, so share those links directly.
+
 ## Architecture
 
 ```

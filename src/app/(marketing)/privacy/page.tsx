@@ -7,7 +7,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy policy"
-      updated="30 September 2026"
+      updated="4 October 2026"
       intro="cumulusOS is inventory software for small product teams. This policy explains what we collect when you use it, why we hold it, who processes it on our behalf, and how to get it back or have it deleted."
     >
       <LegalSection heading="What we collect">
@@ -18,6 +18,7 @@ export default function PrivacyPage() {
             "Billing details: your subscription status, renewal date and Stripe customer reference. Card numbers go straight to Stripe and never reach our servers.",
             "Technical data: request logs, IP address, browser type and error reports, kept so we can keep the service running and secure.",
             "Messages you send to Strato, our assistant, and the workspace records needed to answer them.",
+            "Waitlist and mailing-list entries: the email address, company and needs you enter on the home page, used to get in touch about a workspace and, only if you ask for it, to send product news.",
           ]}
         />
       </LegalSection>
