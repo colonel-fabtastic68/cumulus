@@ -44,7 +44,7 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ error: "Bad request" }, { status: 400 });
   }
-  const catalog = input.catalog.map((c) => `${c.sku} | ${c.name}${c.category ? ` | ${c.category}` : ""}${c.type === "assembly" ? " | assembly" : ""} | price ${c.price} | cost ${c.unitCost} | on hand ${c.onHand}${c.unit ? ` ${c.unit}` : ""}${c.bom?.length ? ` | BOM: ${c.bom.map((b) => `${b.sku}×${b.qty}`).join(", ")}` : ""}`).join("\n");
+  const catalog = input.catalog.map((c) => `${c.sku} | ${c.name}${c.category ? ` | ${c.category}` : ""}${c.type === "assembly" ? " | assembly" : c.type === "kit" ? " | kit" : ""} | price ${c.price} | cost ${c.unitCost} | on hand ${c.onHand}${c.unit ? ` ${c.unit}` : ""}${c.bom?.length ? ` | BOM: ${c.bom.map((b) => `${b.sku}×${b.qty}`).join(", ")}` : ""}`).join("\n");
   try {
     const draft = await structured({
       schema: draftSchema,

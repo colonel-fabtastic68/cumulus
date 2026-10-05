@@ -9,6 +9,7 @@ import { canWrite, useCurrentUser } from "@/lib/auth";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { formatMoney, formatNumber } from "@/lib/format";
 import { matches } from "@/lib/utils";
+import { customFieldsFor } from "@/lib/catalog";
 import { Badge, Button, EmptyState, Page, SearchField, Table, type Column } from "@/components/ui";
 import { NewSupplierModal, SupplierDrawer, formatLeadTime, statsFor, useSupplierStats, websiteLabel } from "@/components/suppliers";
 
@@ -25,8 +26,9 @@ export default function SuppliersPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const statsById = useSupplierStats(items);
+  const fieldDefs = customFieldsFor(settings, "suppliers");
 
-  const rows = useMemo(() => suppliers.filter((s) => matches(query, s.name, s.email, s.phone, s.website, s.terms, s.notes)), [suppliers, query]);
+  const rows = useMemo(() => suppliers.filter((s) => matches(query, s.name, s.email, s.phone, s.website, s.terms, s.notes, ...Object.values(s.attributes ?? {}))), [suppliers, query]);
 
   const selectedSkus = useMemo(() => (selectedId ? statsFor(statsById, selectedId).items.map((i) => i.sku) : undefined), [statsById, selectedId]);
 
@@ -77,8 +79,16 @@ export default function SuppliersPage() {
         width: "130px",
       },
       { key: "value", header: "Stock value", render: (s) => formatMoney(statsFor(statsById, s.id).value, settings.currency), sortValue: (s) => statsFor(statsById, s.id).value, align: "right", width: "120px", hideBelow: "md" },
+      // Custom fields from Settings → Catalog, one column each.
+      ...fieldDefs.map<Column<Supplier>>((f) => ({
+        key: `attr:${f.key}`,
+        header: f.label,
+        align: f.type === "number" ? "right" : "left",
+        render: (s) => (s.attributes?.[f.key] ? <span className="text-text-secondary">{s.attributes[f.key]}</span> : <span className="text-text-tertiary">—</span>),
+        sortValue: (s) => (f.type === "number" ? Number(s.attributes?.[f.key] ?? "") || null : (s.attributes?.[f.key] ?? "")),
+      })),
     ],
-    [statsById, settings.currency],
+    [statsById, settings.currency, fieldDefs],
   );
 
   const newSupplierButton = writable ? (

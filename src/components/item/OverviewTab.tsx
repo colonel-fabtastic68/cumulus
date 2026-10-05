@@ -5,12 +5,15 @@ import type { Item, Member, StockMovement, Supplier } from "@/lib/types";
 import { formatDate, formatMoney, formatPercent, formatRelative, pluralize } from "@/lib/format";
 import { Badge, DescriptionList } from "@/components/ui";
 import { useSettings } from "@/lib/store/provider";
+import { customFieldsFor } from "@/lib/catalog";
 import { Tile } from "./Tile";
 import { MovementSparkline } from "./MovementSparkline";
 import { supplierHref } from "./utils";
 
 export function OverviewTab({ item, supplier, movements, membersById }: { item: Item; supplier?: Supplier; movements: StockMovement[]; membersById: Map<string, Member> }) {
-  const { currency } = useSettings();
+  const settings = useSettings();
+  const { currency } = settings;
+  const fieldDefs = customFieldsFor(settings, "items");
   const margin = item.price > 0 ? (item.price - item.unitCost) / item.price : null;
   const updatedBy = item.updatedBy ? membersById.get(item.updatedBy)?.name : undefined;
   const leadTime = item.leadTimeDays ?? supplier?.leadTimeDays;
@@ -64,7 +67,11 @@ export function OverviewTab({ item, supplier, movements, membersById }: { item: 
       : []),
     ...(item.externalIds?.woocommerce ? [{ label: "WooCommerce id", value: <span className="font-mono text-[12.5px]">{item.externalIds.woocommerce}</span> }] : []),
     ...(item.externalIds?.shopify ? [{ label: "Shopify id", value: <span className="font-mono text-[12.5px]">{item.externalIds.shopify}</span> }] : []),
-    ...Object.entries(item.attributes ?? {}).map(([k, v]) => ({ label: k, value: v })),
+    // Custom fields by their label, then any attribute an import brought in that is not defined in Settings.
+    ...fieldDefs.map((f) => ({ label: f.label, value: item.attributes?.[f.key] || "—" })),
+    ...Object.entries(item.attributes ?? {})
+      .filter(([k, v]) => v && !fieldDefs.some((f) => f.key === k))
+      .map(([k, v]) => ({ label: k, value: v })),
     {
       label: "Tags",
       value:
@@ -93,7 +100,7 @@ export function OverviewTab({ item, supplier, movements, membersById }: { item: 
   return (
     <div className="grid grid-cols-1 gap-6 @3xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <div className="grid grid-cols-3 gap-3 rounded-[var(--radius)] border border-border bg-surface-subdued p-3 @3xl:col-span-2">
-        <Tile label="Cost" value={formatMoney(item.unitCost, currency)} hint="standard cost" />
+        <Tile label="Cost" value={formatMoney(item.unitCost, currency)} hint={item.costMode === "bom" ? (item.type === "kit" ? "from contents" : "from BOM") : "standard cost"} />
         <Tile label="Price" value={item.price > 0 ? formatMoney(item.price, currency) : "—"} hint={item.salePrice ? `sale ${formatMoney(item.salePrice, currency)}` : "list price"} />
         <Tile label="Margin" value={margin === null ? "—" : formatPercent(margin * 100)} hint={margin === null ? "set a price" : `${formatMoney(item.price - item.unitCost, currency)} per unit`} tone={margin === null ? "default" : margin < 0 ? "critical" : margin < 0.2 ? "warning" : "success"} />
       </div>

@@ -3,14 +3,14 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import type { Item } from "@/lib/types";
-import { DEFAULT_STOCK_ALERTS, isLowStock, isNearLowStock, lowStockLine, qtyAt } from "@/lib/inventory";
+import { DEFAULT_STOCK_ALERTS, isLowStock, isNearLowStock, kitAvailable, lowStockLine, qtyAt } from "@/lib/inventory";
 import type { StockAlertRule } from "@/lib/types";
 import { itemBinAt } from "@/lib/locations";
 import { formatMoney, formatNumber, formatQty, formatRelative } from "@/lib/format";
 import { clamp, cn } from "@/lib/utils";
 import { Badge, StatusBadge, type Column } from "@/components/ui";
-import { useSettings } from "@/lib/store/provider";
-import { customFieldsFor } from "@/lib/catalog";
+import { useItems, useSettings } from "@/lib/store/provider";
+import { customFieldsFor, itemTypeLabel } from "@/lib/catalog";
 
 /** On-hand quantity with a "Low" flag and a tiny min/max level bar. */
 /** Red below the low line (workspace rule), amber within the early-warning band or between min and max, green at max or above. */
@@ -76,6 +76,7 @@ function optionalNumber(n?: number): string {
 
 export function useInventoryColumns({ currency, supplierName, location }: { currency: string; supplierName: (id?: string) => string | undefined; location?: ColumnLocation }): Column<Item>[] {
   const settings = useSettings();
+  const items = useItems();
   const customTypes = settings.catalog?.itemTypes;
   const customFields = customFieldsFor(settings, "items");
   const rule = settings.stockAlerts ?? DEFAULT_STOCK_ALERTS;
@@ -127,7 +128,7 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
               Assembly
             </span>
           ) : (
-            <Badge tone={i.type === "assembly" ? "info" : "default"}>{i.type === "assembly" ? "Assembly" : i.type === "part" ? "Part" : (customTypes?.find((t) => t.id === i.type)?.label ?? i.type)}</Badge>
+            <Badge tone={i.type === "assembly" ? "info" : i.type === "kit" ? "accent" : "default"}>{itemTypeLabel({ catalog: { itemTypes: customTypes } }, i.type)}</Badge>
           ),
       },
       {
@@ -137,7 +138,17 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
         maxWidth: location ? 150 : 132,
         align: "right",
         sortValue: (i) => (location ? qtyAt(i, location.id, location.homeId) : i.onHand),
-        render: (i) => (location ? <AtLocationCell item={i} location={location} /> : <StockLevelCell item={i} rule={rule} />),
+        render: (i) =>
+          i.type === "kit" ? (
+            <span className="flex flex-col items-end" title="Kits that can be picked from the parts on hand">
+              <span className="font-medium text-text">{formatQty(kitAvailable(items, i), i.unit)}</span>
+              <span className="text-[11px] text-text-tertiary">from parts</span>
+            </span>
+          ) : location ? (
+            <AtLocationCell item={i} location={location} />
+          ) : (
+            <StockLevelCell item={i} rule={rule} />
+          ),
       },
       {
         key: "minMax",
@@ -239,6 +250,6 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
         render: (i) => (i.attributes?.[f.key] ? <span className="block truncate">{i.attributes[f.key]}</span> : <span className="text-text-tertiary">—</span>),
       })),
     ],
-    [currency, supplierName, location, customTypes, customFields, rule],
+    [currency, supplierName, location, customTypes, customFields, rule, items],
   );
 }

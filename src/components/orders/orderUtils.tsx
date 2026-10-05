@@ -2,7 +2,7 @@
 
 import type { Item, OrderSource, SalesOrder } from "@/lib/types";
 import { formatMoney } from "@/lib/format";
-import { openQty } from "@/lib/inventory";
+import { kitAvailable, openQty } from "@/lib/inventory";
 import { round, sum } from "@/lib/utils";
 import { Badge, type BadgeTone } from "@/components/ui";
 
@@ -65,7 +65,8 @@ export function orderAvailability(order: SalesOrder, byId: Map<string, Item>): O
     const need = openQty(line);
     if (need <= 0) continue;
     const item = byId.get(line.itemId);
-    const have = item?.onHand ?? 0;
+    // A kit ships from its parts, so what is "on hand" is how many kits the parts cover.
+    const have = item ? (item.type === "kit" ? kitAvailable(Array.from(byId.values()), item) : item.onHand) : 0;
     if (have < need) {
       short.push({ sku: item?.sku ?? line.itemId, have, need, isAssembly: !!item && item.type === "assembly" && item.bom.length > 0 });
     }

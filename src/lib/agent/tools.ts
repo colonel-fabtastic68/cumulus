@@ -15,7 +15,7 @@ const itemFilter = z
   .object({
     query: z.string().optional().describe("Free text matched against SKU, name, description, category, tags"),
     category: z.string().optional(),
-    type: z.enum(["part", "assembly"]).optional(),
+    type: z.enum(["part", "assembly", "kit"]).optional(),
     status: z.enum(["active", "inactive", "superseded"]).optional(),
     supplier: z.string().optional().describe("Supplier name (partial match)"),
     belowMin: z.boolean().optional().describe("Only items below their minimum quantity"),
@@ -30,7 +30,7 @@ const itemFields = z
     name: z.string().optional(),
     description: z.string().optional(),
     category: z.string().optional(),
-    type: z.enum(["part", "assembly"]).optional(),
+    type: z.enum(["part", "assembly", "kit"]).optional(),
     unit: z.string().optional(),
     status: z.enum(["active", "inactive", "superseded"]).optional(),
     tags: z.array(z.string()).optional(),
@@ -160,7 +160,7 @@ export const agentTools = {
         z.object({
           sku: z.string(),
           name: z.string(),
-          type: z.enum(["part", "assembly"]).optional(),
+          type: z.enum(["part", "assembly", "kit"]).optional(),
           category: z.string().optional(),
           description: z.string().optional(),
           unit: z.string().optional(),
@@ -210,7 +210,7 @@ export const agentTools = {
     inputSchema: z.object({ sku: z.string(), qty: z.number(), consumeSubassemblies: z.boolean().optional(), note: z.string().optional() }),
   }),
   updateBom: tool({
-    description: "Replace or modify the bill of materials for an assembly. Use mode 'replace' to set the full list, 'merge' to add/update lines, 'remove' to drop lines.",
+    description: "Replace or modify the bill of materials for an assembly, or the contents of a kit. Use mode 'replace' to set the full list, 'merge' to add/update lines, 'remove' to drop lines.",
     inputSchema: z.object({
       sku: z.string(),
       mode: z.enum(["replace", "merge", "remove"]).default("merge"),

@@ -7,6 +7,7 @@ import type { Customer } from "@/lib/types";
 import { Badge, Button, ConfirmDialog, DescriptionList, Drawer, useToast } from "@/components/ui";
 import { canWrite, useCurrentUser } from "@/lib/auth";
 import { customerHistory, deleteCustomer, eraseCustomerData } from "@/lib/customers";
+import { customFieldsFor } from "@/lib/catalog";
 import { formatDate, formatMoney, formatRelative, pluralize } from "@/lib/format";
 import { useCollection, useSettings, useStore } from "@/lib/store/provider";
 import { CustomerModal } from "./CustomerModal";
@@ -16,7 +17,9 @@ export function CustomerDrawer({ customer, onClose }: { customer: Customer | nul
   const store = useStore();
   const user = useCurrentUser();
   const toast = useToast();
-  const { currency } = useSettings();
+  const settings = useSettings();
+  const { currency } = settings;
+  const fieldDefs = customFieldsFor(settings, "customers");
   const orders = useCollection("orders");
   const rmas = useCollection("rmas");
   const quotes = useCollection("quotes");
@@ -78,6 +81,7 @@ export function CustomerDrawer({ customer, onClose }: { customer: Customer | nul
                 { label: "Company", value: customer.company ?? "—" },
                 { label: "Address", value: customer.address ? [customer.address.street1, customer.address.street2, `${customer.address.city}${customer.address.state ? ", " + customer.address.state : ""} ${customer.address.zip}`, customer.address.country].filter(Boolean).join(", ") : "—" },
                 { label: "Tags", value: customer.tags?.length ? <span className="flex flex-wrap gap-1">{customer.tags.map((t) => <Badge key={t}>{t}</Badge>)}</span> : "—" },
+                ...fieldDefs.map((f) => ({ label: f.label, value: customer.attributes?.[f.key] || "—" })),
                 { label: "Source", value: customer.source ?? "manual" },
                 { label: "Added", value: formatDate(customer.createdAt) },
               ]}

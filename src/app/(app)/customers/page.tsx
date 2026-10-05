@@ -7,7 +7,7 @@ import { useAgent } from "@/components/agent/AgentProvider";
 import { Badge, Button, Page, QueryParamEffect, SearchField, Table, type Column } from "@/components/ui";
 import { canWrite, useCurrentUser } from "@/lib/auth";
 import { customerHistory, saveCustomer } from "@/lib/customers";
-import { priceGroupLabel, priceGroups } from "@/lib/catalog";
+import { customFieldsFor, priceGroupLabel, priceGroups } from "@/lib/catalog";
 import { formatMoney, formatRelative } from "@/lib/format";
 import { useCollection, useSettings, useStore } from "@/lib/store/provider";
 import { CustomerDrawer, CustomerModal } from "@/components/customers";
@@ -21,6 +21,7 @@ export default function CustomersPage() {
   const { currency } = settings;
   const store = useStore();
   const groups = priceGroups(settings);
+  const fieldDefs = customFieldsFor(settings, "customers");
   const user = useCurrentUser();
   const writable = canWrite(user);
   const { setPageContext } = useAgent();
@@ -35,7 +36,7 @@ export default function CustomersPage() {
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return customers
-      .filter((c) => !needle || [c.name, c.email, c.phone, c.company, ...(c.tags ?? [])].some((v) => v?.toLowerCase().includes(needle)))
+      .filter((c) => !needle || [c.name, c.email, c.phone, c.company, ...(c.tags ?? []), ...Object.values(c.attributes ?? {})].some((v) => v?.toLowerCase().includes(needle)))
       .map((c) => ({ c, h: customerHistory(c, { orders, rmas, quotes }) }));
   }, [customers, orders, rmas, quotes, q]);
   const selected = useMemo(() => customers.find((c) => c.id === selectedId) ?? null, [customers, selectedId]);
@@ -74,6 +75,14 @@ export default function CustomersPage() {
     { key: "revenue", header: "Revenue", align: "right", render: (r) => formatMoney(r.h.revenue, currency), sortValue: (r) => r.h.revenue },
     { key: "last", header: "Last order", render: (r) => <span className="text-text-secondary">{r.h.lastOrderAt ? formatRelative(r.h.lastOrderAt) : "—"}</span>, sortValue: (r) => r.h.lastOrderAt ?? "" },
     { key: "tags", header: "Tags", render: (r) => (r.c.tags?.length ? <span className="flex flex-wrap gap-1">{r.c.tags.map((t) => <Badge key={t}>{t}</Badge>)}</span> : null) },
+    // Custom fields from Settings → Catalog, one column each.
+    ...fieldDefs.map<Column<(typeof rows)[number]>>((f) => ({
+      key: `attr:${f.key}`,
+      header: f.label,
+      align: f.type === "number" ? "right" : "left",
+      render: (r) => (r.c.attributes?.[f.key] ? <span className="text-text-secondary">{r.c.attributes[f.key]}</span> : <span className="text-text-tertiary">—</span>),
+      sortValue: (r) => (f.type === "number" ? Number(r.c.attributes?.[f.key] ?? "") || null : (r.c.attributes?.[f.key] ?? "")),
+    })),
   ];
 
   return (

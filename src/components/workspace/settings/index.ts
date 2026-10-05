@@ -11,5 +11,7 @@ export * from "./QuotingSection";
 export * from "./BillingSection";
 export * from "./sections";
 export * from "./CatalogSection";
+export * from "./CategoriesSection";
+export * from "./NotificationsSection";
 export * from "./StockAlertsForm";
 export * from "./TimeMachineSection";

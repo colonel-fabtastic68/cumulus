@@ -8,7 +8,7 @@ import type { Table } from "./formats";
  * by category with subtotals, then every part at every level, then a summary.
  */
 
-const typeLabel = (i: Item) => (i.type === "assembly" ? "BOM" : "Part");
+const typeLabel = (i: Item) => (i.type === "assembly" ? "BOM" : i.type === "kit" ? "Kit" : "Part");
 const groupOf = (i: Item) => i.category?.trim() || "Uncategorized";
 
 /**
@@ -23,7 +23,7 @@ export function bomStructureTable(assembly: Item, items: Item[]): Table {
       const comp = byId.get(line.itemId);
       if (!comp) continue;
       const perUnit = round(line.qty * mult, 4);
-      const isSub = comp.type === "assembly" && comp.bom.length > 0 && !path.has(comp.id);
+      const isSub = (comp.type === "assembly" || comp.type === "kit") && comp.bom.length > 0 && !path.has(comp.id);
       rows.push([depth + 1, `${"    ".repeat(depth)}${comp.sku}`, comp.name, isSub ? "BOM" : typeLabel(comp), line.qty, perUnit, comp.unit, line.wastePct ?? "", comp.unitCost, round(perUnit * comp.unitCost), comp.onHand]);
       if (isSub) visit(comp, perUnit, depth + 1, new Set([...path, comp.id]));
     }

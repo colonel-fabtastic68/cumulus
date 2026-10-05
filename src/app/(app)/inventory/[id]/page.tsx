@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Copy, Hammer, MoreHorizontal, Pencil, Power, Replace, SlidersHorizontal, Sparkles, Trash2 } from "lucide-react";
 import { deleteItems, isLowStock, updateItem } from "@/lib/inventory";
+import { itemTypeLabel } from "@/lib/catalog";
 import { useCollection, useItems, useSettings, useStore } from "@/lib/store/provider";
 import { canWrite, useCurrentUser } from "@/lib/auth";
 import { Badge, Button, Card, ConfirmDialog, EmptyState, IconButton, Menu, Page, PageLayout, QueryParamEffect, StatusBadge, Tabs, useToast } from "@/components/ui";
@@ -87,6 +88,7 @@ export default function ItemDetailPage() {
 
   const writable = canWrite(user);
   const isAssembly = item.type === "assembly";
+  const withBom = isAssembly || item.type === "kit";
   const low = isLowStock(item, settings.stockAlerts);
 
   const toggleActive = async () => {
@@ -116,7 +118,7 @@ export default function ItemDetailPage() {
     { value: "images", label: "Images", count: itemImages(item).length || undefined },
     { value: "locations", label: "Locations", count: item.stock ? Object.values(item.stock).filter((s) => s.qty !== 0).length : undefined },
     { value: "crossRefs", label: "Cross-references", count: item.crossRefs?.length || undefined },
-    ...(isAssembly ? [{ value: "bom" as Tab, label: "BOM", count: item.bom.length }] : [{ value: "bom" as Tab, label: "BOM" }]),
+    ...(withBom ? [{ value: "bom" as Tab, label: item.type === "kit" ? "Contents" : "BOM", count: item.bom.length }] : [{ value: "bom" as Tab, label: "BOM" }]),
     { value: "whereUsed", label: "Where used", count: usedIn },
     { value: "history", label: "Stock history", count: itemMovements.length },
     { value: "batches", label: "Batches", count: lotsOnShelf },
@@ -131,7 +133,7 @@ export default function ItemDetailPage() {
       titleMeta={
         <>
           <StatusBadge status={item.status} />
-          <Badge tone={isAssembly ? "info" : "default"}>{isAssembly ? "Assembly" : "Part"}</Badge>
+          <Badge tone={isAssembly ? "info" : item.type === "kit" ? "accent" : "default"}>{itemTypeLabel(settings, item.type)}</Badge>
           {low && <Badge tone="warning">Low stock</Badge>}
           {item.category && <Badge>{item.category}</Badge>}
         </>

@@ -30,7 +30,8 @@ export function parseLenientNumber(raw: string | undefined): NumberParse {
 export function normalizeItemType(raw: string | undefined): Item["type"] | undefined {
   const s = (raw ?? "").trim().toLowerCase();
   if (!s) return undefined;
-  if (/assembl|assy|kit|bundle|finished|\bfg\b|build|product/.test(s)) return "assembly";
+  if (/\bkit|bundle/.test(s)) return "kit";
+  if (/assembl|assy|finished|\bfg\b|build|product/.test(s)) return "assembly";
   return "part";
 }
 

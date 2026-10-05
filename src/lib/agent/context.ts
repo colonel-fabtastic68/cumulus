@@ -14,7 +14,7 @@ export function buildAgentContext(ws: Pick<WorkspaceSnapshot, "items" | "supplie
   const openRmas = ws.rmas.filter((r) => r.status === "open" || r.status === "inspecting");
   const lines: string[] = [];
   lines.push(`Company: ${settings?.companyName ?? "Unknown"} · Currency: ${settings?.currency ?? "USD"} · Costing: ${COSTING_LABELS[costingMethod(settings)]} · Relieve components: ${settings?.relievePolicy ?? "on_build"} · Track in-use: ${settings?.trackInUse ? "yes" : "no"} · Inactivity window: ${settings?.inactivityDays ?? 120} days`);
-  lines.push(`Items: ${ws.items.length} total (${active.length} active, ${ws.items.filter((i) => i.type === "assembly").length} assemblies) · Inventory value: ${inventoryValue(ws.items).toFixed(2)} · Below min: ${low.length}`);
+  lines.push(`Items: ${ws.items.length} total (${active.length} active, ${ws.items.filter((i) => i.type === "assembly").length} assemblies, ${ws.items.filter((i) => i.type === "kit").length} kits) · Inventory value: ${inventoryValue(ws.items).toFixed(2)} · Below min: ${low.length}`);
   lines.push(`Categories: ${Array.from(cats.entries()).map(([c, n]) => `${c} (${n})`).join(", ")}`);
   lines.push(`Suppliers: ${ws.suppliers.map((s) => `${s.name}${s.leadTimeDays ? ` [${s.leadTimeDays}d]` : ""}`).join(", ") || "none"}`);
   lines.push(`Open orders: ${openOrders.length}${openOrders.length ? ` (${openOrders.slice(0, 5).map((o) => `${o.number} ${o.customer}`).join("; ")})` : ""} · Open RMAs: ${openRmas.length}${openRmas.length ? ` (${openRmas.map((r) => r.number).join(", ")})` : ""}`);

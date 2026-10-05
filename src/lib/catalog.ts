@@ -1,10 +1,11 @@
-import type { CatalogSettings, CustomFieldDef, ItemType, PriceGroup, WorkspaceSettings } from "@/lib/types";
+import type { CatalogSettings, CustomFieldDef, Item, ItemType, PriceGroup, WorkspaceSettings } from "@/lib/types";
 
 /** Workspace vocabulary helpers (Settings → Catalog). */
 
 export const BUILT_IN_ITEM_TYPES: Array<{ id: ItemType; label: string }> = [
   { id: "part", label: "Part" },
-  { id: "assembly", label: "Assembly (has a BOM)" },
+  { id: "assembly", label: "Assembly (built from a BOM)" },
+  { id: "kit", label: "Kit (components picked at shipping)" },
 ];
 
 export function itemTypeOptions(settings: Pick<WorkspaceSettings, "catalog">): Array<{ value: string; label: string }> {
@@ -15,7 +16,23 @@ export function itemTypeOptions(settings: Pick<WorkspaceSettings, "catalog">): A
 export function itemTypeLabel(settings: Pick<WorkspaceSettings, "catalog">, type: string): string {
   if (type === "part") return "Part";
   if (type === "assembly") return "Assembly";
+  if (type === "kit") return "Kit";
   return settings.catalog?.itemTypes?.find((t) => t.id === type)?.label ?? type;
+}
+
+/** The categories kept in Settings → Categories. */
+export function listedCategories(settings: Pick<WorkspaceSettings, "catalog">): string[] {
+  return settings.catalog?.categories ?? [];
+}
+
+/** Every category to offer: the ones kept in Settings and the ones items already carry, sorted, without duplicates. */
+export function categoryOptions(settings: Pick<WorkspaceSettings, "catalog">, items: Array<Pick<Item, "category">>): string[] {
+  const seen = new Map<string, string>();
+  for (const c of [...listedCategories(settings), ...items.map((i) => i.category ?? "")]) {
+    const name = c.trim();
+    if (name && !seen.has(name.toLowerCase())) seen.set(name.toLowerCase(), name);
+  }
+  return Array.from(seen.values()).sort((a, b) => a.localeCompare(b));
 }
 
 export function customFieldsFor(settings: Pick<WorkspaceSettings, "catalog">, kind: "items" | "customers" | "suppliers"): CustomFieldDef[] {
@@ -43,5 +60,5 @@ export function keyFromLabel(label: string): string {
 }
 
 export function emptyCatalog(): Required<CatalogSettings> {
-  return { itemTypes: [], priceGroups: [], customFields: { items: [], customers: [], suppliers: [] } };
+  return { itemTypes: [], categories: [], priceGroups: [], customFields: { items: [], customers: [], suppliers: [] } };
 }

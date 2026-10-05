@@ -10,10 +10,12 @@ import {
   AgentSection,
   BillingSection,
   CatalogSection,
+  CategoriesSection,
   CompanySection,
   DataSection,
   InventoryPolicySection,
   LocationsSection,
+  NotificationsSection,
   QuotingSection,
   ShippingSection,
   TimeMachineSection,
@@ -78,6 +80,9 @@ export default function SettingsPage() {
         <Row id="catalog">
           <CatalogSection key={formKey} settings={settings} readOnly={readOnly} />
         </Row>
+        <Row id="categories">
+          <CategoriesSection settings={settings} readOnly={readOnly} />
+        </Row>
         <Row id="locations">
           <LocationsSection readOnly={readOnly} />
         </Row>
@@ -86,6 +91,9 @@ export default function SettingsPage() {
         </Row>
         <Row id="quoting">
           <QuotingSection key={formKey} settings={settings} readOnly={readOnly} />
+        </Row>
+        <Row id="notifications">
+          <NotificationsSection key={formKey} settings={settings} readOnly={readOnly} />
         </Row>
         <Row id="strato">
           <AgentSection key={formKey} settings={settings} readOnly={readOnly} />
