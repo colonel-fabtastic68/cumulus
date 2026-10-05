@@ -4,12 +4,12 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, Layers, Plus, Trash2 } from "lucide-react";
 import type { BomLine, Item } from "@/lib/types";
-import { buildableQty, explodeBom, rolledUpCost, updateItem, whereUsedDeep } from "@/lib/inventory";
+import { buildableQty, carriesBom, componentCost, costFollowsBom, explodeBom, rolledUpCost, updateItem, whereUsedDeep } from "@/lib/inventory";
 import { useStore } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
 import { formatMoney, formatQty } from "@/lib/format";
 import { cn, round } from "@/lib/utils";
-import { Badge, Button, EmptyState, IconButton, SimpleTable, TextField, Toggle, useToast } from "@/components/ui";
+import { Badge, Button, EmptyState, IconButton, Segmented, SimpleTable, TextField, Toggle, useToast } from "@/components/ui";
 import { ItemPicker } from "@/components/inventory";
 import { ExportBomMenu } from "@/components/builds/ExportBomMenu";
 import { Tile } from "./Tile";
@@ -21,31 +21,33 @@ export function BomTab({ item, items, currency, canEdit }: { item: Item; items: 
   const toast = useToast();
   const [converting, setConverting] = useState(false);
 
-  if (item.type !== "assembly") {
+  if (!carriesBom(item)) {
+    const convert = async (type: "assembly" | "kit") => {
+      setConverting(true);
+      try {
+        await updateItem(store, user, item.id, type === "kit" ? { type, costMode: "bom" } : { type }, type === "kit" ? "Converted to kit" : "Converted to assembly");
+        toast(`${item.sku} is now ${type === "kit" ? "a kit" : "an assembly"}`, "success");
+      } catch (e) {
+        toast(errorMessage(e), "critical");
+      } finally {
+        setConverting(false);
+      }
+    };
     return (
       <EmptyState
         icon={<Layers />}
-        title="This is a part"
-        description="Parts are bought or made without a bill of materials. Convert it to an assembly to define the components it is built from."
+        title="This item has no bill of materials"
+        description="Parts are bought or made as they are. Make it an assembly to build it from components, or a kit whose components are picked from the shelf when it ships."
         action={
           canEdit ? (
-            <Button
-              variant="primary"
-              loading={converting}
-              onClick={async () => {
-                setConverting(true);
-                try {
-                  await updateItem(store, user, item.id, { type: "assembly" }, "Converted to assembly");
-                  toast(`${item.sku} is now an assembly`, "success");
-                } catch (e) {
-                  toast(errorMessage(e), "critical");
-                } finally {
-                  setConverting(false);
-                }
-              }}
-            >
-              Convert to assembly
-            </Button>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button variant="primary" loading={converting} onClick={() => void convert("assembly")}>
+                Convert to assembly
+              </Button>
+              <Button loading={converting} onClick={() => void convert("kit")}>
+                Make it a kit
+              </Button>
+            </div>
           ) : undefined
         }
       />
@@ -80,6 +82,8 @@ function BomEditor({ item, items, currency, canEdit }: { item: Item; items: Item
   const [saving, setSaving] = useState(false);
   const [explodeQty, setExplodeQty] = useState("10");
   const [consumeSub, setConsumeSub] = useState(true);
+  const kit = item.type === "kit";
+  const follows = costFollowsBom(item);
 
   const parsed = useMemo<BomLine[]>(
     () =>
@@ -105,8 +109,8 @@ function BomEditor({ item, items, currency, canEdit }: { item: Item; items: Item
     if (invalid) return toast("Fix the highlighted quantities first", "critical");
     setSaving(true);
     try {
-      await updateItem(store, user, item.id, { bom: parsed, type: "assembly" }, "BOM edited");
-      toast(`Saved BOM for ${item.sku}`, "success");
+      await updateItem(store, user, item.id, { bom: parsed, type: carriesBom(item) ? item.type : "assembly" }, kit ? "Kit contents edited" : "BOM edited");
+      toast(`Saved ${kit ? "contents" : "BOM"} for ${item.sku}`, "success");
     } catch (e) {
       toast(errorMessage(e), "critical");
     } finally {
@@ -123,27 +127,44 @@ function BomEditor({ item, items, currency, canEdit }: { item: Item; items: Item
     }
   };
 
+  // "From BOM" keeps the unit cost at the rolled-up figure from now on; "Set by hand" leaves whatever it is.
+  const setCostMode = async (mode: "manual" | "bom") => {
+    if (mode === (follows ? "bom" : "manual")) return;
+    try {
+      await updateItem(store, user, item.id, mode === "bom" ? { costMode: "bom", unitCost: rolledUpCost(items, item) } : { costMode: "manual" }, mode === "bom" ? `Unit cost follows the ${kit ? "contents" : "BOM"}` : "Unit cost set by hand");
+      toast(mode === "bom" ? `${item.sku} unit cost now follows its ${kit ? "contents" : "BOM"}` : `${item.sku} unit cost is set by hand again`, "success");
+    } catch (e) {
+      toast(errorMessage(e), "critical");
+    }
+  };
+
   const update = (idx: number, patch: Partial<DraftLine>) => setDraft((d) => d.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
 
   return (
     <div className="flex flex-col gap-5">
       <div className="grid grid-cols-2 gap-x-6 gap-y-4 @md:grid-cols-4">
-        <Tile label="Components" value={parsed.length} hint={`${parsed.filter((l) => byId.get(l.itemId)?.type === "assembly").length} sub-assemblies`} />
-        <Tile label="Rolled-up cost" value={formatMoney(rolled, currency)} hint={dirty ? "From the unsaved draft" : "Recursive across sub-assemblies"} />
+        <Tile label="Components" value={parsed.length} hint={`${parsed.filter((l) => carriesBom(byId.get(l.itemId) ?? { type: "part" })).length} with a BOM of their own`} />
+        <Tile label="Rolled-up cost" value={formatMoney(rolled, currency)} hint={dirty ? "From the unsaved draft" : "Components × quantity, waste included"} />
         <Tile
-          label="Standard cost"
+          label="Unit cost"
           value={formatMoney(item.unitCost, currency)}
-          hint={Math.abs(item.unitCost - rolled) > 0.005 ? `${item.unitCost > rolled ? "+" : "−"}${formatMoney(Math.abs(item.unitCost - rolled), currency)} vs rolled-up` : "Matches rolled-up"}
-          tone={Math.abs(item.unitCost - rolled) > 0.005 ? "warning" : "default"}
+          hint={follows ? `Follows the ${kit ? "contents" : "BOM"}` : Math.abs(item.unitCost - rolled) > 0.005 ? `Set by hand · ${item.unitCost > rolled ? "+" : "−"}${formatMoney(Math.abs(item.unitCost - rolled), currency)} vs rolled-up` : "Set by hand · matches rolled-up"}
+          tone={!follows && Math.abs(item.unitCost - rolled) > 0.005 ? "warning" : "default"}
         />
-        <Tile label="Buildable now" value={formatQty(buildable, item.unit)} hint="Pulling sub-assemblies from stock" tone={buildable === 0 && item.bom.length > 0 ? "critical" : "default"} />
+        <Tile label={kit ? "Can pick now" : "Buildable now"} value={formatQty(buildable, item.unit)} hint={kit ? "From the parts on hand" : "Pulling sub-assemblies from stock"} tone={buildable === 0 && item.bom.length > 0 ? "critical" : "default"} />
       </div>
 
       <div>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h4 className="text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">Bill of materials</h4>
-          <div className="flex items-center gap-2">
-            {canEdit && Math.abs(item.unitCost - rolled) > 0.005 && !dirty && (
+          <h4 className="text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">{kit ? "Kit contents" : "Bill of materials"}</h4>
+          <div className="flex flex-wrap items-center gap-2">
+            {canEdit && (
+              <span className="inline-flex items-center gap-1.5 text-[12px] text-text-secondary">
+                Unit cost
+                <Segmented value={follows ? "bom" : "manual"} onChange={(v) => void setCostMode(v)} options={[{ value: "manual", label: "Set by hand" }, { value: "bom", label: kit ? "From contents" : "From BOM" }]} />
+              </span>
+            )}
+            {canEdit && !follows && Math.abs(item.unitCost - rolled) > 0.005 && !dirty && (
               <Button size="sm" onClick={setCost}>
                 Set unit cost to {formatMoney(rolled, currency)}
               </Button>
@@ -176,7 +197,7 @@ function BomEditor({ item, items, currency, canEdit }: { item: Item; items: Item
             {draft.length === 0 && (
               <tr>
                 <td colSpan={canEdit ? 7 : 6} className="py-6 text-center text-text-tertiary">
-                  No components yet. Add the parts and sub-assemblies this item is built from.
+                  {kit ? "No contents yet. Add the parts this kit ships with." : "No components yet. Add the parts and sub-assemblies this item is built from."}
                 </td>
               </tr>
             )}
@@ -185,7 +206,7 @@ function BomEditor({ item, items, currency, canEdit }: { item: Item; items: Item
               if (!comp) return null;
               const qty = Number(d.qty);
               const waste = d.wastePct.trim() === "" ? (comp.expectedWastePct ?? 0) : Number(d.wastePct);
-              const compCost = comp.type === "assembly" ? rolledUpCost(items, comp) : comp.unitCost;
+              const compCost = componentCost(items, comp);
               const ext = Number.isFinite(qty) ? round(qty * (1 + (Number.isFinite(waste) ? waste : 0) / 100) * compCost) : 0;
               const badQty = !Number.isFinite(qty) || qty <= 0;
               return (
@@ -197,6 +218,7 @@ function BomEditor({ item, items, currency, canEdit }: { item: Item; items: Item
                       </Link>
                       <span className="text-text-secondary">{comp.name}</span>
                       {comp.type === "assembly" && <Badge tone="info">Sub-assembly</Badge>}
+                      {comp.type === "kit" && <Badge tone="accent">Kit</Badge>}
                       {comp.status !== "active" && <Badge tone={comp.status === "superseded" ? "warning" : "default"}>{comp.status}</Badge>}
                     </div>
                   </td>
@@ -279,7 +301,7 @@ function BomEditor({ item, items, currency, canEdit }: { item: Item; items: Item
           <div className="mb-2 flex flex-wrap items-end justify-between gap-3">
             <div>
               <h4 className="text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">Explode requirements</h4>
-              <p className="mt-0.5 text-[12.5px] text-text-secondary">What it takes to build a quantity, through every level of the BOM.</p>
+              <p className="mt-0.5 text-[12.5px] text-text-secondary">{kit ? "What it takes to pick a quantity of kits, through every level." : "What it takes to build a quantity, through every level of the BOM."}</p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <TextField type="number" min={1} step={1} value={explodeQty} onChange={(e) => setExplodeQty(e.target.value)} prefix="×" containerClassName="w-28" aria-label="Quantity to explode" />

@@ -69,7 +69,7 @@ function PricingEditor({ item, currency, canEdit }: { item: Item; currency: stri
           hint={item.salePrice !== undefined ? `${formatPercent(marginPct(item, item.salePrice), 1)} margin${onSale ? "" : " · not below list"}` : "Set one in Edit"}
           tone={item.salePrice !== undefined ? marginTone(marginPct(item, item.salePrice)) : "default"}
         />
-        <Tile label="Unit cost" value={formatMoney(item.unitCost, currency)} hint={item.type === "assembly" ? "Rolled-up from BOM at last build" : "Standard cost"} />
+        <Tile label="Unit cost" value={formatMoney(item.unitCost, currency)} hint={item.costMode === "bom" ? "Calculated from the BOM" : item.type === "assembly" ? "Rolled-up from BOM at last build" : "Standard cost"} />
         <Tile label="Gross profit / unit" value={formatMoney(round((onSale ? item.salePrice! : item.price) - item.unitCost), currency)} hint={onSale ? "At sale price" : "At list price"} tone={(onSale ? item.salePrice! : item.price) - item.unitCost < 0 ? "critical" : "default"} />
         <Tile label="Price breaks" value={parsed.length} hint={parsed.length ? `From ${parsed[0]!.minQty}+ units` : "None"} />
       </div>

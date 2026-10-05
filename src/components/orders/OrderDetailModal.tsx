@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ExternalLink, RefreshCw, Truck, XCircle } from "lucide-react";
+import { ExternalLink, Mail, RefreshCw, Truck, XCircle } from "lucide-react";
 import type { SalesOrder, Shipment } from "@/lib/types";
 import { isOrderOpen, openQty } from "@/lib/inventory";
 import { useCollection, useItemsById, useSettings } from "@/lib/store/provider";
@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 import { Badge, Button, DescriptionList, Modal, SimpleTable, StatusBadge, useToast } from "@/components/ui";
 import { orderAvailability, orderOpenUnits, orderTotal, orderUnits, SourceBadge } from "./orderUtils";
 import { findCustomer } from "@/lib/customers";
+import { ORDER_EMAIL_LABELS } from "@/lib/orderEmails";
+import { useOrderNotifier } from "./useOrderNotifier";
 
 interface OrderDetailModalProps {
   order: SalesOrder | null;
@@ -34,6 +36,19 @@ function OrderDetail({ order, onClose, canWrite, busy, onFulfil, onCancel }: Ord
   const members = useCollection("members");
   const customerRecords = useCollection("customers");
   const { currency } = useSettings();
+  const { mode } = useSession();
+  const notify = useOrderNotifier();
+  const [mailing, setMailing] = useState<"confirmed" | "shipped" | null>(null);
+  const customerRecord = findCustomer(customerRecords, { id: order.customerId, email: order.customerEmail, name: order.customer });
+  const mailTo = order.customerEmail ?? customerRecord?.email;
+  const sendMail = async (kind: "confirmed" | "shipped") => {
+    setMailing(kind);
+    try {
+      await notify(kind, order.id, { force: true });
+    } finally {
+      setMailing(null);
+    }
+  };
 
   const open = isOrderOpen(order);
   const availability = orderAvailability(order, itemsById);
@@ -186,6 +201,39 @@ function OrderDetail({ order, onClose, canWrite, busy, onFulfil, onCancel }: Ord
                 <ShipmentRow key={s.id} shipment={s} currency={currency} />
               ))}
             </ul>
+          </div>
+        )}
+
+        {(mode === "firestore" || (order.emails?.length ?? 0) > 0) && (
+          <div>
+            <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+              <div className="text-[13px] font-semibold text-text">Emails to the customer</div>
+              {canWrite && mode === "firestore" && (
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" icon={<Mail />} onClick={() => void sendMail("confirmed")} loading={mailing === "confirmed"} disabled={mailing !== null || !mailTo} title={mailTo ? `Send the order confirmation to ${mailTo}` : "Add an email address to the order or the customer first"}>
+                    Send confirmation
+                  </Button>
+                  <Button size="sm" icon={<Mail />} onClick={() => void sendMail("shipped")} loading={mailing === "shipped"} disabled={mailing !== null || !mailTo || shipments.length === 0} title={shipments.length === 0 ? "Nothing has shipped yet" : mailTo ? `Send the latest shipping update to ${mailTo}` : "Add an email address to the order or the customer first"}>
+                    Send shipping update
+                  </Button>
+                </div>
+              )}
+            </div>
+            {order.emails?.length ? (
+              <ul className="divide-y divide-border rounded-[var(--radius)] border border-border text-[12.5px]">
+                {order.emails.map((e, i) => (
+                  <li key={`${e.sentAt}-${i}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5">
+                    <span className="font-medium text-text">{ORDER_EMAIL_LABELS[e.kind]}</span>
+                    <span className="text-text-secondary">to {e.to}</span>
+                    <span className="ml-auto text-text-tertiary" title={formatDateTime(e.sentAt)}>
+                      {formatRelative(e.sentAt)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[12.5px] text-text-tertiary">{mailTo ? `Nothing sent yet. Automatic emails are set under Settings → Notifications; the buttons send one now to ${mailTo}.` : "No email address on this order or its customer."}</p>
+            )}
           </div>
         )}
 

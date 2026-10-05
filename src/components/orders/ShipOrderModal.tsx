@@ -12,6 +12,7 @@ import { useSession } from "@/lib/session";
 import { formatMoney, formatQty, pluralize } from "@/lib/format";
 import { round } from "@/lib/utils";
 import { Badge, Banner, Button, FormGrid, Modal, Segmented, Select, SimpleTable, TextField, useToast } from "@/components/ui";
+import { useOrderNotifier } from "./useOrderNotifier";
 
 export interface CarrierRate {
   provider: "shippo" | "easypost";
@@ -44,6 +45,7 @@ function ShipForm({ order, onClose, onShipped }: ShipOrderModalProps & { order: 
   const user = useCurrentUser();
   const toast = useToast();
   const api = useApi();
+  const notify = useOrderNotifier();
   const { mode: sessionMode } = useSession();
   const itemsById = useItemsById();
   const settings = useSettings();
@@ -132,10 +134,12 @@ function ShipForm({ order, onClose, onShipped }: ShipOrderModalProps & { order: 
         if (!rate) throw new Error("Pick a rate first");
         const res = await api<{ shipment: Shipment }>("/api/shipping/buy", { orderId: order.id, provider: rate.provider, rateId: rate.rateId, lines, locationId, shipTo: address });
         toast(`Label bought · ${res.shipment.carrier ?? rate.carrier} ${res.shipment.trackingNumber ?? ""}`.trim(), "success");
+        void notify("shipped", order.id, { shipmentId: res.shipment.id });
         onShipped?.(res.shipment);
       } else {
         const { shipment } = await shipOrder(store, user, { orderId: order.id, lines, locationId, carrier: carrier.trim() || undefined, trackingNumber: tracking.trim() || undefined, trackingUrl: trackingUrl.trim() || undefined });
         toast(leavesOpen ? `Shipped ${units} units on ${order.number}; the rest stays backordered` : `Shipped ${order.number}`, "success");
+        void notify("shipped", order.id, { shipmentId: shipment.id });
         onShipped?.(shipment);
       }
       onClose();

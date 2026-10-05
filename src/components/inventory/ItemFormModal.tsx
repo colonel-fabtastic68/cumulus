@@ -2,9 +2,9 @@
 
 import { useMemo, useState } from "react";
 import type { Item } from "@/lib/types";
-import { createItems, updateItem } from "@/lib/inventory";
+import { carriesBom, createItems, updateItem } from "@/lib/inventory";
 import { useCollection, useItems, useSettings, useStore } from "@/lib/store/provider";
-import { customFieldsFor, itemTypeOptions } from "@/lib/catalog";
+import { categoryOptions, customFieldsFor, itemTypeOptions } from "@/lib/catalog";
 import { CustomFieldsEditor } from "@/components/fields";
 import { useCurrentUser } from "@/lib/auth";
 import { Button, Combobox, FormGrid, Modal, Select, TextArea, TextField, useToast } from "@/components/ui";
@@ -25,6 +25,7 @@ interface FormState {
   location: string;
   barcode: string;
   unitCost: string;
+  costMode: "manual" | "bom";
   price: string;
   salePrice: string;
   minQty: string;
@@ -54,6 +55,7 @@ function fromItem(item?: Item | null, defaults?: Partial<Item>): FormState {
     location: src?.location ?? "",
     barcode: src?.barcode ?? "",
     unitCost: src?.unitCost !== undefined ? String(src.unitCost) : "",
+    costMode: src?.costMode ?? (src?.type === "kit" ? "bom" : "manual"),
     price: src?.price !== undefined ? String(src.price) : "",
     salePrice: src?.salePrice !== undefined ? String(src.salePrice) : "",
     minQty: src?.minQty !== undefined ? String(src.minQty) : "",
@@ -99,7 +101,7 @@ function ItemForm({ open, onClose, item, defaults, onSaved }: ItemFormModalProps
   const [error, setError] = useState<string | null>(null);
   const editing = !!item;
 
-  const categories = useMemo(() => Array.from(new Set(items.map((i) => i.category).filter(Boolean) as string[])).sort(), [items]);
+  const categories = useMemo(() => categoryOptions(settings, items), [settings, items]);
   const set = (k: keyof FormState) => (e: { target: { value: string } }) => setF((p) => ({ ...p, [k]: e.target.value }));
 
   // Field-level validation: numbers must be non-negative and max must not sit below min.
@@ -123,7 +125,9 @@ function ItemForm({ open, onClose, item, defaults, onSaved }: ItemFormModalProps
     weight: numErr(f.weight),
   };
   const invalid = Object.values(errors).some(Boolean);
-  const clearsBom = editing && !!item && item.type === "assembly" && f.type !== "assembly" && item.bom.length > 0;
+  const withBom = carriesBom({ type: f.type });
+  const follows = withBom && f.costMode === "bom";
+  const clearsBom = editing && !!item && item.bom.length > 0 && carriesBom(item) && !withBom;
 
   const submit = async () => {
     if (!f.sku.trim() || !f.name.trim()) return setError("SKU and name are required");
@@ -144,6 +148,7 @@ function ItemForm({ open, onClose, item, defaults, onSaved }: ItemFormModalProps
       location: f.location.trim() || undefined,
       barcode: f.barcode.trim() || undefined,
       unitCost: num(f.unitCost) ?? 0,
+      costMode: withBom ? f.costMode : undefined,
       price: num(f.price) ?? 0,
       salePrice: num(f.salePrice),
       minQty: num(f.minQty),
@@ -198,7 +203,14 @@ function ItemForm({ open, onClose, item, defaults, onSaved }: ItemFormModalProps
             <TextField label="Name" value={f.name} onChange={set("name")} placeholder="1590B aluminum enclosure, raw" />
           </div>
           <div className="flex flex-col gap-2">
-            <Select label="Type" value={f.type} onChange={set("type")} options={typeOptions.some((o) => o.value === f.type) ? typeOptions : [...typeOptions, { value: f.type, label: f.type }]} help={clearsBom ? `Switching away from assembly removes its ${item!.bom.length}-line BOM` : undefined} />
+            <Select
+              label="Type"
+              value={f.type}
+              onChange={(e) => setF((p) => ({ ...p, type: e.target.value, costMode: e.target.value === "kit" && p.type !== "kit" ? "bom" : p.costMode }))}
+              options={typeOptions.some((o) => o.value === f.type) ? typeOptions : [...typeOptions, { value: f.type, label: f.type }]}
+              help={clearsBom ? `Switching away from ${item!.type === "kit" ? "kit" : "assembly"} removes its ${item!.bom.length}-line ${item!.type === "kit" ? "contents" : "BOM"}` : f.type === "kit" ? "Kits hold no stock of their own: shipping one picks its components from the shelf." : undefined}
+            />
+            {withBom && <Select label="Unit cost" value={f.costMode} onChange={(e) => setF((p) => ({ ...p, costMode: e.target.value as "manual" | "bom" }))} options={[{ value: "manual", label: "Set by hand" }, { value: "bom", label: f.type === "kit" ? "Calculated from contents" : "Calculated from BOM" }]} />}
             {f.type === "assembly" && (
               <div className="flex items-center gap-1.5">
                 <span className="mr-1 text-[12px] text-text-secondary">Chip color</span>
@@ -226,7 +238,7 @@ function ItemForm({ open, onClose, item, defaults, onSaved }: ItemFormModalProps
           />
         </FormGrid>
         <FormGrid cols={4}>
-          <TextField label="Unit cost" type="number" step="any" min={0} prefix="$" value={f.unitCost} onChange={set("unitCost")} error={errors.unitCost} />
+          <TextField label="Unit cost" type="number" step="any" min={0} prefix="$" value={f.unitCost} onChange={set("unitCost")} error={errors.unitCost} disabled={follows} help={follows ? "Recalculated from the components whenever they change" : undefined} />
           <TextField label="Price" type="number" step="any" min={0} prefix="$" value={f.price} onChange={set("price")} error={errors.price} />
           <TextField label="Sale price" hint="(optional)" type="number" step="any" min={0} prefix="$" value={f.salePrice} onChange={set("salePrice")} error={errors.salePrice} />
           <TextField label="Unit" value={f.unit} onChange={set("unit")} placeholder="ea" />

@@ -13,6 +13,7 @@ import { saveOrderTemplate } from "@/lib/orderTemplates";
 import { ensureCustomer, findCustomer } from "@/lib/customers";
 import { ItemPicker } from "@/components/inventory";
 import { currencySymbol } from "./orderUtils";
+import { useOrderNotifier } from "./useOrderNotifier";
 
 interface NewOrderModalProps {
   open: boolean;
@@ -49,6 +50,7 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
   const store = useStore();
   const user = useCurrentUser();
   const toast = useToast();
+  const notify = useOrderNotifier();
   const orders = useCollection("orders");
   const allItems = useCollection("items");
   const customerRecords = useCollection("customers");
@@ -180,6 +182,8 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
       const record = await ensureCustomer(store, user, { name: order.customer, email: order.customerEmail, address: address, source: "order" }).catch(() => undefined);
       if (record) await store.patch("orders", order.id, { customerId: record.id }).catch(() => {});
       toast(shipNow ? `Created and shipped ${order.number} for ${order.customer}` : `Created ${order.number} for ${order.customer}`, "success");
+      // Settings → Notifications decides whether this goes out; a shipped-now order gets the shipping update instead of a confirmation.
+      if (order.customerEmail) void notify(shipNow ? "shipped" : "confirmed", order.id);
       onCreated?.(order);
       onClose();
     } catch (e) {

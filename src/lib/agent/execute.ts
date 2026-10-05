@@ -34,6 +34,7 @@ import {
   type ItemPatch,
   InventoryError,
   backorderReport,
+  carriesBom,
 } from "@/lib/inventory";
 import { matches, round } from "@/lib/utils";
 import { crossRefText } from "@/lib/scan";
@@ -268,7 +269,7 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
         company: settings[0]?.companyName,
         currency: settings[0]?.currency,
         relievePolicy: settings[0]?.relievePolicy,
-        items: { total: items.length, active: items.filter((i) => i.status === "active").length, inactive: items.filter((i) => i.status === "inactive").length, superseded: items.filter((i) => i.status === "superseded").length, assemblies: items.filter((i) => i.type === "assembly").length },
+        items: { total: items.length, active: items.filter((i) => i.status === "active").length, inactive: items.filter((i) => i.status === "inactive").length, superseded: items.filter((i) => i.status === "superseded").length, assemblies: items.filter((i) => i.type === "assembly").length, kits: items.filter((i) => i.type === "kit").length },
         inventoryValue: inventoryValue(items),
         belowMin: items.filter((i) => isLowStock(i, settings[0]?.stockAlerts)).map((i) => i.sku),
         unitsSoldLast30Days: sold30,
@@ -381,7 +382,7 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
         priceBreaks: item.priceBreaks,
         expectedWastePct: item.expectedWastePct,
         bom: item.bom.map((l) => ({ sku: byId.get(l.itemId)?.sku, name: byId.get(l.itemId)?.name, qty: l.qty, wastePct: l.wastePct, onHand: byId.get(l.itemId)?.onHand })),
-        buildable: item.type === "assembly" ? buildableQty(items, item) : undefined,
+        buildable: carriesBom(item) ? buildableQty(items, item) : undefined,
         whereUsed: whereUsed(items, item.id).map((w) => ({ sku: w.assembly.sku, name: w.assembly.name, qtyPer: w.qtyPer })),
         replenishment: item.replenishment,
         lotsOnShelf: lots.filter((l) => l.itemId === item.id && l.qtyRemaining > 0).map((l) => ({ lot: lotLabel(l), supplierLot: l.supplierLot, source: lotSourceLabel(l), receivedAt: l.receivedAt.slice(0, 10), expiresAt: l.expiresAt?.slice(0, 10), qtyRemaining: l.qtyRemaining, unitCost: l.unitCost })),
@@ -620,7 +621,7 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
           return { itemId: comp.id, qty: l.qty ?? 1, wastePct: l.wastePct };
         });
       }
-      await updateItem(store, actor, asm.id, { bom, type: "assembly" }, String(input.reason ?? "BOM updated by agent"));
+      await updateItem(store, actor, asm.id, { bom, type: carriesBom(asm) ? asm.type : "assembly" }, String(input.reason ?? "BOM updated by agent"));
       return { ok: true, sku: asm.sku, lines: bom.length, summary: `${asm.sku} BOM now has ${bom.length} line${bom.length === 1 ? "" : "s"}` };
     }
 
@@ -1022,7 +1023,7 @@ export async function previewPatches(name: AgentToolName, rawInput: unknown, ctx
         }
       }
       if (mode === "replace") bom = lines.map((l) => ({ itemId: findItem(items, l.sku)?.id ?? "", qty: l.qty ?? 1, wastePct: l.wastePct })).filter((b) => b.itemId);
-      out[asm.id] = { bom, type: "assembly" };
+      out[asm.id] = { bom, type: carriesBom(asm) ? asm.type : "assembly" };
       return out;
     }
     default:

@@ -11,8 +11,12 @@ export type ID = string;
 // Items (parts, assemblies)
 // ---------------------------------------------------------------------------
 
-/** "part" and "assembly" are built in (assemblies carry a BOM); workspaces add their own types in Settings → Catalog. */
-export type ItemType = "part" | "assembly" | (string & {});
+/**
+ * "part", "assembly" and "kit" are built in: assemblies carry a BOM and are built into stock; kits carry a
+ * BOM too but are never built, their components are picked when the kit ships. Workspaces add their own
+ * plain groupings in Settings → Catalog.
+ */
+export type ItemType = "part" | "assembly" | "kit" | (string & {});
 export type ItemStatus = "active" | "inactive" | "superseded";
 
 export interface PriceBreak {
@@ -63,6 +67,8 @@ export interface Item {
 
   /** Current unit cost: the standard cost, or the moving average / FIFO layer cost under those costing methods. */
   unitCost: number;
+  /** For an item with a BOM: "bom" keeps the unit cost equal to the rolled-up cost of its components whenever they or the BOM change; "manual" (default) leaves it to be set by hand. */
+  costMode?: "manual" | "bom";
   /** List price. */
   price: number;
   salePrice?: number;
@@ -320,6 +326,16 @@ export interface OrderLine {
   shipped?: number;
 }
 
+/** An email sent to the customer about an order, kept on the order so nobody sends it twice. */
+export interface OrderEmail {
+  kind: "confirmed" | "shipped";
+  to: string;
+  subject?: string;
+  shipmentId?: ID;
+  sentAt: string;
+  sentBy?: string;
+}
+
 export interface SalesOrder {
   id: ID;
   number: string; // SO-1001
@@ -338,6 +354,8 @@ export interface SalesOrder {
   externalId?: string;
   /** Human reference on the channel, e.g. Shopify "#1042". */
   externalRef?: string;
+  /** Confirmation and shipping emails sent to the customer (Settings → Notifications, or by hand from the order). */
+  emails?: OrderEmail[];
   fulfilledAt?: string;
   createdAt: string;
   createdBy: string;
@@ -795,6 +813,7 @@ export type ActivityType =
   | "transfer.cancelled"
   | "order.shipped"
   | "order.ready"
+  | "order.emailed"
   | "integration.connected"
   | "integration.disconnected"
   | "integration.synced"
@@ -978,7 +997,21 @@ export interface WorkspaceSettings {
   numbering?: { orderPrefix?: string; purchaseOrderPrefix?: string };
   /** When an item counts as low stock (the Low chip, the low-stock view, reorder suggestions). */
   stockAlerts?: StockAlertRule;
+  /** Emails to customers about their orders. */
+  notifications?: NotificationSettings;
   updatedAt: string;
+}
+
+/** Which order emails go out on their own, and how they sign off. Sending needs RESEND_API_KEY and EMAIL_FROM on the server. */
+export interface NotificationSettings {
+  /** Email the customer when an order is created for them. */
+  orderConfirmed?: boolean;
+  /** Email the customer when a shipment goes out, with the carrier and tracking. */
+  orderShipped?: boolean;
+  /** Replies go here instead of the sending address. */
+  replyTo?: string;
+  /** Closing lines under every email: who to contact, hours, a phone number. */
+  signature?: string;
 }
 
 /**
@@ -1023,6 +1056,8 @@ export interface PriceGroup {
 
 export interface CatalogSettings {
   itemTypes?: Array<{ id: string; label: string }>;
+  /** The category list kept in Settings → Categories. Items may still carry a category that is not on it; the list and the categories in use are offered together. */
+  categories?: string[];
   priceGroups?: PriceGroup[];
   customFields?: {
     items?: CustomFieldDef[];

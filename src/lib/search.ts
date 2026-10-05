@@ -153,7 +153,7 @@ export function searchWorkspace(query: string, src: SearchSource, { perKind = 8,
     const score = scoreFields(q, [i.sku, i.name, i.barcode], [i.category, i.brand, i.supplierSku, suppliers, i.location, i.description, i.tags.join(" "), crossRefText(i), i.attributes ? Object.values(i.attributes).join(" ") : undefined]);
     if (!score) continue;
     const viaXref = !!i.crossRefs?.some((r) => r.number.toLowerCase().includes(q));
-    add(i.type === "assembly" ? "BOM" : "Item", score, {
+    add(i.type === "assembly" || i.type === "kit" ? "BOM" : "Item", score, {
       key: i.id,
       label: `${i.sku} · ${i.name}`,
       sub: `${formatQty(i.onHand, i.unit)} on hand${viaXref ? " · matched a cross-reference" : ""}`,

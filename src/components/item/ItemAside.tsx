@@ -5,10 +5,13 @@ import Link from "next/link";
 import type { ActivityEvent, Item, Member, Supplier } from "@/lib/types";
 import { formatDate, formatDateTime, formatRelative } from "@/lib/format";
 import { Avatar, Card, CardHeader, DescriptionList, StatusBadge } from "@/components/ui";
+import { useSettings } from "@/lib/store/provider";
+import { itemTypeLabel } from "@/lib/catalog";
 import { itemHref } from "./utils";
 import { SuppliersCard } from "./SuppliersCard";
 
 export function ItemAside({ item, items, suppliers, currency, canEdit, membersById, activity }: { item: Item; items: Item[]; suppliers: Supplier[]; currency: string; canEdit: boolean; membersById: Map<string, Member>; activity: ActivityEvent[] }) {
+  const settings = useSettings();
   const supersededBy = item.supersededBy ? items.find((i) => i.id === item.supersededBy) : undefined;
   const supersedes = useMemo(() => items.filter((i) => i.supersededBy === item.id), [items, item.id]);
   const recent = useMemo(() => activity.filter((a) => a.entityId === item.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5), [activity, item.id]);
@@ -53,7 +56,7 @@ export function ItemAside({ item, items, suppliers, currency, canEdit, membersBy
         <DescriptionList
           rows={[
             { label: "ID", value: <span className="font-mono text-[12px] text-text-secondary">{item.id}</span> },
-            { label: "Type", value: item.type === "assembly" ? "BOM (assembly)" : "Part" },
+            { label: "Type", value: item.type === "assembly" ? "BOM (assembly)" : item.type === "kit" ? "Kit (components picked at shipping)" : itemTypeLabel(settings, item.type) },
             { label: "Status", value: <StatusBadge status={item.status} /> },
             { label: "Created", value: <span title={formatDateTime(item.createdAt)}>{formatDate(item.createdAt)}</span> },
             {

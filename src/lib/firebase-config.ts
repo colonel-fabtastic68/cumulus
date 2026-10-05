@@ -23,6 +23,8 @@ export interface RuntimeConfig {
   workspaceId: string;
   /** New password accounts confirm their address with an emailed one-time code (Resend key, sender and service account are set). */
   emailCodes?: boolean;
+  /** A Resend key and sender are set, so order emails can go out. */
+  email?: boolean;
   /** Calendly scheduling link behind "Book a demo"; absent hides the calendar. */
   calendlyUrl?: string;
   /** The visitor opened the public demo: the sample workspace runs in the browser with no account. */
@@ -81,6 +83,7 @@ export function runtimeConfigFromEnv(): RuntimeConfig {
     firebase: parseFirebaseConfig(process.env),
     workspaceId: pick(process.env, ENV_NAMES.workspaceId) ?? "default",
     emailCodes: !!(cleanEnv(process.env.RESEND_API_KEY) && cleanEnv(process.env.EMAIL_FROM) && (cleanEnv(process.env.FIREBASE_SERVICE_ACCOUNT_JSON) || cleanEnv(process.env.FIREBASE_SERVICE_ACCOUNT_B64))),
+    email: !!(cleanEnv(process.env.RESEND_API_KEY) && cleanEnv(process.env.EMAIL_FROM)),
     calendlyUrl: cleanEnv(process.env.CALENDLY_URL),
   };
 }

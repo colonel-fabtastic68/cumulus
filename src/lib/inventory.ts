@@ -53,6 +53,15 @@ export class InventoryError extends Error {
 // Pure helpers
 // ---------------------------------------------------------------------------
 
+/** Items that carry a bill of materials: assemblies, which are built into stock, and kits, whose components are picked when the kit ships. */
+export function carriesBom(item: Pick<Item, "type">): boolean {
+  return item.type === "assembly" || item.type === "kit";
+}
+
+export function hasBom(item: Pick<Item, "type" | "bom">): boolean {
+  return carriesBom(item) && item.bom.length > 0;
+}
+
 export function itemDefaults(partial: Partial<Item> & { sku: string; name: string }): Item {
   const now = nowIso();
   return {
@@ -73,6 +82,8 @@ export function itemDefaults(partial: Partial<Item> & { sku: string; name: strin
     leadTimeDays: partial.leadTimeDays,
     replenishment: partial.replenishment,
     unitCost: partial.unitCost ?? 0,
+    // A kit's cost is its parts by default; an assembly keeps a standard cost unless told otherwise.
+    costMode: partial.costMode ?? (partial.type === "kit" ? "bom" : undefined),
     price: partial.price ?? 0,
     salePrice: partial.salePrice,
     priceBreaks: partial.priceBreaks,
@@ -116,7 +127,8 @@ export function isLowStock(item: Item, rule: StockAlertRule = DEFAULT_STOCK_ALER
   // Point-free use (items.filter(isLowStock)) hands the array index in as `rule`; fall back to the default then.
   const effective = rule && typeof rule === "object" ? rule : DEFAULT_STOCK_ALERTS;
   const line = lowStockLine(item, effective);
-  return item.status === "active" && line !== undefined && item.onHand < line;
+  // A kit holds no stock of its own: its parts are what run low.
+  return item.status === "active" && item.type !== "kit" && line !== undefined && item.onHand < line;
 }
 
 /** Amber band: at or above the low line but within warnPct of it. */
@@ -213,9 +225,10 @@ export function explodeBom(items: Item[], assembly: Item, qty: number, opts: Exp
       const comp = byId.get(line.itemId);
       if (!comp) continue;
       const need = round(line.qty * mult * (1 + (line.wastePct ?? comp.expectedWastePct ?? 0) / 100), 3);
-      const isSub = comp.type === "assembly" && comp.bom.length > 0 && !path.has(comp.id);
-      if (isSub && !opts.consumeSubassemblies) {
-        if (opts.explodeShortfallOnly) {
+      const isSub = hasBom(comp) && !path.has(comp.id);
+      // A kit never sits on the shelf, so it is always broken into its parts.
+      if (isSub && (comp.type === "kit" || !opts.consumeSubassemblies)) {
+        if (opts.explodeShortfallOnly && comp.type !== "kit") {
           const already = acc.get(comp.id)?.required ?? 0;
           const fromStock = Math.max(0, Math.min(need, comp.onHand - already));
           if (fromStock > 0) add(comp, fromStock, depth);
@@ -256,17 +269,43 @@ export function buildableQty(items: Item[], assembly: Item, opts: ExplodeOptions
   return Number.isFinite(max) ? Math.max(0, max) : 0;
 }
 
-/** Rolled-up cost of an assembly from its BOM. */
+/** How many kits can be picked from the parts on hand right now. */
+export function kitAvailable(items: Item[], kit: Item): number {
+  // Picking a kit takes sub-assemblies from the shelf and breaks the rest into parts, exactly as shipping does.
+  return hasBom(kit) ? buildableQty(items, kit, { explodeShortfallOnly: true }) : 0;
+}
+
+/** What can be sold of an item right now: its own stock, or for a kit the kits its parts cover. */
+export function sellableQty(items: Item[], item: Item): number {
+  return item.type === "kit" ? kitAvailable(items, item) : item.onHand;
+}
+
+/**
+ * Rolled-up cost of an item with a BOM: each component's cost times its
+ * quantity, waste included, through every level. A component that has a BOM
+ * of its own counts at its stored unit cost unless it is itself costed from
+ * its BOM, so a sub-assembly whose cost is set by hand keeps that number.
+ */
 export function rolledUpCost(items: Item[], assembly: Item, depth = 0): number {
-  if (assembly.type !== "assembly" || assembly.bom.length === 0 || depth > 8) return assembly.unitCost;
+  if (!hasBom(assembly) || depth > 8) return assembly.unitCost;
   const byId = new Map(items.map((i) => [i.id, i]));
   let total = 0;
   for (const line of assembly.bom) {
     const comp = byId.get(line.itemId);
     if (!comp) continue;
-    total += rolledUpCost(items, comp, depth + 1) * line.qty * (1 + (line.wastePct ?? 0) / 100);
+    total += componentCost(items, comp, depth + 1) * line.qty * (1 + (line.wastePct ?? comp.expectedWastePct ?? 0) / 100);
   }
   return round(total);
+}
+
+/** What one unit of a component costs inside a BOM. */
+export function componentCost(items: Item[], comp: Item, depth = 1): number {
+  return comp.costMode === "bom" && hasBom(comp) ? rolledUpCost(items, comp, depth) : comp.unitCost;
+}
+
+/** Whether a unit cost follows the BOM (kits by default) rather than being set by hand. */
+export function costFollowsBom(item: Pick<Item, "type" | "bom" | "costMode">): boolean {
+  return item.costMode === "bom" && carriesBom(item);
 }
 
 // ---------------------------------------------------------------------------
@@ -599,6 +638,7 @@ export async function movementOps(
   for (const input of inputs) {
     const item = byId.get(input.itemId);
     if (!item) throw new InventoryError(`Unknown item ${input.itemId}`);
+    if (item.type === "kit") throw new InventoryError(`${item.sku} is a kit: its components carry the stock, so receive, count or adjust those instead`, { itemId: item.id });
     if (input.qty === 0) continue;
     const locationId = input.locationId ?? homeId;
     if (locationId !== homeId && !locations.some((l) => l.id === locationId)) throw new InventoryError(`Unknown location ${locationId}`);
@@ -751,6 +791,8 @@ export async function adjustStock(store: Store, actor: Actor, inputs: AdjustInpu
     ops.push(activityOp(actor, "stock.adjusted", describeMovements(actor, byId, others, "adjusted"), { ...entity(others), meta: { count: others.length, changes: changes.slice(0, CHANGE_LOG_LIMIT), changesTotal: changes.length } }));
   }
   await store.batch(ops);
+  // Under FIFO a negative adjustment can move the item's cost; parents costed from their BOM follow.
+  await syncBomCosts(store, actor, Array.from(new Set(movements.map((m) => m.itemId))));
   return movements;
 }
 
@@ -905,6 +947,8 @@ export async function receiveStock(store: Store, actor: Actor, input: ReceiveInp
   const total = round(sum(receipt.lines.map((l) => l.qty * l.unitCost)));
   ops.push(activityOp(actor, "stock.received", `${actor.name} received ${receipt.number} · ${receipt.lines.length} line${receipt.lines.length === 1 ? "" : "s"} · $${total.toFixed(2)}`, { entityType: "receipt", entityId: receipt.id, meta: { lines: receipt.lines.length, total } }));
   await store.batch(ops);
+  // Receipts move component costs; assemblies and kits costed from their BOM follow.
+  await syncBomCosts(store, actor, receipt.lines.map((l) => l.itemId));
   return receipt;
 }
 
@@ -971,6 +1015,7 @@ export async function buildAssembly(store: Store, actor: Actor, input: BuildInpu
     activityOp(actor, "build.completed", `${actor.name} built ${input.qty} × ${assembly.sku} (${build.number})`, { entityType: "build", entityId: build.id, meta: { qty: input.qty, lot: lot.number } }),
   ];
   await store.batch(ops);
+  await syncBomCosts(store, actor, [assembly.id, ...reqs.map((r) => r.item.id)]);
   return build;
 }
 
@@ -1099,14 +1144,16 @@ export async function shipOrder(store: Store, actor: Actor, input: ShipInput): P
     const open = openQty(line);
     if (req.qty > open + 1e-9) throw new InventoryError(`Only ${open} of ${item.sku} is still open on ${order.number}`);
     const available = qtyAt(item, locationId, homeId);
-    if (settings.relievePolicy === "on_fulfill" && item.type === "assembly" && item.bom.length > 0 && available < req.qty) {
-      // Relieve components for the portion not on the shelf.
-      const fromStock = Math.max(0, available);
+    const kit = item.type === "kit";
+    if (kit && item.bom.length === 0) throw new InventoryError(`${item.sku} is a kit with no contents yet; add its components before shipping it`, { itemId: item.id });
+    if (kit || (settings.relievePolicy === "on_fulfill" && item.type === "assembly" && item.bom.length > 0 && available < req.qty)) {
+      // A kit is picked from its parts; an assembly relieves components only for the portion not on the shelf.
+      const fromStock = kit ? 0 : Math.max(0, available);
       if (fromStock > 0) movementInputs.push({ itemId: item.id, type: "sale", qty: -fromStock, refType: "order", refId: order.id, occurredAt: shippedAt, locationId });
       const reqs = explodeBom(items, item, req.qty - fromStock, { explodeShortfallOnly: true });
       const short = reqs.filter((r) => r.shortage > 0);
       if (short.length) throw new InventoryError(`Cannot ship ${order.number}: short on ${short.map((r) => r.item.sku).join(", ")}`, { shortages: short });
-      for (const r of reqs) movementInputs.push({ itemId: r.item.id, type: "sale", qty: -r.required, refType: "order", refId: order.id, occurredAt: shippedAt, note: `Component of ${item.sku}`, locationId });
+      for (const r of reqs) movementInputs.push({ itemId: r.item.id, type: "sale", qty: -r.required, refType: "order", refId: order.id, occurredAt: shippedAt, note: `${kit ? "Part of kit" : "Component of"} ${item.sku}`, locationId });
     } else {
       if (available < req.qty) {
         throw new InventoryError(`Cannot ship ${order.number}: ${item.sku} has ${available} available, need ${req.qty}${item.type === "assembly" ? ". Build more first." : ""}`, { itemId: item.id });
@@ -1157,6 +1204,9 @@ export async function shipOrder(store: Store, actor: Actor, input: ShipInput): P
     ),
   ];
   await store.batch(ops);
+  // Under FIFO a sale can move a component's cost; parents costed from their BOM follow.
+  const costMoved = Array.from(mv.itemPatches).filter(([, p]) => p.unitCost !== undefined).map(([id]) => id);
+  if (costMoved.length) await syncBomCosts(store, actor, costMoved);
   return { order: { ...order, ...patch }, shipment };
 }
 
@@ -1312,6 +1362,7 @@ export async function createItems(store: Store, actor: Actor, inputs: Array<Part
     if (taken.has(sku)) throw new InventoryError(`SKU ${sku} already exists`);
     taken.add(sku);
     const item = itemDefaults({ ...input, sku, onHand: 0, updatedBy: actor.id });
+    if (costFollowsBom(item) && item.bom.length > 0) item.unitCost = rolledUpCost([...existing, ...created], item);
     created.push(item);
     ops.push({ op: "put", collection: "items", doc: item });
   }
@@ -1350,6 +1401,7 @@ export async function updateItem(store: Store, actor: Actor, itemId: string, pat
     { op: "patch", collection: "items", id: itemId, patch: { ...patch, updatedAt: nowIso(), updatedBy: actor.id } },
     activityOp(actor, "item.updated", `${actor.name} updated ${item.sku} (${changed.join(", ")})${reason ? ` · ${reason}` : ""}`, { entityType: "item", entityId: itemId, meta: { fields: changed, reason, changes: changes.slice(0, CHANGE_LOG_LIMIT), changesTotal: changes.length } }),
   ]);
+  if (changed.some((k) => k === "bom" || k === "unitCost" || k === "costMode" || k === "type")) await syncBomCosts(store, actor, [itemId]);
 }
 
 /** One before/after line for the activity log, so a bulk change can be audited field by field. */
@@ -1731,6 +1783,7 @@ export async function importItems(store: Store, actor: Actor, rows: ImportRow[],
 
   ops.push(activityOp(actor, "import.completed", `${actor.name} imported ${result.created} new and ${result.updated} updated items`, { meta: { ...result } }));
   await store.batch(ops);
+  await syncBomCosts(store, actor, Array.from(new Set(rows.map((r) => bySku.get(r.sku.trim().toUpperCase())?.id).filter((id): id is string => !!id))));
   if (qtyTargets.length) {
     await adjustStock(store, actor, qtyTargets.map((t) => ({ itemId: t.itemId, newQty: t.newQty, type: "count" as const, reason: "Imported quantity", refType: "import" as const })));
   }
@@ -1749,5 +1802,39 @@ export async function bulkPatchItems(store: Store, actor: Actor, patches: Array<
   const fields = Array.from(new Set(patches.flatMap((p) => Object.keys(p.patch)))).join(", ");
   ops.push(activityOp(actor, "item.updated", `${actor.name} updated ${fields} on ${patches.length} item${patches.length === 1 ? "" : "s"} · ${reason}`, { meta: { count: patches.length, fields: fields.split(", "), reason, changes: changes.slice(0, CHANGE_LOG_LIMIT), changesTotal: changes.length } }));
   await store.batch(ops);
+  if (patches.some((p) => "unitCost" in p.patch || "bom" in p.patch || "costMode" in p.patch || "type" in p.patch)) await syncBomCosts(store, actor, patches.map((p) => p.id));
   return patches.length;
+}
+
+/**
+ * Keeps unit costs that follow a BOM in step: for every changed item and each
+ * assembly or kit above it, an item costed "from BOM" gets the rolled-up cost
+ * of its components when that differs from what is stored. Returns how many
+ * items moved. Pure reads plus one batch; a no-op when nothing follows a BOM.
+ */
+export async function syncBomCosts(store: Store, actor: Actor, changedIds: Iterable<string>): Promise<number> {
+  const items = await store.list("items");
+  if (!items.some((i) => costFollowsBom(i))) return 0;
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const affected = new Set<string>();
+  for (const id of changedIds) {
+    if (!byId.has(id)) continue;
+    affected.add(id);
+    for (const parent of whereUsedDeep(items, id)) affected.add(parent.id);
+  }
+  const ops: WriteOp[] = [];
+  const moved: string[] = [];
+  for (const id of affected) {
+    const item = byId.get(id)!;
+    if (!costFollowsBom(item) || item.bom.length === 0) continue;
+    const cost = rolledUpCost(items, item);
+    if (Math.abs(cost - item.unitCost) < 0.00001) continue;
+    item.unitCost = cost;
+    moved.push(item.sku);
+    ops.push({ op: "patch", collection: "items", id, patch: { unitCost: cost, updatedAt: nowIso(), updatedBy: actor.id } });
+  }
+  if (ops.length === 0) return 0;
+  ops.push(activityOp(actor, "item.updated", `Unit cost recalculated from the BOM on ${moved.length === 1 ? moved[0] : `${moved.length} items`}`, { meta: { fields: ["unitCost"], reason: "Follows the BOM", skus: moved.slice(0, 50) } }));
+  await store.batch(ops);
+  return ops.length - 1;
 }

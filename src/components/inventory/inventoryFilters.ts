@@ -1,20 +1,29 @@
-import type { Item, StockAlertRule } from "@/lib/types";
+import type { Item, StockAlertRule, WorkspaceSettings } from "@/lib/types";
 import { crossRefText } from "@/lib/scan";
 import { isLowStock } from "@/lib/inventory";
 import { matches } from "@/lib/utils";
 
-export type InventoryView = "all" | "active" | "low" | "assemblies" | "inactive";
+/** The built-in chips, plus one per item type defined in Settings → Catalog ("type:<id>"). */
+export type InventoryView = "all" | "active" | "low" | "assemblies" | "kits" | "inactive" | `type:${string}`;
 
 export const INVENTORY_VIEWS: Array<{ value: InventoryView; label: string }> = [
   { value: "all", label: "All" },
   { value: "active", label: "Active" },
   { value: "low", label: "Low stock" },
   { value: "assemblies", label: "Assemblies" },
+  { value: "kits", label: "Kits" },
   { value: "inactive", label: "Inactive" },
 ];
 
+/** The chips for this workspace: the built-in ones with the workspace's own item types slotted in before Inactive. */
+export function inventoryViews(settings: Pick<WorkspaceSettings, "catalog">): Array<{ value: InventoryView; label: string }> {
+  const custom = (settings.catalog?.itemTypes ?? []).filter((t) => t.label.trim()).map((t) => ({ value: `type:${t.id}` as InventoryView, label: t.label.trim() }));
+  const inactive = INVENTORY_VIEWS.find((v) => v.value === "inactive")!;
+  return [...INVENTORY_VIEWS.filter((v) => v.value !== "inactive"), ...custom, inactive];
+}
+
 export function isInventoryView(value: string | null | undefined): value is InventoryView {
-  return INVENTORY_VIEWS.some((v) => v.value === value);
+  return INVENTORY_VIEWS.some((v) => v.value === value) || (typeof value === "string" && value.startsWith("type:") && value.length > 5);
 }
 
 export function matchesView(item: Item, view: InventoryView, rule?: StockAlertRule): boolean {
@@ -25,10 +34,12 @@ export function matchesView(item: Item, view: InventoryView, rule?: StockAlertRu
       return isLowStock(item, rule);
     case "assemblies":
       return item.type === "assembly";
+    case "kits":
+      return item.type === "kit";
     case "inactive":
       return item.status === "inactive" || item.status === "superseded";
     default:
-      return true;
+      return view.startsWith("type:") ? item.type === view.slice("type:".length) : true;
   }
 }
 
@@ -44,9 +55,9 @@ export interface InventoryFilters {
 }
 
 /** Human-readable description of the active filters, for Strato prompt. */
-export function describeFilters(f: InventoryFilters, supplierName?: string): string {
+export function describeFilters(f: InventoryFilters, supplierName?: string, views: Array<{ value: InventoryView; label: string }> = INVENTORY_VIEWS): string {
   const parts: string[] = [];
-  if (f.view !== "all") parts.push(`view "${INVENTORY_VIEWS.find((v) => v.value === f.view)?.label ?? f.view}"`);
+  if (f.view !== "all") parts.push(`view "${views.find((v) => v.value === f.view)?.label ?? f.view}"`);
   if (f.category) parts.push(`category "${f.category}"`);
   if (f.supplierId) parts.push(`supplier "${supplierName ?? f.supplierId}"`);
   if (f.q.trim()) parts.push(`search "${f.q.trim()}"`);

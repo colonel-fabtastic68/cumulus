@@ -19,7 +19,7 @@ import { ItemFormModal } from "./ItemFormModal";
 import { StockAlertsModal } from "./StockAlertsModal";
 import { BulkEditModal } from "./BulkEditModal";
 import { useInventoryColumns } from "./InventoryColumns";
-import { INVENTORY_VIEWS, describeFilters, matchesSearch, matchesView, type InventoryView } from "./inventoryFilters";
+import { describeFilters, inventoryViews, matchesSearch, matchesView, type InventoryView } from "./inventoryFilters";
 import { downloadCsv, itemsToCsv } from "./exportItemsCsv";
 
 type Dialog = "new" | "adjust" | "build" | "bulk" | "deactivate" | "delete" | null;
@@ -69,6 +69,7 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
   const supplierById = useMemo(() => new Map(suppliers.map((s) => [s.id, s.name])), [suppliers]);
   const supplierName = useCallback((id?: string) => (id ? supplierById.get(id) : undefined), [supplierById]);
   const columns = useInventoryColumns({ currency, supplierName, location });
+  const views = useMemo(() => inventoryViews(settings), [settings]);
 
   const categories = useMemo(() => Array.from(new Set(items.map((i) => i.category).filter((c): c is string => !!c))).sort((a, b) => a.localeCompare(b)), [items]);
   const supplierOptions = useMemo(() => [...suppliers].sort((a, b) => a.name.localeCompare(b.name)).map((s) => ({ value: s.id, label: s.name })), [suppliers]);
@@ -86,10 +87,11 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
     [items, q, category, supplierId, location],
   );
   const counts = useMemo(() => {
-    const out: Record<InventoryView, number> = { all: 0, active: 0, low: 0, assemblies: 0, inactive: 0 };
-    for (const i of base) for (const v of INVENTORY_VIEWS) if (matchesView(i, v.value, settings.stockAlerts)) out[v.value]++;
+    const out: Record<string, number> = {};
+    for (const v of views) out[v.value] = 0;
+    for (const i of base) for (const v of views) if (matchesView(i, v.value, settings.stockAlerts)) out[v.value]!++;
     return out;
-  }, [base, settings.stockAlerts]);
+  }, [base, views, settings.stockAlerts]);
   const rows = useMemo(() => base.filter((i) => matchesView(i, view, settings.stockAlerts)), [base, view, settings.stockAlerts]);
 
   const lowCount = useMemo(() => items.filter((i) => isLowStock(i, settings.stockAlerts)).length, [items, settings.stockAlerts]);
@@ -124,7 +126,7 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
 
   const askAboutView = () => {
     const skus = rows.slice(0, MAX_SKUS_IN_PROMPT).map((i) => i.sku);
-    const filters = describeFilters({ q, view, category, supplierId }, supplierName(supplierId));
+    const filters = describeFilters({ q, view, category, supplierId }, supplierName(supplierId), views);
     const listing = rows.length === 0 ? "It is empty." : rows.length > MAX_SKUS_IN_PROMPT ? `The first ${MAX_SKUS_IN_PROMPT} SKUs are: ${skus.join(", ")}.` : `The SKUs are: ${skus.join(", ")}.`;
     openAgent(`I'm looking at the Inventory list with ${filters} (${pluralize(rows.length, "item")}, value ${formatMoney(viewValue, currency)}). ${listing} `, { send: false });
   };
@@ -193,7 +195,7 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
     <div className="flex flex-1 flex-wrap items-center gap-2">
       <SearchField value={q} onChange={setQ} placeholder="Search SKU, name, tag, barcode, cross-reference" className="w-full sm:w-72" />
       <div className="max-w-full overflow-x-auto">
-        <Segmented value={view} onChange={setView} options={INVENTORY_VIEWS.map((v) => ({ value: v.value, label: v.label, count: counts[v.value] }))} />
+        <Segmented value={view} onChange={setView} options={views.map((v) => ({ value: v.value, label: v.label, count: counts[v.value] ?? 0 }))} />
       </div>
       <Select value={category} onChange={(e) => setCategory(e.target.value)} placeholder="All categories" options={categories.map((c) => ({ value: c, label: c }))} containerClassName="w-full sm:w-44" aria-label="Category" />
       <Select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} placeholder="All suppliers" options={supplierOptions} containerClassName="w-full sm:w-48" aria-label="Supplier" />

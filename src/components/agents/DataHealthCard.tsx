@@ -73,7 +73,7 @@ export function DataHealthCard() {
         key: "bom",
         label: "Assemblies with an empty BOM",
         hint: "Cannot be built or costed",
-        items: active.filter((i) => i.type === "assembly" && i.bom.length === 0),
+        items: active.filter((i) => (i.type === "assembly" || i.type === "kit") && i.bom.length === 0),
         instruction: "These assemblies have an empty bill of materials. Suggest a BOM for each based on similar assemblies and their names, and explain what you are unsure about.",
       },
     ];

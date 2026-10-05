@@ -36,7 +36,7 @@ export function itemsToCsv(items: Item[], supplierName: (id?: string) => string 
       i.sku,
       i.name,
       i.category,
-      i.type === "assembly" ? "BOM" : "Part",
+      i.type === "assembly" ? "BOM" : i.type === "kit" ? "Kit" : "Part",
       i.status,
       i.onHand,
       i.unit,

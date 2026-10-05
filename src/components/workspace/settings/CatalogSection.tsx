@@ -38,6 +38,7 @@ export function CatalogSection({ settings, readOnly }: { settings: WorkspaceSett
       const clean = (list: CustomFieldDef[]) => list.filter((f) => f.label.trim()).map((f) => ({ ...f, key: f.key || keyFromLabel(f.label), label: f.label.trim(), options: f.type === "select" ? (f.options ?? []).map((o) => o.trim()).filter(Boolean) : undefined }));
       await saveSettings({
         catalog: {
+          ...(settings.catalog ?? {}),
           itemTypes: itemTypes.filter((t) => t.label.trim()).map((t) => ({ id: t.id, label: t.label.trim() })),
           priceGroups: groups.filter((g) => g.name.trim()).map((g) => ({ id: g.id, name: g.name.trim(), kind: g.kind ?? "percent", value: g.value && g.value > 0 ? g.value : undefined })),
           customFields: { items: clean(fields.items), customers: clean(fields.customers), suppliers: clean(fields.suppliers) },

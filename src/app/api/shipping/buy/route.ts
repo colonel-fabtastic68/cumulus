@@ -37,7 +37,7 @@ export async function POST(req: Request) {
       const line = order.lines.find((x) => x.itemId === l.itemId);
       if (!item || !line) throw new HttpError(400, "A line does not belong to this order.");
       if (l.qty > openQty(line)) throw new HttpError(409, `${item.sku}: only ${openQty(line)} is open.`);
-      if (item.type !== "assembly" && qtyAt(item, locationId, homeId) < l.qty) throw new HttpError(409, `${item.sku}: not enough stock at the ship-from location.`);
+      if (item.type !== "assembly" && item.type !== "kit" && qtyAt(item, locationId, homeId) < l.qty) throw new HttpError(409, `${item.sku}: not enough stock at the ship-from location.`);
     }
 
     const { secrets } = await loadConnected(ctx, body.provider);
