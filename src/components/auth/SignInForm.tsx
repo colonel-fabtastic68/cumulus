@@ -9,11 +9,15 @@ import { describeAuthError, useAuth } from "@/lib/auth";
 import { EMAIL_FOR_SIGN_IN_KEY, finishMagicLink, isMagicLink, scrubMagicLink, sendMagicLink } from "@/lib/auth-link";
 import { signInHref } from "@/lib/auth-routes";
 import { useSession } from "@/lib/session";
+import { currentInstance } from "@/lib/firebase-config";
 import { AuthPage, useNextPath } from "./AuthPage";
 import { PasswordField, emailError } from "./fields";
 
 export function SignInForm() {
   const { signIn, authError } = useAuth();
+  // A bespoke instance: password sign-in to its own account pool only (no emailed links, no waitlist).
+  const instance = currentInstance();
+  const instanceClosed = !!instance && !instance.tenantId;
   const { app, status } = useSession();
   const next = useNextPath();
   const params = useSearchParams();
@@ -104,9 +108,14 @@ export function SignInForm() {
 
   return (
     <AuthPage
-      title={needsEmail ? "Finish signing in" : "Sign in to cumulusOS"}
-      subtitle={needsEmail ? "Confirm the address this sign-in link was sent to." : "Your team's inventory workspace, live in Firestore."}
+      title={needsEmail ? "Finish signing in" : instance ? `Sign in to ${instance.brand.product}` : "Sign in to cumulusOS"}
+      subtitle={needsEmail ? "Confirm the address this sign-in link was sent to." : instance ? "Use the email and password your administrator set up for you." : "Your team's inventory workspace, live in Firestore."}
     >
+      {instanceClosed && (
+        <Banner tone="warning" className="mb-4">
+          Sign-in for {instance!.brand.name} is not switched on yet. Your administrator needs to finish setting it up.
+        </Banner>
+      )}
       <form onSubmit={submit} noValidate className="flex flex-col gap-4">
         <TextField label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} placeholder="you@company.com" autoComplete="email" autoFocus />
         {!needsEmail && (
@@ -127,17 +136,17 @@ export function SignInForm() {
             <p>{notice}</p>
           </div>
         )}
-        <Button type="submit" variant="primary" size="lg" fullWidth loading={busy === "form" || busy === "finish"} disabled={busy !== null}>
+        <Button type="submit" variant="primary" size="lg" fullWidth loading={busy === "form" || busy === "finish"} disabled={busy !== null || instanceClosed}>
           {needsEmail ? "Continue" : "Sign in"}
         </Button>
-        {!needsEmail && (
+        {!needsEmail && !instance && (
           <Button type="button" size="lg" fullWidth icon={<Send />} loading={busy === "link"} disabled={busy !== null} onClick={() => void sendLink()}>
             Email me a sign-in link
           </Button>
         )}
       </form>
 
-      {!needsEmail && (
+      {!needsEmail && !instance && (
         <p className="mt-5 text-center text-[13px] leading-5 text-text-secondary">
           New to cumulusOS?{" "}
           <Link href="/#waitlist" className="font-medium text-accent hover:underline">

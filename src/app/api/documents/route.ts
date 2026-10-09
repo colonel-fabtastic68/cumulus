@@ -25,7 +25,7 @@ export async function POST(req: Request) {
     const name = field("name") || file.name || "Untitled";
     const kind = field("kind") === "template" ? "template" : "document";
     const useFor = USES.includes(field("useFor") as DocumentUse) ? (field("useFor") as DocumentUse) : undefined;
-    const storagePath = documentPath(ctx.workspaceId, id, name);
+    const storagePath = documentPath(ctx.workspaceId, id, name, ctx.instance);
     await uploadDocumentFile(ctx.sa, storagePath, Buffer.from(await file.arrayBuffer()), file.type);
     const now = nowIso();
     const doc: WorkspaceDocument = {

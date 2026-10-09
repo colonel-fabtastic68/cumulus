@@ -17,6 +17,8 @@ export interface VerifiedIdToken {
   emailVerified: boolean;
   /** firebase.sign_in_provider, e.g. "password", "emailLink" or "anonymous". */
   signInProvider?: string;
+  /** firebase.tenant: the Identity Platform tenant the account belongs to; absent for the shared account pool. */
+  tenant?: string;
 }
 
 export async function verifyFirebaseIdToken(token: string, projectId: string): Promise<VerifiedIdToken> {
@@ -30,11 +32,12 @@ export async function verifyFirebaseIdToken(token: string, projectId: string): P
   if (!uid) throw new Error("Token has no subject");
   const authTime = typeof payload.auth_time === "number" ? payload.auth_time : 0;
   if (authTime > Math.floor(Date.now() / 1000) + 300) throw new Error("Token auth_time is in the future");
-  const firebase = (payload.firebase ?? {}) as { sign_in_provider?: unknown };
+  const firebase = (payload.firebase ?? {}) as { sign_in_provider?: unknown; tenant?: unknown };
   return {
     uid,
     email: typeof payload.email === "string" ? payload.email : undefined,
     emailVerified: payload.email_verified === true,
     signInProvider: typeof firebase.sign_in_provider === "string" ? firebase.sign_in_provider : undefined,
+    tenant: typeof firebase.tenant === "string" && firebase.tenant ? firebase.tenant : undefined,
   };
 }

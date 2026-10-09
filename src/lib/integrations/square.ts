@@ -1,8 +1,8 @@
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import type { Firestore } from "firebase-admin/firestore";
 import type { OAuthState } from "@/lib/server/quickbooksRules";
 import { OAUTH_STATES, consumeState } from "./quickbooks";
-import { HttpError, USER_AGENT, fetchJson, readSecrets, writeSecrets, type Secrets, type ServerContext } from "./server";
+import { HttpError, USER_AGENT, fetchJson, readSecrets, safeEqual, writeSecrets, type Secrets, type ServerContext } from "./server";
 
 /**
  * Square: the Catalog, Inventory and Locations APIs behind either of two
@@ -291,4 +291,115 @@ export async function verifySquareAccessToken(environment: SquareEnvironment, ac
     if (e instanceof HttpError && e.status === 401) throw new HttpError(400, `Square rejected that access token for the ${environment} environment. Copy it from the application's Credentials page with the toggle at the top set to ${environment === "sandbox" ? "Sandbox" : "Production"}, and paste the whole token.`);
     throw e;
   }
+}
+
+// ---- writes and webhooks (ranch bridge) -------------------------------------------
+
+/** A catalog object as the ranch bridge reads it: items with nested variations, and measurement units. */
+export interface SquareCatalogObject {
+  type: string;
+  id: string;
+  created_at?: string;
+  updated_at?: string;
+  is_deleted?: boolean;
+  item_data?: {
+    name?: string;
+    variations?: Array<{
+      id: string;
+      created_at?: string;
+      updated_at?: string;
+      is_deleted?: boolean;
+      item_variation_data?: { item_id?: string; name?: string; sku?: string; price_money?: { amount?: number }; track_inventory?: boolean; measurement_unit_id?: string };
+    }>;
+  };
+  measurement_unit_data?: { measurement_unit?: { weight_unit?: string; custom_unit?: { name?: string } } };
+}
+
+/** Every catalog object of the given types (variations come nested in their items). */
+export async function listCatalogObjects(environment: SquareEnvironment, token: string, types: string[]): Promise<SquareCatalogObject[]> {
+  const out: SquareCatalogObject[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < 100; page++) {
+    const q = new URLSearchParams({ types: types.join(",") });
+    if (cursor) q.set("cursor", cursor);
+    const data = await api<{ objects?: SquareCatalogObject[]; cursor?: string }>(environment, token, "GET", `catalog/list?${q.toString()}`);
+    out.push(...(data.objects ?? []));
+    cursor = data.cursor;
+    if (!cursor) break;
+  }
+  return out;
+}
+
+export interface SquareAdjustment {
+  variationId: string;
+  locationId: string;
+  /** Positive amount, in the variation's unit (pounds keep up to five decimals). */
+  quantity: number;
+  fromState: "IN_STOCK" | "NONE";
+  toState: "SOLD" | "IN_STOCK";
+  occurredAt: string;
+  referenceId?: string;
+}
+
+/** Square keeps five decimal places on inventory quantities. */
+export function squareQuantity(n: number): string {
+  return (Math.round(n * 100000) / 100000).toFixed(5).replace(/\.?0+$/, "");
+}
+
+/**
+ * Records adjustments (IN_STOCK → SOLD for a sale, NONE → IN_STOCK to put
+ * stock back) in one call per 100. The idempotency key makes a retry with the
+ * same key and body a no-op on Square's side.
+ */
+export async function batchChangeInventory(environment: SquareEnvironment, token: string, adjustments: SquareAdjustment[], idempotencyKey: string): Promise<void> {
+  for (let i = 0; i < adjustments.length; i += 100) {
+    const chunk = adjustments.slice(i, i + 100);
+    await api(environment, token, "POST", "inventory/changes/batch-create", {
+      idempotency_key: `${idempotencyKey}-${i / 100}`.slice(0, 128),
+      ignore_unchanged_counts: false,
+      changes: chunk.map((a) => ({
+        type: "ADJUSTMENT",
+        adjustment: {
+          catalog_object_id: a.variationId,
+          catalog_object_type: "ITEM_VARIATION",
+          location_id: a.locationId,
+          quantity: squareQuantity(a.quantity),
+          from_state: a.fromState,
+          to_state: a.toState,
+          occurred_at: a.occurredAt,
+          ...(a.referenceId ? { reference_id: a.referenceId.slice(0, 255) } : {}),
+        },
+      })),
+    });
+  }
+}
+
+/**
+ * Subscribes the seller's own application to events. Only works with the
+ * application's personal access token (Square owns subscriptions per app, not
+ * per seller), which is how a ranch instance connects.
+ */
+export async function createWebhookSubscription(environment: SquareEnvironment, token: string, input: { name: string; eventTypes: string[]; notificationUrl: string }): Promise<{ id: string; signatureKey: string }> {
+  const data = await api<{ subscription?: { id?: string; signature_key?: string } }>(environment, token, "POST", "webhooks/subscriptions", {
+    idempotency_key: randomBytes(16).toString("hex"),
+    subscription: { name: input.name, event_types: input.eventTypes, notification_url: input.notificationUrl, api_version: SQUARE_VERSION },
+  });
+  if (!data.subscription?.id || !data.subscription.signature_key) throw new HttpError(502, "Square did not confirm the webhook subscription.");
+  return { id: data.subscription.id, signatureKey: data.subscription.signature_key };
+}
+
+export async function deleteWebhookSubscription(environment: SquareEnvironment, token: string, id: string): Promise<void> {
+  try {
+    await fetchJson(`${squareBase(environment)}/v2/webhooks/subscriptions/${encodeURIComponent(id)}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}`, "Square-Version": SQUARE_VERSION } });
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 502 && /404/.test(e.message)) return;
+    throw e;
+  }
+}
+
+/** Square signs notifications with HMAC-SHA256 over the subscription's URL followed by the raw body (base64). */
+export function verifySquareWebhook(rawBody: string, signature: string | null, signatureKey: string, notificationUrl: string): boolean {
+  if (!signature || !signatureKey) return false;
+  const digest = createHmac("sha256", signatureKey).update(notificationUrl + rawBody, "utf8").digest("base64");
+  return safeEqual(digest, signature);
 }

@@ -5,18 +5,21 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Building2, Check, ChevronDown, ChevronsUpDown, Mail, Plus } from "lucide-react";
 import { Kbd, Menu, WorkspaceMark, type MenuItem } from "@/components/ui";
+import { currentInstance } from "@/lib/firebase-config";
 import { cn } from "@/lib/utils";
 import { useCollection, useSettings } from "@/lib/store/provider";
 import { isLowStock } from "@/lib/inventory";
 import { useSession } from "@/lib/session";
 import { APP_HOME } from "@/lib/auth-routes";
-import { isChildNavActive, isNavActive, NAV, NAV_SECONDARY, type NavItem } from "./nav";
+import { isChildNavActive, isNavActive, NAV, NAV_SECONDARY, navWithRanch, type NavItem } from "./nav";
+import { hasFeature } from "@/lib/instances";
 import { FeedbackChip } from "./FeedbackChip";
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const session = useSession();
+  const instance = currentInstance();
   const navRef = useRef<HTMLElement>(null);
   const settings = useSettings();
   const items = useCollection("items");
@@ -102,7 +105,15 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <aside className="flex h-full w-[232px] shrink-0 flex-col border-r border-border bg-nav-bg">
-      {session.mode === "firestore" ? (
+      {instance ? (
+        <div className="flex h-14 items-center gap-2.5 px-4">
+          <WorkspaceMark icon={settings.logo || instance.brand.icon} size={28} />
+          <div className="min-w-0 leading-tight">
+            <div className="truncate text-[13.5px] font-semibold text-text">{settings.companyName || instance.brand.name}</div>
+            <div className="text-[11px] text-text-tertiary">Inventory</div>
+          </div>
+        </div>
+      ) : session.mode === "firestore" ? (
         <Menu
           align="left"
           className="w-full"
@@ -142,11 +153,12 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         </div>
       )}
       <nav ref={navRef} className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 pb-3">
-        {NAV.map(renderLink)}
+        {(hasFeature(instance, "ranch") ? navWithRanch(NAV) : NAV).map(renderLink)}
         <div className="mt-4 mb-1 px-2.5 text-[12px] font-[550] text-text-secondary">Workspace</div>
         {NAV_SECONDARY.map(renderLink)}
       </nav>
-      <FeedbackChip />
+      {/* Feedback goes to the shared product's database; instances stay air-gapped from it. */}
+      {!instance && <FeedbackChip />}
       <div className="flex items-center gap-1.5 border-t border-border px-4 py-2 text-[11px] text-text-tertiary" title="Hold Shift and press the up or down arrow to move between pages">
         <Kbd>⇧</Kbd>
         <Kbd>↑</Kbd>

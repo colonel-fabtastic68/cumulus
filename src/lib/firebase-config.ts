@@ -9,6 +9,8 @@
  * access (security comes from Firestore rules and Auth), so sending it to the
  * browser is expected.
  */
+import { instanceForHost, instanceRuntime, type InstanceRuntime } from "@/lib/instances";
+
 export interface FirebaseConfig {
   apiKey: string;
   authDomain: string;
@@ -27,6 +29,12 @@ export interface RuntimeConfig {
   calendlyUrl?: string;
   /** The visitor opened the public demo: the sample workspace runs in the browser with no account. */
   demo?: boolean;
+  /**
+   * A bespoke instance (src/lib/instances.ts): its own Firestore database, its
+   * own account pool (Identity Platform tenant), one workspace and its brand.
+   * Absent on the shared product.
+   */
+  instance?: InstanceRuntime;
 }
 
 /** Env names in the order they are consulted; the NEXT_PUBLIC_ ones are legacy. */
@@ -83,6 +91,24 @@ export function runtimeConfigFromEnv(): RuntimeConfig {
     emailCodes: !!(cleanEnv(process.env.RESEND_API_KEY) && cleanEnv(process.env.EMAIL_FROM) && (cleanEnv(process.env.FIREBASE_SERVICE_ACCOUNT_JSON) || cleanEnv(process.env.FIREBASE_SERVICE_ACCOUNT_B64))),
     calendlyUrl: cleanEnv(process.env.CALENDLY_URL),
   };
+}
+
+/**
+ * Server-side: the runtime config for a request's host. On a bespoke instance
+ * the workspace is the instance's own, emailed sign-up codes and the demo
+ * calendar are off (the operator creates accounts), and the browser learns
+ * which database and account pool to use.
+ */
+export function runtimeConfigForHost(host: string | null | undefined): RuntimeConfig {
+  const base = runtimeConfigFromEnv();
+  const inst = instanceForHost(host);
+  if (!inst) return base;
+  return { firebase: base.firebase, workspaceId: inst.workspaceId, emailCodes: false, instance: instanceRuntime(inst) };
+}
+
+/** Client-side: the bespoke instance this page belongs to, if any. */
+export function currentInstance(): InstanceRuntime | null {
+  return getRuntimeConfig().instance ?? null;
 }
 
 let injected: RuntimeConfig | null = null;

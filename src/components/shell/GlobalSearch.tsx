@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { currentInstance } from "@/lib/firebase-config";
+import { SHARED_ONLY_PREFIXES, matchesPrefix } from "@/lib/instances";
 import { useRouter } from "next/navigation";
 import { Search, Sparkles } from "lucide-react";
 import { Kbd, Modal } from "@/components/ui";
@@ -80,7 +82,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
   );
 
   const results = useMemo(
-    () => searchWorkspace(q, { pages: PAGES, items, orders, shipments, rmas, receipts, transfers, builds, suppliers, customers, locations, members, integrations: integrationRows, activity }),
+    () => searchWorkspace(q, { pages: currentInstance() ? PAGES.filter((pg) => !matchesPrefix(pg.href.split("#")[0]!.split("?")[0]!, SHARED_ONLY_PREFIXES) && pg.href !== "/settings#billing") : PAGES, items, orders, shipments, rmas, receipts, transfers, builds, suppliers, customers, locations, members, integrations: integrationRows, activity }),
     [q, items, orders, shipments, rmas, receipts, transfers, builds, suppliers, customers, locations, members, integrationRows, activity],
   );
 

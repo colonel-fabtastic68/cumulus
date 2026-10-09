@@ -1,5 +1,6 @@
 import { isChannel, runChannelSync } from "@/lib/integrations/channelSync";
 import { authenticate, jsonError, readJson, readSecrets } from "@/lib/integrations/server";
+import { isRanch, pushPacks } from "@/lib/ranch/bridge";
 
 export const maxDuration = 60;
 
@@ -15,6 +16,11 @@ export async function POST(req: Request) {
     const ids = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string").slice(0, 500) : undefined);
     const itemIds = ids(body.itemIds);
     const detailIds = ids(body.detailIds);
+    // Ranch instances sell packs, not items: re-count the packs that draw on the changed cuts.
+    if (isRanch(ctx)) {
+      const r = await pushPacks(ctx, { itemIds });
+      return Response.json({ results: { woocommerce: { pushed: r.pushed, updated: r.priced, removed: 0, errors: r.errors } } });
+    }
     const integrations = (await ctx.store.list("integrations")).filter((i) => isChannel(i.id) && i.status === "connected");
     const results: Record<string, { pushed: number; created?: number; linked?: number; updated?: number; removed: number; errors: string[] }> = {};
     for (const integration of integrations) {

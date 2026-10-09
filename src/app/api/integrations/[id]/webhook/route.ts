@@ -1,5 +1,6 @@
 import { handleChannelWebhook, isChannel } from "@/lib/integrations/channelSync";
-import { readSecrets, safeEqual, systemContext } from "@/lib/integrations/server";
+import { readSecrets, requestInstance, safeEqual, systemContext } from "@/lib/integrations/server";
+import { handleRanchWooWebhook, isRanch } from "@/lib/ranch/bridge";
 import { verifyShopifyWebhook } from "@/lib/integrations/shopify";
 import { verifyWooWebhook } from "@/lib/integrations/woocommerce";
 
@@ -17,10 +18,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const ws = url.searchParams.get("ws") ?? "";
   const token = url.searchParams.get("t") ?? "";
   if (!ws || !token || !/^[A-Za-z0-9_-]{1,128}$/.test(ws)) return new Response("Unauthorized", { status: 401 });
+  // A bespoke instance's deliveries arrive on its own host and land in its own database, for its one workspace.
+  const instance = requestInstance(req);
+  if (instance && (ws !== instance.workspaceId || !(instance.integrations as string[]).includes(id))) return new Response("Unauthorized", { status: 401 });
   const raw = await req.text();
   let ctx;
   try {
-    ctx = systemContext(ws);
+    ctx = systemContext(ws, undefined, instance);
   } catch (e) {
     return new Response(e instanceof Error ? e.message : "Unavailable", { status: 503 });
   }
@@ -47,7 +51,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return new Response("Bad JSON", { status: 400 });
   }
   try {
-    const outcome = await handleChannelWebhook(ctx, integration, secrets, topic, payload);
+    const outcome = isRanch(ctx) && id === "woocommerce" ? await handleRanchWooWebhook(ctx, topic, payload) : await handleChannelWebhook(ctx, integration, secrets, topic, payload);
     return Response.json({ ok: true, outcome });
   } catch (e) {
     console.error(`[webhook ${id}]`, e);

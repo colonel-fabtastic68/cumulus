@@ -50,6 +50,9 @@ export function getFirebaseAuth(app: FirebaseApp): Auth {
   } catch {
     auth = getAuth(app);
   }
+  // A bespoke instance signs people in to its own Identity Platform tenant, never the shared account pool.
+  const instance = getRuntimeConfig().instance;
+  if (instance) auth.tenantId = instance.tenantId ?? "unconfigured-instance-tenant";
   auths.set(app, auth);
   return auth;
 }
@@ -65,16 +68,22 @@ const dbs = new WeakMap<FirebaseApp, Firestore>();
 export function getDb(app: FirebaseApp): Firestore {
   const existing = dbs.get(app);
   if (existing) return existing;
+  // A bespoke instance keeps everything in its own named database; the shared product uses the default one.
+  const databaseId = getRuntimeConfig().instance?.databaseId;
   let db: Firestore;
   try {
-    db = initializeFirestore(app, {
-      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-      // Fall back to long polling when a proxy, extension or Safari blocks the streaming channel.
-      experimentalAutoDetectLongPolling: true,
-    });
+    db = initializeFirestore(
+      app,
+      {
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+        // Fall back to long polling when a proxy, extension or Safari blocks the streaming channel.
+        experimentalAutoDetectLongPolling: true,
+      },
+      databaseId,
+    );
   } catch {
     // Already initialized without these settings (or persistence unavailable): keep going without the disk cache.
-    db = getFirestore(app);
+    db = databaseId ? getFirestore(app, databaseId) : getFirestore(app);
   }
   dbs.set(app, db);
   return db;
@@ -110,7 +119,7 @@ export class FirestoreStore implements Store {
     this.cache = {
       items: [], movements: [], lots: [], suppliers: [], receipts: [], builds: [], orders: [],
       rmas: [], members: [], activity: [], integrations: [], settings: [], agentSessions: [],
-      locations: [], transfers: [], shipments: [], quotes: [], channelTombstones: [], quoteTemplates: [], orderTemplates: [], customers: [], events: [], purchaseOrders: [], purchaseOrderTemplates: [], cycleCounts: [], documents: [],
+      locations: [], transfers: [], shipments: [], quotes: [], channelTombstones: [], quoteTemplates: [], orderTemplates: [], customers: [], events: [], purchaseOrders: [], purchaseOrderTemplates: [], cycleCounts: [], documents: [], packs: [],
     };
     for (const name of COLLECTIONS) {
       const p = new Promise<void>((resolve, reject) => {

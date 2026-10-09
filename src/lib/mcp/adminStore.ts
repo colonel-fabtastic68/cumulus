@@ -70,11 +70,13 @@ export class AdminFirestoreStore implements Store {
   private db: Firestore;
   private cache = new Map<CollectionName, unknown[]>();
 
+  /** `databaseId` names a bespoke instance's own Firestore database (src/lib/instances.ts); omitted means the shared default one. */
   constructor(
     sa: ServiceAccount,
     private workspaceId: string,
+    databaseId?: string,
   ) {
-    this.db = getFirestore(adminApp(sa));
+    this.db = databaseId ? getFirestore(adminApp(sa), databaseId) : getFirestore(adminApp(sa));
   }
 
   private col(name: CollectionName) {

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { isDemo } from "@/lib/firebase-config";
+import { currentInstance, isDemo } from "@/lib/firebase-config";
+import { hasFeature } from "@/lib/instances";
 import { ArrowRight, Download, ExternalLink, Plug, RefreshCw, Sparkles, Unplug } from "lucide-react";
 import type { Integration, IntegrationSettings } from "@/lib/types";
 import { Badge, Banner, Button, ConfirmDialog, DescriptionList, Modal, Select, StatusBadge, TextField, Toggle, useToast } from "@/components/ui";
@@ -96,7 +97,8 @@ function SetupSteps({ def }: { def: IntegrationDef }) {
 
 function SettingsToggles({ def, value, onChange, disabled }: { def: IntegrationDef; value: IntegrationSettings; onChange: (v: IntegrationSettings) => void; disabled?: boolean }) {
   const locations = useLocations();
-  if (!def.settings?.length) return null;
+  // On a ranch instance the bridge decides what syncs (Square counts in, packs out); the generic switches do not apply.
+  if (!def.settings?.length || hasFeature(currentInstance(), "ranch")) return null;
   return (
     <div className="flex flex-col gap-2.5">
       {def.settings.map((s) => (
@@ -177,13 +179,15 @@ function OAuthConnect({ def, integration, onClose }: { def: IntegrationDef; inte
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(integration?.status === "error" && integration.lastError ? integration.lastError : null);
-  const [manual, setManual] = useState(false);
+  const [manual, setManual] = useState(() => !!currentInstance());
   const [realmId, setRealmId] = useState(integration?.config?.realmId ?? "");
   const [refreshToken, setRefreshToken] = useState("");
   const [shop, setShop] = useState(integration?.config?.shop ?? "");
   const needsShop = def.id === "shopify";
   // Shopify, Square, Clover and the carriers also take a pasted key; QuickBooks only in the sandbox.
   const pasteForm = needsShop || def.kind === "carrier" || def.id === "square" || def.id === "clover";
+  // A bespoke instance cannot use the shared OAuth apps (their callbacks live on the shared product): paste a token instead.
+  const pasteOnly = !!currentInstance() && pasteForm;
 
   const paste = async () => {
     setBusy(true);
@@ -218,14 +222,14 @@ function OAuthConnect({ def, integration, onClose }: { def: IntegrationDef; inte
       <SetupSteps def={def} />
       {needsShop && <TextField label="Store address" value={shop} onChange={(e) => setShop(e.target.value)} placeholder="your-store.myshopify.com" help="The .myshopify.com address from Shopify admin." autoComplete="off" autoFocus />}
       {error && <Banner tone="critical">{error}</Banner>}
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      {!pasteOnly && <div className="flex flex-wrap items-center justify-between gap-2">
         <Button variant="plain" size="sm" onClick={() => setManual((v) => !v)}>
           {manual ? (pasteForm ? `Back to Connect to ${def.name}` : "Hide sandbox token entry") : needsShop ? "Use an Admin API access token instead" : def.kind === "carrier" ? "Paste an API token instead" : def.id === "square" ? "Use your own Square application's access token instead" : def.id === "clover" ? "Use an API token from your Clover dashboard instead" : def.id === "quickbooks" ? "Sandbox: paste tokens from Intuit's playground instead" : ""}
         </Button>
         <Button variant="primary" icon={<ExternalLink />} onClick={() => void start()} loading={busy && !manual} disabled={needsShop && !shop.trim()}>
           Connect to {def.name.replace(/ Online$/, "")}
         </Button>
-      </div>
+      </div>}
       {manual && pasteForm && <ConnectForm def={def} integration={integration} onClose={onClose ?? (() => {})} />}
       {manual && !pasteForm && (
         <div className="flex flex-col gap-3 rounded-[var(--radius)] border border-border bg-surface-subdued p-4">

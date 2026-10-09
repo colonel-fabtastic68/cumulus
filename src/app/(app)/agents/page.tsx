@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
+import { currentInstance } from "@/lib/firebase-config";
 import { Page } from "@/components/ui";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { AutomationsCard, ConversationsTable, DataHealthCard, McpCard } from "@/components/agents";
@@ -31,7 +32,8 @@ export default function AgentsPage() {
 
         <section>
           <SectionHeading title="Connect other agents" description="Let other AI agents and tools reach this workspace through the Model Context Protocol, with the same tools Strato has." />
-          <McpCard />
+          {/* The MCP endpoint serves the shared product only; instances do not expose it. */}
+          {!currentInstance() && <McpCard />}
         </section>
 
         <section>

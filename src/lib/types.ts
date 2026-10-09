@@ -196,6 +196,11 @@ export interface Lot {
   unitCost: number;
   receivedAt: string;
   expiresAt?: string;
+  /**
+   * The point-of-sale record this batch mirrors. On a ranch instance a Square
+   * "Lot #" variation is one animal's share of one cut; its count is the batch's quantity.
+   */
+  externalIds?: { square?: string };
 }
 
 /** Replenishment rule on an item: how and when it is reordered. */
@@ -341,6 +346,67 @@ export interface SalesOrder {
   fulfilledAt?: string;
   createdAt: string;
   createdBy: string;
+  /** Ranch instances: how a web order of packs became pounds of cuts, and whether Square has been told. */
+  bridge?: OrderBridge;
+}
+
+/** Ranch bridge bookkeeping on a web order (see src/lib/ranch). */
+export interface OrderBridge {
+  /** The packs on the store order and the listings they were matched to. */
+  packs: Array<{ sku: string; listingId: string; name: string; packs: number }>;
+  /** Store lines no listing matched; they did not take stock. */
+  unmatched?: string[];
+  /** Pounds that could not be relieved because cumulusOS was short; the order stays open for them. */
+  short?: Array<{ itemId: string; qty: number }>;
+  /** Square adjustments for the lots the sale was taken from. */
+  square: BridgePush;
+  /** Set when the store order was cancelled or refunded after it had been recorded. */
+  reversed?: { at: string; square: BridgePush };
+}
+
+export interface BridgePush {
+  status: "pending" | "pushed" | "failed" | "skipped";
+  /** Number of lot adjustments sent (or to send). */
+  adjustments?: number;
+  error?: string;
+  at?: string;
+}
+
+/**
+ * Ranch instances: one product on the web store and what a pack of it takes
+ * out of stock. A single cut has one component (the pack weight in the cut's
+ * unit, e.g. 1.5 lb of Flat Iron); a box lists several. Willo sets these; the
+ * bridge turns pounds on hand into packs for sale and web orders back into pounds.
+ */
+export interface PackListing {
+  id: ID;
+  /** Product name as the store shows it. */
+  name: string;
+  /** Store SKU, the second way web order lines find the listing. */
+  sku: string;
+  /** The store product (and variation) this listing drives; found by SKU when absent. */
+  woo?: { productId: string; variationId?: string };
+  components: PackComponent[];
+  /** How the pack is described to staff, e.g. "2 × 8 oz avg/pack". */
+  packLabel?: string;
+  /** Web price per pack. */
+  price: number;
+  /** Packs held back from the web so counter sales and the site do not oversell. */
+  reserve?: number;
+  category?: string;
+  active: boolean;
+  /** What the bridge last wrote to the store. */
+  pushed?: { stock: number; price: number; at: string };
+  /** Why the last push for this listing failed, if it did. */
+  pushError?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PackComponent {
+  itemId: ID;
+  /** Quantity of the item one pack takes, in the item's unit (lb for cuts). */
+  qty: number;
 }
 
 /** Someone the business sells to. Orders, returns and quotes point back here by id or, for older records, by name. */
@@ -1171,6 +1237,7 @@ export interface CollectionMap {
   purchaseOrderTemplates: PurchaseOrderTemplate;
   cycleCounts: CycleCount;
   documents: WorkspaceDocument;
+  packs: PackListing;
 }
 
 export type CollectionName = keyof CollectionMap;
@@ -1202,6 +1269,7 @@ export const COLLECTIONS: CollectionName[] = [
   "purchaseOrderTemplates",
   "cycleCounts",
   "documents",
+  "packs",
 ];
 
 /** A full snapshot of a workspace. Used for seed data, export and import. */

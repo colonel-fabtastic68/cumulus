@@ -25,8 +25,9 @@ export function safeFileName(name: string): string {
   return (cleaned || "file").slice(0, 160);
 }
 
-export function documentPath(workspaceId: string, id: string, name: string): string {
-  return `workspaces/${workspaceId}/documents/${id}/${safeFileName(name)}`;
+/** A bespoke instance's files sit under instances/{id}/ so they never share a prefix with the shared product's workspaces. */
+export function documentPath(workspaceId: string, id: string, name: string, instance?: { id: string } | null): string {
+  return `${instance ? `instances/${instance.id}/` : ""}workspaces/${workspaceId}/documents/${id}/${safeFileName(name)}`;
 }
 
 export async function uploadDocumentFile(sa: ServiceAccount, path: string, data: Buffer, mime: string): Promise<void> {

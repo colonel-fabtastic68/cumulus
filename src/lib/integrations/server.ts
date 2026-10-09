@@ -2,8 +2,9 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import type { Integration, IntegrationId, Member } from "@/lib/types";
 import type { Actor } from "@/lib/inventory";
+import { instanceForHost, instanceTenantId, type InstanceDef } from "@/lib/instances";
 import { AdminFirestoreStore, adminApp, readServiceAccount, type ServiceAccount } from "@/lib/mcp/adminStore";
-import { verifyFirebaseIdToken } from "./verifyIdToken";
+import { verifyFirebaseIdToken, type VerifiedIdToken } from "./verifyIdToken";
 
 /**
  * Shared plumbing for the integration and shipping API routes: the caller's
@@ -33,6 +34,8 @@ export interface ServerContext {
   actor: Actor;
   /** Present for signed-in callers; absent for webhooks and cron. */
   member?: Member;
+  /** The bespoke instance the work belongs to (its own database); null for the shared product. */
+  instance: InstanceDef | null;
 }
 
 export const SYSTEM_ACTOR: Actor = { id: "system", name: "cumulusOS sync" };
@@ -43,32 +46,75 @@ export function requireServiceAccount(): ServiceAccount {
   return sa;
 }
 
+/** The hostname a request was made to (Vercel and `next dev` both set Host to the domain the visitor typed). */
+export function requestHost(req: Request): string {
+  return req.headers.get("host") ?? req.headers.get("x-forwarded-host") ?? new URL(req.url).host;
+}
+
+/** The bespoke instance a request is for, or null for the shared product. */
+export function requestInstance(req: Request): InstanceDef | null {
+  return instanceForHost(requestHost(req));
+}
+
+/** The Firestore database that holds a context's data: an instance's own, else the shared default. */
+export function firestoreFor(sa: ServiceAccount, instance: InstanceDef | null): Firestore {
+  return instance ? getFirestore(adminApp(sa), instance.databaseId) : getFirestore(adminApp(sa));
+}
+
+/**
+ * Keeps the account pools apart: a token from an instance's tenant only works
+ * on that instance's host, and a shared-product token never works on an
+ * instance. An instance whose tenant is not configured yet refuses everyone.
+ */
+export function assertTokenPool(token: Pick<VerifiedIdToken, "tenant">, instance: InstanceDef | null): void {
+  if (!instance) {
+    if (token.tenant) throw new HttpError(401, "This account belongs to a different cumulusOS site. Sign in there instead.");
+    return;
+  }
+  const tenantId = instanceTenantId(instance);
+  if (!tenantId) throw new HttpError(503, `${instance.brand.name} sign-in is not set up yet (${instance.tenantEnv} is missing on the server).`);
+  if (token.tenant !== tenantId) throw new HttpError(401, `This account cannot sign in to ${instance.brand.name}.`);
+}
+
 /** A context for background work (webhooks, cron) on one workspace. */
-export function systemContext(workspaceId: string, sa = requireServiceAccount()): ServerContext {
-  return { sa, db: getFirestore(adminApp(sa)), workspaceId, store: new AdminFirestoreStore(sa, workspaceId), actor: SYSTEM_ACTOR };
+export function systemContext(workspaceId: string, sa = requireServiceAccount(), instance: InstanceDef | null = null): ServerContext {
+  return { sa, db: firestoreFor(sa, instance), workspaceId, store: new AdminFirestoreStore(sa, workspaceId, instance?.databaseId), actor: SYSTEM_ACTOR, instance };
+}
+
+function bearer(req: Request): string {
+  const header = req.headers.get("authorization") ?? "";
+  return header.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : "";
+}
+
+async function verifiedFor(token: string, sa: ServiceAccount, instance: InstanceDef | null): Promise<VerifiedIdToken> {
+  let t: VerifiedIdToken;
+  try {
+    t = await verifyFirebaseIdToken(token, sa.project_id);
+  } catch {
+    throw new HttpError(401, "Your session has expired. Sign in again.");
+  }
+  assertTokenPool(t, instance);
+  return t;
 }
 
 /** Verifies the bearer ID token and the caller's membership of the workspace named in `x-workspace-id`. */
 export async function authenticate(req: Request, opts: { write?: boolean; manage?: boolean } = {}): Promise<ServerContext & { member: Member }> {
   const sa = requireServiceAccount();
-  const header = req.headers.get("authorization") ?? "";
-  const token = header.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : "";
+  const token = bearer(req);
   if (!token) throw new HttpError(401, "Sign in first.");
   const workspaceId = req.headers.get("x-workspace-id")?.trim() ?? "";
   if (!workspaceId || !/^[A-Za-z0-9_-]{1,128}$/.test(workspaceId)) throw new HttpError(400, "Missing workspace.");
-  let uid: string;
-  try {
-    uid = (await verifyFirebaseIdToken(token, sa.project_id)).uid;
-  } catch {
-    throw new HttpError(401, "Your session has expired. Sign in again.");
-  }
-  const db = getFirestore(adminApp(sa));
+  const instance = requestInstance(req);
+  // An instance has exactly one workspace; nothing else can be named through its host.
+  if (instance && workspaceId !== instance.workspaceId) throw new HttpError(403, "You are not a member of this workspace.");
+  const { uid } = await verifiedFor(token, sa, instance);
+  const db = firestoreFor(sa, instance);
   const snap = await db.doc(`workspaces/${workspaceId}/members/${uid}`).get();
   if (!snap.exists) throw new HttpError(403, "You are not a member of this workspace.");
   const member = snap.data() as Member;
   if (opts.write && member.role === "viewer") throw new HttpError(403, "Viewers cannot do that.");
   if (opts.manage && member.role !== "owner" && member.role !== "admin") throw new HttpError(403, "Only owners and admins can manage connections.");
-  return { sa, db, workspaceId, member, store: new AdminFirestoreStore(sa, workspaceId), actor: { id: member.id, name: member.name } };
+  return { sa, db, workspaceId, member, store: new AdminFirestoreStore(sa, workspaceId, instance?.databaseId), actor: { id: member.id, name: member.name }, instance };
 }
 
 export interface AccountContext {
@@ -79,20 +125,17 @@ export interface AccountContext {
   email: string;
   emailVerified: boolean;
   signInProvider?: string;
+  instance: InstanceDef | null;
 }
 
 /** Verifies the bearer ID token for calls made outside any workspace: email codes, billing, creating a workspace. */
 export async function authenticateAccount(req: Request): Promise<AccountContext> {
   const sa = requireServiceAccount();
-  const header = req.headers.get("authorization") ?? "";
-  const token = header.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : "";
+  const token = bearer(req);
   if (!token) throw new HttpError(401, "Sign in first.");
-  try {
-    const t = await verifyFirebaseIdToken(token, sa.project_id);
-    return { sa, db: getFirestore(adminApp(sa)), uid: t.uid, email: (t.email ?? "").toLowerCase(), emailVerified: t.emailVerified, signInProvider: t.signInProvider };
-  } catch {
-    throw new HttpError(401, "Your session has expired. Sign in again.");
-  }
+  const instance = requestInstance(req);
+  const t = await verifiedFor(token, sa, instance);
+  return { sa, db: firestoreFor(sa, instance), uid: t.uid, email: (t.email ?? "").toLowerCase(), emailVerified: t.emailVerified, signInProvider: t.signInProvider, instance };
 }
 
 // ---- secrets ----------------------------------------------------------------
@@ -137,8 +180,17 @@ export function safeEqual(a: string, b: string): boolean {
   return ab.length === bb.length && timingSafeEqual(ab, bb);
 }
 
-/** Public base URL for webhooks: APP_URL when set, else the request's own origin. */
+/**
+ * Public base URL for webhooks: APP_URL when set, else the request's own
+ * origin. A bespoke instance always uses its own host, so deliveries come back
+ * to the instance (and its database) rather than the shared product.
+ */
 export function appUrl(req: Request): string {
+  if (requestInstance(req)) {
+    const host = requestHost(req);
+    const local = /(^|\.)localhost(:\d+)?$/.test(host);
+    return `${local ? "http" : "https"}://${host}`;
+  }
   const configured = process.env.APP_URL?.trim().replace(/\/$/, "");
   if (configured) return configured;
   const origin = new URL(req.url).origin;

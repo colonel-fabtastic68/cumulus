@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { FirebaseApp } from "firebase/app";
 import type { User } from "firebase/auth";
-import { getRuntimeConfig } from "@/lib/firebase-config";
+import { currentInstance, getRuntimeConfig } from "@/lib/firebase-config";
 import type { BusinessIntake, MemberRole, UserProfile, WorkspaceInvite, WorkspaceMembership } from "@/lib/types";
 import { debugLog } from "@/lib/debug";
 import { getFirebaseApp, getFirebaseAuth, readFirebaseConfig } from "@/lib/store/firestore";
@@ -193,12 +193,15 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
     };
   }, [app]);
 
+  // A bespoke instance has one workspace and no invites: the operator creates every account.
+  const instance = currentInstance();
+
   // Invites addressed to this email, live.
   const email = profile?.email ?? "";
   useEffect(() => {
-    if (!email) return;
+    if (!email || instance) return;
     return subscribeInvitesForEmail(app, email, (invites) => setInviteFeed({ email, invites }));
-  }, [app, email]);
+  }, [app, email, instance]);
   const pendingInvites = useMemo(() => (email && inviteFeed.email === email ? inviteFeed.invites : []), [email, inviteFeed]);
 
   const workspaces = useMemo(() => Object.values(profile?.workspaces ?? {}).sort((a, b) => a.name.localeCompare(b.name)), [profile]);
@@ -206,12 +209,14 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
   const workspaceId = useMemo(() => {
     if (!profile) return null;
     const has = (id: string | null | undefined): id is string => !!id && !!profile.workspaces[id];
+    // On an instance only its own workspace can open; without that membership the account has no access here.
+    if (instance) return has(instance.workspaceId) ? instance.workspaceId : null;
     if (has(chosen)) return chosen;
     const saved = readSavedWorkspace(profile.id);
     if (has(saved)) return saved;
     if (has(profile.lastWorkspaceId)) return profile.lastWorkspaceId;
     return workspaces[0]?.id ?? null;
-  }, [profile, chosen, workspaces]);
+  }, [profile, chosen, workspaces, instance]);
 
   const switchWorkspace = useCallback(
     (id: string) => {
@@ -230,6 +235,7 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
   const createWorkspace = useCallback(
     async (opts: CreateWorkspaceOptions) => {
       if (!profile) throw new Error("Sign in first.");
+      if (instance) throw new Error("This site has a single workspace.");
       const membership = await createWorkspaceDoc(app, profile, opts);
       // The profile snapshot follows shortly; make the switch immediate.
       setProfile((p) => (p ? { ...p, workspaces: { ...p.workspaces, [membership.id]: membership }, lastWorkspaceId: membership.id } : p));
@@ -240,12 +246,13 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
       setChosen(membership.id);
       return membership;
     },
-    [app, profile, switchWorkspace],
+    [app, profile, switchWorkspace, instance],
   );
 
   const acceptInvite = useCallback(
     async (code: string) => {
       if (!profile) throw new Error("Sign in first.");
+      if (instance) throw new Error("Accounts on this site are added by your administrator.");
       const membership = await acceptInviteDoc(app, profile, code);
       setProfile((p) => (p ? { ...p, workspaces: { ...p.workspaces, [membership.id]: membership }, lastWorkspaceId: membership.id } : p));
       try {
@@ -254,16 +261,17 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
       setChosen(membership.id);
       return membership;
     },
-    [app, profile],
+    [app, profile, instance],
   );
 
   const createInvite = useCallback(
     (opts: { email: string; role: MemberRole }) => {
+      if (instance) return Promise.reject(new Error("Accounts on this site are added by your administrator."));
       const ws = workspaceId ? profile?.workspaces[workspaceId] : undefined;
       if (!profile || !ws) return Promise.reject(new Error("Open a workspace first."));
       return createInviteDoc(app, { id: profile.id, name: profile.name }, { id: ws.id, name: ws.name }, opts);
     },
-    [app, profile, workspaceId],
+    [app, profile, workspaceId, instance],
   );
 
   const revokeInvite = useCallback((id: string) => revokeInviteDoc(app, id), [app]);
@@ -302,7 +310,7 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
 
   const needsEmailCode = !!(getRuntimeConfig().emailCodes && account && !account.isAnonymous && account.passwordAccount && !account.emailVerified && account.createdAt >= EMAIL_CODES_FROM);
   // Once the email is confirmed, a new account answers the intake before the app opens; the answer lives on the profile.
-  const needsIntake = !!(account && !account.isAnonymous && !needsEmailCode && profile && !profile.guest && !profile.business && account.createdAt >= INTAKE_FROM);
+  const needsIntake = !!(!instance && account && !account.isAnonymous && !needsEmailCode && profile && !profile.guest && !profile.business && account.createdAt >= INTAKE_FROM);
   const saveIntake = useCallback(
     async (intake: Omit<BusinessIntake, "completedAt">) => {
       if (!account) return;
@@ -325,13 +333,13 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
 
   const subscribeInvites = useCallback(
     (cb: (invites: WorkspaceInvite[]) => void) => {
-      if (!workspaceId) {
+      if (!workspaceId || instance) {
         cb([]);
         return () => {};
       }
       return subscribeWorkspaceInvites(app, workspaceId, cb);
     },
-    [app, workspaceId],
+    [app, workspaceId, instance],
   );
 
   const status: SessionStatus = account === undefined ? "loading" : account === null ? "signed-out" : !profile ? "loading" : workspaceId ? "ready" : "no-workspace";

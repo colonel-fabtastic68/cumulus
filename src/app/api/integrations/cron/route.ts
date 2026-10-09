@@ -11,6 +11,8 @@ import { adminApp } from "@/lib/mcp/adminStore";
 import { nowIso } from "@/lib/utils";
 import { autoBackup } from "@/lib/server/backups";
 import { autoReplenish } from "@/lib/replenishment";
+import { INSTANCES, hasFeature } from "@/lib/instances";
+import { ranchSync } from "@/lib/ranch/bridge";
 
 export const maxDuration = 300;
 
@@ -80,6 +82,33 @@ export async function GET(req: Request) {
       if (outcome !== "unchanged") report.push({ workspace: wsRef.id, integration: "backup", outcome });
     } catch (e) {
       report.push({ workspace: wsRef.id, integration: "backup", outcome: `error: ${e instanceof Error ? e.message : String(e)}` });
+    }
+  }
+  // Bespoke instances: each in its own database, never mixed into the loops above.
+  for (const instance of INSTANCES) {
+    const ctx = systemContext(instance.workspaceId, sa, instance);
+    const label = `${instance.id}/${instance.workspaceId}`;
+    try {
+      if (!(await ctx.db.doc(`workspaces/${instance.workspaceId}/settings/default`).get()).exists) continue;
+    } catch (e) {
+      // The instance's database does not exist yet (or is unreachable): nothing to do until it is set up.
+      report.push({ workspace: label, integration: "instance", outcome: `skipped: ${e instanceof Error ? e.message : String(e)}` });
+      continue;
+    }
+    if (hasFeature(instance, "ranch")) {
+      try {
+        report.push({ workspace: label, integration: "ranch", outcome: (await ranchSync(ctx)).summary });
+      } catch (e) {
+        report.push({ workspace: label, integration: "ranch", outcome: `error: ${e instanceof Error ? e.message : String(e)}` });
+      }
+    }
+    try {
+      const outcome = await autoReplenish(ctx.store, ctx.actor);
+      if (outcome !== "nothing to order") report.push({ workspace: label, integration: "replenishment", outcome });
+      const backup = await autoBackup(ctx);
+      if (backup !== "unchanged") report.push({ workspace: label, integration: "backup", outcome: backup });
+    } catch (e) {
+      report.push({ workspace: label, integration: "housekeeping", outcome: `error: ${e instanceof Error ? e.message : String(e)}` });
     }
   }
   return Response.json({ ranAt: nowIso(), report });

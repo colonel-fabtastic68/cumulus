@@ -14,7 +14,7 @@ import { Onboarding } from "./Onboarding";
 import { PreviewBar } from "./PreviewBar";
 import { Banner, Button, Skeleton } from "@/components/ui";
 import { signInHref } from "@/lib/auth-routes";
-import { isDemo } from "@/lib/firebase-config";
+import { currentInstance, isDemo } from "@/lib/firebase-config";
 import { useSession } from "@/lib/session";
 import { WorkspaceHub } from "@/components/workspace/hub";
 import { useNavArrowKeys } from "./useNavArrowKeys";
@@ -124,6 +124,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   if (needsCode || needsIntake) return <LoadingSkeleton />;
 
+  // A bespoke instance: an account without membership of its one workspace has no way in (no hub, no create, no invites).
+  if (mode === "firestore" && currentInstance() && (session.status === "no-workspace" || (ready && !user))) return <InstanceNoAccess />;
+
   // Signed in, but not in any workspace yet: create one or join one you were invited to.
   if (mode === "firestore" && session.status === "no-workspace") {
     return (
@@ -175,8 +178,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     );
   }
 
-  // A fresh workspace (no company name yet) asks for its basics first.
-  if (!settings.companyName.trim()) return <Onboarding />;
+  // A fresh workspace (no company name yet) asks for its basics first. Instances are set up by the operator, so they skip it.
+  if (!settings.companyName.trim() && !currentInstance()) return <Onboarding />;
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -204,5 +207,20 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
       <AgentPanel />
     </div>
+  );
+}
+
+/** Signed in to a bespoke instance's account pool but not a member of its workspace. */
+function InstanceNoAccess() {
+  const { signOut } = useAuth();
+  const instance = currentInstance();
+  return (
+    <CenterCard>
+      <h1 className="text-[16px] font-semibold">No access to {instance?.brand.product ?? "this workspace"}</h1>
+      <p className="mt-2 text-[13px] leading-5 text-text-secondary">This account is not set up for the workspace yet. Ask your administrator to add you, then sign in again.</p>
+      <Button className="mt-4" onClick={() => void signOut()}>
+        Sign out
+      </Button>
+    </CenterCard>
   );
 }

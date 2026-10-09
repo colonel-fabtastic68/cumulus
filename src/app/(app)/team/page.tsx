@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { currentInstance } from "@/lib/firebase-config";
 import Link from "next/link";
 import { UserPlus } from "lucide-react";
 import { useCollection } from "@/lib/store/provider";
@@ -15,7 +16,9 @@ export default function TeamPage() {
   const { mode } = useAuth();
   const { setPageContext } = useAgent();
   const [inviting, setInviting] = useState(false);
-  const canManage = canManageTeam(user);
+  // On a bespoke instance the operator creates every account, so nobody invites from here.
+  const instance = currentInstance();
+  const canManage = canManageTeam(user) && !instance;
 
   useEffect(() => {
     setPageContext({ page: "Team" });
@@ -30,6 +33,11 @@ export default function TeamPage() {
   return (
     <Page title="Team" subtitle="Who has access to this workspace and what they can do" primaryAction={inviteButton}>
       <div className="flex flex-col gap-4">
+        {instance && (
+          <Banner tone="info" title="Adding people">
+            Accounts for {instance.brand.product} are created by your administrator. Ask them to add a teammate or change a role.
+          </Banner>
+        )}
         {mode === "local" && (
           <Banner tone="info" title="Local mode">
             Use the avatar menu (top right) to switch between demo users and see how collaboration feels. Connect Firestore in{" "}

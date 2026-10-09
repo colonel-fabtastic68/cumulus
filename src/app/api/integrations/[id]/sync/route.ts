@@ -3,6 +3,8 @@ import { runQuickbooksSync } from "@/lib/integrations/quickbooksSync";
 import { runCloverSync } from "@/lib/integrations/cloverSync";
 import { runSquareSync } from "@/lib/integrations/squareSync";
 import { HttpError, authenticate, jsonError, loadConnected, readJson } from "@/lib/integrations/server";
+import { assertIntegrationAllowed } from "@/lib/integrations/connect";
+import { isRanch, ranchSync } from "@/lib/ranch/bridge";
 import { nowIso } from "@/lib/utils";
 
 export const maxDuration = 120;
@@ -21,6 +23,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { id } = await params;
     if (!isChannel(id) && id !== "quickbooks" && id !== "square" && id !== "clover") throw new HttpError(404, "This connection does not sync.");
     const ctx = await authenticate(req, { write: true });
+    assertIntegrationAllowed(ctx, id);
+    // Ranch instances: Square counts in, web orders in, packs out, whichever card's Sync was pressed.
+    if (isRanch(ctx)) return Response.json(await ranchSync(ctx));
     const body = await readJson<SyncBody>(req).catch(() => ({}) as SyncBody);
     const { integration, secrets } = await loadConnected(ctx, id);
     try {

@@ -4,6 +4,7 @@ import { nowIso } from "@/lib/utils";
 import { CARRIERS, isCarrier } from "./carriers";
 import { isChannel } from "./channelSync";
 import { HttpError, appUrl, deleteSecrets, newToken, readSecrets, writeSecrets, type Secrets, type ServerContext } from "./server";
+import { hasFeature } from "@/lib/instances";
 import * as qbo from "./quickbooks";
 import * as square from "./square";
 import * as clover from "./clover";
@@ -27,8 +28,9 @@ function clean(v: unknown): string {
  * registers webhooks and marks the integration connected.
  */
 export async function connectIntegration(ctx: ServerContext, req: Request, id: IntegrationId, body: ConnectBody): Promise<Integration> {
+  assertIntegrationAllowed(ctx, id);
   if (id === "quickbooks") return reconnectQuickbooks(ctx, body);
-  if (id === "square") return reconnectSquare(ctx, body);
+  if (id === "square") return reconnectSquare(ctx, body, req);
   if (id === "clover") return reconnectClover(ctx, body);
   if (!isChannel(id) && !isCarrier(id)) throw new HttpError(501, `${NAMES[id]} is on the roadmap; use the CSV export for now.`);
   const creds = body.credentials ?? {};
@@ -81,7 +83,8 @@ export async function connectIntegration(ctx: ServerContext, req: Request, id: I
     secrets.consumerKey = consumerKey;
     secrets.consumerSecret = consumerSecret;
     const url = `${base}/api/integrations/woocommerce/webhook?ws=${encodeURIComponent(ctx.workspaceId)}&t=${secrets.webhookToken}`;
-    const topics = ["order.created", "order.updated", "product.updated", "product.deleted"];
+    // A ranch instance drives products from its pack listings, so only orders come back from the store.
+    const topics = hasFeature(ctx.instance, "ranch") ? ["order.created", "order.updated"] : ["order.created", "order.updated", "product.updated", "product.deleted"];
     await removeWebhooks(existing, previous, id);
     for (const topic of topics) {
       try {
@@ -167,7 +170,7 @@ async function reconnectQuickbooks(ctx: ServerContext, body: ConnectBody): Promi
  * Developer Console, pasted here. Without a pasted token, "connect" re-checks
  * the stored credentials and saves settings.
  */
-async function reconnectSquare(ctx: ServerContext, body: ConnectBody): Promise<Integration> {
+async function reconnectSquare(ctx: ServerContext, body: ConnectBody, req: Request): Promise<Integration> {
   const existing = await ctx.store.get("integrations", "square");
   const pasted = clean(body.credentials?.accessToken);
   const now = nowIso();
@@ -184,7 +187,8 @@ async function reconnectSquare(ctx: ServerContext, body: ConnectBody): Promise<I
       const config = square.squareConfig();
       if (config) await square.revokeSquare(config, previous).catch((e) => console.warn("[square] revoke failed:", e instanceof Error ? e.message : e));
     }
-    await writeSecrets(ctx, "square", { accessToken: pasted, environment: env, tokenKind: "personal" });
+    // A ranch instance's live-count subscription is carried over so the new connection replaces it rather than adding a second.
+    await writeSecrets(ctx, "square", { accessToken: pasted, environment: env, tokenKind: "personal", ...(previous?.webhookSubscriptionId ? { webhookSubscriptionId: previous.webhookSubscriptionId } : {}) });
     environment = env;
     auth = "token";
   } else {
@@ -206,9 +210,45 @@ async function reconnectSquare(ctx: ServerContext, body: ConnectBody): Promise<I
     webhooks: [],
     createdAt: existing?.createdAt ?? now,
   };
+  if (hasFeature(ctx.instance, "ranch")) await subscribeRanchSquare(ctx, req, doc, merchant, active);
   if (pasted) await ctx.store.batch([{ op: "put", collection: "integrations", doc }, activityOp(ctx.actor, "integration.connected", `Connected Square (${doc.config!.businessName})`, { entityType: "integration", entityId: "square" })]);
   else await ctx.store.put("integrations", doc);
   return doc;
+}
+
+/**
+ * Ranch instances count and sell from one Square location and hear about
+ * count changes as they happen: the seller's own application (a pasted
+ * personal token; Square only lets an app's own token manage its webhooks)
+ * subscribes to inventory.count.updated, delivered to this instance's host.
+ * Without a subscription the daily pass and Sync now still mirror the counts.
+ */
+async function subscribeRanchSquare(ctx: ServerContext, req: Request, doc: Integration, merchant: square.SquareMerchant, active: square.SquareLocation[]): Promise<void> {
+  const config = doc.config!;
+  if (!config.ranchLocationId || !active.some((l) => l.id === config.ranchLocationId)) {
+    config.ranchLocationId = (merchant.main_location_id && active.some((l) => l.id === merchant.main_location_id) ? merchant.main_location_id : active[0]?.id) ?? "";
+  }
+  const secrets = await readSecrets(ctx, "square");
+  if (!secrets?.accessToken || !square.isPersonalToken(secrets)) {
+    doc.lastError = "Live Square updates need your own Square application's access token; counts update on Sync now and the daily pass until then.";
+    return;
+  }
+  const environment = (secrets.environment as square.SquareEnvironment | undefined) ?? "production";
+  if (secrets.webhookSubscriptionId) await square.deleteWebhookSubscription(environment, secrets.accessToken, secrets.webhookSubscriptionId).catch(() => undefined);
+  const url = `${appUrl(req)}/api/integrations/square/webhook?ws=${encodeURIComponent(ctx.workspaceId)}`;
+  try {
+    const sub = await square.createWebhookSubscription(environment, secrets.accessToken, { name: `cumulusOS ${ctx.instance?.brand.name ?? "ranch"} counts`, eventTypes: ["inventory.count.updated"], notificationUrl: url });
+    await writeSecrets(ctx, "square", { ...secrets, webhookSubscriptionId: sub.id, webhookSignatureKey: sub.signatureKey, webhookUrl: url });
+    doc.webhooks = [{ id: sub.id, topic: "inventory.count.updated" }];
+    doc.lastError = undefined;
+  } catch (e) {
+    doc.lastError = `Square connected, but live count updates could not be switched on: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
+/** A bespoke instance only uses the connections it was set up with. */
+export function assertIntegrationAllowed(ctx: Pick<ServerContext, "instance">, id: IntegrationId): void {
+  if (ctx.instance && !(ctx.instance.integrations as string[]).includes(id)) throw new HttpError(404, "This connection is not available here.");
 }
 
 /**
@@ -275,6 +315,9 @@ export async function disconnectIntegration(ctx: ServerContext, id: IntegrationI
   let secrets = await readSecrets(ctx, id);
   if (id === "shopify" && existing && secrets) secrets = await freshShopifySecrets(ctx, existing, secrets).catch(() => secrets);
   await removeWebhooks(existing, secrets, id);
+  if (id === "square" && secrets?.webhookSubscriptionId && secrets.accessToken && square.isPersonalToken(secrets)) {
+    await square.deleteWebhookSubscription((secrets.environment as square.SquareEnvironment | undefined) ?? "production", secrets.accessToken, secrets.webhookSubscriptionId).catch((e) => console.warn("[square] webhook removal failed:", e instanceof Error ? e.message : e));
+  }
   // Only a token this server's OAuth app was granted can be revoked here; a pasted one is revoked in the seller's own Developer Console.
   if (id === "square" && secrets?.accessToken && secrets.refreshToken) {
     const config = square.squareConfig();

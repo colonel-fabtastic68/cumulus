@@ -3,6 +3,7 @@
 import { useModKey } from "@/lib/platform";
 
 import { useEffect, useState } from "react";
+import { currentInstance } from "@/lib/firebase-config";
 import { Bell, ChevronDown, LogOut, Menu as MenuIcon, ScanBarcode, Search, Settings2, Sparkles, UserRound } from "lucide-react";
 import { Avatar, AvatarStack, Button, IconButton, Kbd, Menu } from "@/components/ui";
 import { isOnline, useAuth, useCurrentUser } from "@/lib/auth";
@@ -62,7 +63,7 @@ export function TopBar({ onMenu }: { onMenu?: () => void }) {
         className="flex h-8 w-full max-w-md items-center gap-2 rounded-[var(--radius-sm)] border border-border bg-surface px-3 text-[13px] text-text-tertiary shadow-[var(--shadow-100)] hover:border-border-strong"
       >
         <Search className="h-3.5 w-3.5" />
-        <span className="flex-1 text-left">Search cumulusOS…</span>
+        <span className="flex-1 text-left">{currentInstance() ? "Search…" : "Search cumulusOS…"}</span>
         <Kbd>{mod}K</Kbd>
       </button>
       <div className="flex-1" />
@@ -92,7 +93,7 @@ export function TopBar({ onMenu }: { onMenu?: () => void }) {
                 ...members.map((m) => ({ label: `${m.name}${m.id === user.id ? " ✓" : ""}`, onSelect: () => switchUser(m.id) })),
               ]
             : [
-                { label: "Account and workspaces", href: "/account", icon: <Settings2 /> },
+                ...(currentInstance() ? [] : [{ label: "Account and workspaces", href: "/account", icon: <Settings2 /> }]),
                 { label: "Sign out", onSelect: () => signOut(), icon: <LogOut /> },
               ]),
         ]}

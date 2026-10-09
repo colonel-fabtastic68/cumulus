@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Boxes, CalendarDays, ClipboardList, ClipboardCheck, FolderOpen, ListChecks, Contact, Download, FileBarChart2, FileText, Hammer, Home, MessageSquare, PackageCheck, Plug, Receipt, Repeat, RotateCcw, Settings, ShoppingCart, Sparkles, TrendingUp, Truck, Upload, UserRound, Users, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, Beef, Boxes, CalendarDays, ClipboardList, ClipboardCheck, FolderOpen, ListChecks, Contact, Download, FileBarChart2, FileText, Hammer, Home, MessageSquare, PackageCheck, Package, Plug, Receipt, RefreshCw, Repeat, RotateCcw, Settings, ShoppingCart, Sparkles, Tags, TrendingUp, Truck, Upload, UserRound, Users, type LucideIcon } from "lucide-react";
 
 export interface NavItem {
   href: string;
@@ -67,6 +67,24 @@ export const NAV_SECONDARY: NavItem[] = [
 ];
 
 /** Every sidebar destination, top to bottom, as shown in the sidebar (children follow their parent). */
+/** Ranch instances (src/lib/instances.ts, feature "ranch"): web packs, animals and the Square/store bridge. */
+export const RANCH_NAV: NavItem = {
+  href: "/ranch",
+  label: "Ranch",
+  icon: Beef,
+  children: [
+    { href: "/ranch", label: "Web packs", icon: Package },
+    { href: "/ranch/animals", label: "Animals", icon: Tags },
+    { href: "/ranch/bridge", label: "Square & store", icon: RefreshCw },
+  ],
+};
+
+/** The main navigation with the ranch section after Inventory. */
+export function navWithRanch(nav: NavItem[]): NavItem[] {
+  const at = nav.findIndex((n) => n.href === "/inventory");
+  return [...nav.slice(0, at + 1), RANCH_NAV, ...nav.slice(at + 1)];
+}
+
 export const NAV_ORDER: readonly string[] = [...NAV, ...NAV_SECONDARY].flatMap((n) => (n.children ? n.children.map((c) => c.href) : [n.href]));
 
 /** Whether a sidebar entry is the one for this path (an item page counts as Inventory, etc.). */

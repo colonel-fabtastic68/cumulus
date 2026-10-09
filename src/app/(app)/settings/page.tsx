@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
+import { currentInstance } from "@/lib/firebase-config";
 import { useSettings } from "@/lib/store/provider";
 import { useAuth, useCurrentUser } from "@/lib/auth";
 import { useAgent } from "@/components/agent/AgentProvider";
@@ -90,9 +91,11 @@ export default function SettingsPage() {
         <Row id="strato">
           <AgentSection key={formKey} settings={settings} readOnly={readOnly} />
         </Row>
-        <Row id="billing">
-          <BillingSection settings={settings} />
-        </Row>
+        {!currentInstance() && (
+          <Row id="billing">
+            <BillingSection settings={settings} />
+          </Row>
+        )}
         {canManage && (
           <Row id="time-machine">
             <TimeMachineSection />

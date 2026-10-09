@@ -41,7 +41,7 @@ function shopifyCreds(integration: Integration, secrets: Secrets): shopify.Shopi
 }
 
 /** Connections made before permalink detection existed learn their REST style on first use. */
-async function wooCreds(ctx: ServerContext, integration: Integration, secrets: Secrets): Promise<woo.WooCreds> {
+export async function wooCreds(ctx: ServerContext, integration: Integration, secrets: Secrets): Promise<woo.WooCreds> {
   const siteUrl = integration.config?.siteUrl;
   if (!siteUrl || !secrets.consumerKey || !secrets.consumerSecret) throw new HttpError(409, "WooCommerce credentials are incomplete; connect it again.");
   let plainPermalinks = integration.config?.plainPermalinks === "1";

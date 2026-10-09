@@ -1,0 +1,68 @@
+rules_version = '2';
+// Rules for the "willoranch" Firestore database: the Willo Ranch bespoke instance
+// (src/lib/instances.ts). Nothing here is shared with the default database.
+//
+// Only accounts in Willo Ranch's own Identity Platform tenant get in. Replace
+// the placeholder in instanceTenant() with the tenant id (the same value as the
+// WILLORANCH_AUTH_TENANT env var) before deploying; until then nobody can read
+// or write anything, which is the safe default.
+//
+// Accounts and memberships are created by the operator (scripts/instance.ts);
+// people inside the workspace cannot add members, invite, or create workspaces.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function instanceTenant() {
+      return 'REPLACE_WITH_WILLORANCH_TENANT_ID';
+    }
+    function signedIn() {
+      return request.auth != null && request.auth.token.firebase.get('tenant', '') == instanceTenant();
+    }
+    function uid() {
+      return request.auth.uid;
+    }
+    function memberPath(ws) {
+      return /databases/$(database)/documents/workspaces/$(ws)/members/$(request.auth.uid);
+    }
+    function isMember(ws) {
+      return signedIn() && ws == 'willoranch' && exists(memberPath(ws));
+    }
+    function canManage(ws) {
+      return isMember(ws) && get(memberPath(ws)).data.role in ['owner', 'admin'];
+    }
+
+    // Each account reads and writes only its own profile.
+    match /users/{userId} {
+      allow read, write: if signedIn() && uid() == userId;
+    }
+
+    match /workspaces/{ws} {
+      allow read: if isMember(ws);
+      allow create, delete: if false;
+      allow update: if canManage(ws);
+
+      match /members/{memberId} {
+        allow read: if isMember(ws);
+        // New people come from the operator only.
+        allow create: if false;
+        // Managers change roles and details; everyone keeps their own presence and profile fields current.
+        allow update: if canManage(ws)
+          || (isMember(ws) && memberId == uid() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSeenAt', 'status', 'name', 'color', 'email']));
+        allow delete: if canManage(ws) && memberId != uid();
+      }
+
+      // Server only: connection secrets and the bridge's per-order claims.
+      match /secrets/{docId} {
+        allow read, write: if false;
+      }
+      match /bridgeLocks/{docId} {
+        allow read, write: if false;
+      }
+
+      // Everything else in the workspace is shared by its members.
+      match /{collection}/{docId} {
+        allow read: if !(collection in ['members', 'secrets', 'bridgeLocks']) && isMember(ws);
+        allow write: if !(collection in ['members', 'secrets', 'bridgeLocks']) && isMember(ws);
+      }
+    }
+  }
+}
