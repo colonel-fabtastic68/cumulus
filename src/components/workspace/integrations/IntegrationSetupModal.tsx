@@ -29,6 +29,7 @@ function SetupForm({ def, integration, onClose }: { def: IntegrationDef; integra
   const canManage = user.role === "owner" || user.role === "admin";
   const connected = integration?.status === "connected" || integration?.status === "error";
   const live = def.kind !== "roadmap";
+  const stage = currentInstance() ? undefined : def.stage;
 
   return (
     <Modal
@@ -39,14 +40,14 @@ function SetupForm({ def, integration, onClose }: { def: IntegrationDef; integra
         <span className="inline-flex items-center gap-2">
           {connected ? def.name : `Connect ${def.name}`}
           <StatusBadge status={integration?.status ?? "not_connected"} />
-          {def.stage === "in_progress" && <Badge tone="attention">In progress</Badge>}
+          {stage === "in_progress" && <Badge tone="attention">In progress</Badge>}
         </span>
       }
       subtitle={live ? (def.kind === "carrier" ? "Rates, labels and tracking for the carriers on your account." : def.oauth ? `You sign in with ${def.name} itself; the access it grants is kept on the server, never in the browser.` : "Credentials are verified with the platform and kept on the server, never in the browser.") : "On the roadmap. Save your details now and use the CSV export until it ships."}
       footer={<Button onClick={onClose}>Close</Button>}
     >
       <div className="flex flex-col gap-4">
-        {def.stage === "in_progress" && live && (
+        {stage === "in_progress" && live && (
           <Banner tone="warning" title="Still being finished">
             {def.name} connects and syncs, but it has not been proven on a customer&apos;s account yet. Use it, and tell us what breaks through Feedback &amp; requests in the sidebar.
           </Banner>
@@ -68,7 +69,8 @@ function SetupForm({ def, integration, onClose }: { def: IntegrationDef; integra
         ) : (
           <ConnectForm def={def} integration={integration} onClose={onClose} />
         )}
-        {def.export && (!live || mode !== "firestore" || !connected) && <CsvFallback def={def} />}
+        {/* A ranch instance's cuts and animals come only through the bridge; a plain item import would skip the lots. */}
+        {def.export && !hasFeature(currentInstance(), "ranch") && (!live || mode !== "firestore" || !connected) && <CsvFallback def={def} />}
       </div>
     </Modal>
   );
@@ -179,15 +181,15 @@ function OAuthConnect({ def, integration, onClose }: { def: IntegrationDef; inte
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(integration?.status === "error" && integration.lastError ? integration.lastError : null);
-  const [manual, setManual] = useState(() => !!currentInstance());
+  const [manual, setManual] = useState(false);
   const [realmId, setRealmId] = useState(integration?.config?.realmId ?? "");
   const [refreshToken, setRefreshToken] = useState("");
   const [shop, setShop] = useState(integration?.config?.shop ?? "");
   const needsShop = def.id === "shopify";
   // Shopify, Square, Clover and the carriers also take a pasted key; QuickBooks only in the sandbox.
   const pasteForm = needsShop || def.kind === "carrier" || def.id === "square" || def.id === "clover";
-  // A bespoke instance cannot use the shared OAuth apps (their callbacks live on the shared product): paste a token instead.
-  const pasteOnly = !!currentInstance() && pasteForm;
+  // Square is connected by signing in with Square; its token form only opens when sign-in is not set up on this server.
+  const offerPaste = def.id !== "square" || manual;
 
   const paste = async () => {
     setBusy(true);
@@ -222,14 +224,18 @@ function OAuthConnect({ def, integration, onClose }: { def: IntegrationDef; inte
       <SetupSteps def={def} />
       {needsShop && <TextField label="Store address" value={shop} onChange={(e) => setShop(e.target.value)} placeholder="your-store.myshopify.com" help="The .myshopify.com address from Shopify admin." autoComplete="off" autoFocus />}
       {error && <Banner tone="critical">{error}</Banner>}
-      {!pasteOnly && <div className="flex flex-wrap items-center justify-between gap-2">
-        <Button variant="plain" size="sm" onClick={() => setManual((v) => !v)}>
-          {manual ? (pasteForm ? `Back to Connect to ${def.name}` : "Hide sandbox token entry") : needsShop ? "Use an Admin API access token instead" : def.kind === "carrier" ? "Paste an API token instead" : def.id === "square" ? "Use your own Square application's access token instead" : def.id === "clover" ? "Use an API token from your Clover dashboard instead" : def.id === "quickbooks" ? "Sandbox: paste tokens from Intuit's playground instead" : ""}
-        </Button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {offerPaste ? (
+          <Button variant="plain" size="sm" onClick={() => setManual((v) => !v)}>
+            {manual ? (pasteForm ? `Back to Connect to ${def.name}` : "Hide sandbox token entry") : needsShop ? "Use an Admin API access token instead" : def.kind === "carrier" ? "Paste an API token instead" : def.id === "clover" ? "Use an API token from your Clover dashboard instead" : def.id === "quickbooks" ? "Sandbox: paste tokens from Intuit's playground instead" : ""}
+          </Button>
+        ) : (
+          <span />
+        )}
         <Button variant="primary" icon={<ExternalLink />} onClick={() => void start()} loading={busy && !manual} disabled={needsShop && !shop.trim()}>
           Connect to {def.name.replace(/ Online$/, "")}
         </Button>
-      </div>}
+      </div>
       {manual && pasteForm && <ConnectForm def={def} integration={integration} onClose={onClose ?? (() => {})} />}
       {manual && !pasteForm && (
         <div className="flex flex-col gap-3 rounded-[var(--radius)] border border-border bg-surface-subdued p-4">

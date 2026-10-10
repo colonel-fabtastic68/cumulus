@@ -163,8 +163,11 @@ export const SHARED_ONLY_PREFIXES = [
   "/api/integrations/clover",
   "/api/integrations/quickbooks",
   "/api/integrations/shippo",
-  "/api/integrations/square/authorize",
+  // Square sends every sign-in back to the one redirect URL its app has (on the shared host); an instance's
+  // sign-in starts on the instance (/api/integrations/square/authorize) and the callback hands it back there.
   "/api/integrations/square/callback",
+  // Square's app-level webhook (one per cumulusOS app), routed to instances by merchant.
+  "/api/integrations/square/events",
 ] as const;
 
 /** Instance-only routes: 404 on the shared product. */

@@ -146,12 +146,10 @@ export const INTEGRATIONS: IntegrationDef[] = [
     ],
     setup: {
       steps: [
-        "Press Connect to Square, sign in to your Square account and approve the access cumulusOS asks for (items, inventory, orders, locations); you come straight back here, connected",
-        "Or use your own application: at developer.squareup.com/apps create an application (name it cumulusOS), set the toggle at the top to Production, open Credentials and copy the access token",
-        "Paste the token here with the matching environment and press Connect; it never expires, and you can revoke it from that same Credentials page at any time",
-        "Press Sync now to pull the item library in",
+        "Press Connect to Square and sign in with the Square account the business uses",
+        "Approve the access cumulusOS asks for (items, inventory, orders, locations); you come straight back here, connected",
+        "Press Sync now to pull the item library in. To disconnect later, use Disconnect here or remove cumulusOS under Apps in your Square Dashboard",
       ],
-      docsUrl: "https://developer.squareup.com/docs/devtools/developer-dashboard",
     },
     export: {
       steps: ["In Square Dashboard open Items & orders → Items", "Choose Actions → Export library and download the CSV", "Upload the file on the Import page"],

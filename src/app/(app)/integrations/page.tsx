@@ -5,6 +5,7 @@ import { currentInstance, isDemo } from "@/lib/firebase-config";
 import { hasFeature } from "@/lib/instances";
 import type { IntegrationId } from "@/lib/types";
 import { useCollection } from "@/lib/store/provider";
+import { ranchModeOf } from "@/lib/ranch/squareTruth";
 import { useSession } from "@/lib/session";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { Banner, Page, QueryParamEffect, useToast } from "@/components/ui";
@@ -22,7 +23,7 @@ function SectionHeading({ title, description }: { title: string; description?: s
 /** What the connections do on a ranch instance, where the bridge (src/lib/ranch) replaces the generic sync. */
 const RANCH_COPY: Partial<Record<IntegrationId, string>> = {
   woocommerce: "Sells the web packs. Each pack's stock and web price go to the store product with the same SKU; paid orders come back and take their pounds from the oldest animal. Product names, photos and descriptions stay as you edit them in WooCommerce.",
-  square: "Keeps the count of every cut per animal (Lot #) at the counter. Counts come in here as they change, and web sales go back to Square lot by lot. Paste your own Square application's access token to connect.",
+  square: "Sells every cut per animal (Lot #) at the counter. Counts and counter sales stay in step with this inventory lot by lot, and web sales go back to Square. Connect by signing in with Square.",
 };
 
 export default function IntegrationsPage() {
@@ -76,7 +77,10 @@ export default function IntegrationsPage() {
 
         {hasFeature(instance, "ranch") && (
           <Banner tone="info" title="How the two connections work together">
-            Square keeps the count of every cut per animal (its Lot # options); those counts come in here. WooCommerce sells the web packs: the stock and price of each pack go out to the store, and paid web orders come back to take their pounds from the oldest animal and tell Square. Card payments stay with the store&apos;s Square gateway.
+            {ranchModeOf(integrations.find((i) => i.id === "square")?.config) === "cumulus"
+              ? "This inventory keeps the count of every cut per animal and sets Square's (its Lot # options); counter sales in Square come in here. "
+              : "Square keeps the count of every cut per animal (its Lot # options); those counts come in here. "}
+            WooCommerce sells the web packs: the stock and price of each pack go out to the store, and paid web orders come back to take their pounds from the oldest animal and tell Square. Card payments stay with the store&apos;s Square gateway.
           </Banner>
         )}
 

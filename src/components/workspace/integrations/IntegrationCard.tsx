@@ -5,10 +5,13 @@ import type { Integration } from "@/lib/types";
 import { Badge, Button, StatusBadge } from "@/components/ui";
 import { formatRelative } from "@/lib/format";
 import type { IntegrationDef } from "./catalog";
+import { currentInstance } from "@/lib/firebase-config";
 
 export function IntegrationCard({ def, integration, onSetUp }: { def: IntegrationDef; integration?: Integration; onSetUp: () => void }) {
   const status = integration?.status ?? "not_connected";
   const connected = status === "connected" || status === "error";
+  // A bespoke instance shows only what is connected, not how far along each connection is in the shared product.
+  const stage = currentInstance() ? undefined : def.stage;
   const where = integration?.config?.shop ?? integration?.config?.siteUrl ?? integration?.config?.companyName ?? integration?.config?.businessName ?? integration?.config?.account ?? Object.values(integration?.config ?? {})[0];
   return (
     <div className="card flex flex-col gap-3 p-4">
@@ -17,8 +20,8 @@ export function IntegrationCard({ def, integration, onSetUp }: { def: Integratio
           <h3 className="text-[13.5px] font-semibold text-text">{def.name}</h3>
           <StatusBadge status={status} />
           {def.kind === "roadmap" && <Badge tone="default">Roadmap</Badge>}
-          {def.stage === "in_progress" && <Badge tone="attention">In progress</Badge>}
-          {def.stage === "live" && <Badge tone="success">Live</Badge>}
+          {stage === "in_progress" && <Badge tone="attention">In progress</Badge>}
+          {stage === "live" && <Badge tone="success">Live</Badge>}
           {connected && integration?.config?.environment === "sandbox" && <Badge tone="attention">Sandbox</Badge>}
         </div>
         <p className="mt-1 text-[12.5px] leading-[1.45] text-text-secondary">{def.description}</p>

@@ -24,6 +24,8 @@ export interface SquareConfig {
 
 export const SQUARE_VERSION = "2026-09-16";
 export const SQUARE_SCOPES = ["MERCHANT_PROFILE_READ", "ITEMS_READ", "INVENTORY_READ", "ORDERS_READ", "CUSTOMERS_READ"];
+/** A ranch instance also writes: counts and web sales per lot, and new animals as Lot # variations. */
+export const SQUARE_RANCH_SCOPES = [...SQUARE_SCOPES, "INVENTORY_WRITE", "ITEMS_WRITE"];
 const REFRESH_MARGIN_MS = 7 * 86_400_000;
 
 function envValue(name: string): string {
@@ -76,16 +78,31 @@ export function squareRedirectUri(base: string): string {
  * fingerprinting protection stops that page reading the parameters that
  * carry the flow forward, stranding the seller on their dashboard.
  */
-export async function beginSquareAuthorization(ctx: Pick<ServerContext, "db" | "workspaceId" | "actor">, base: string, config = requireSquareConfig()): Promise<string> {
-  const state = randomBytes(24).toString("base64url");
+export async function beginSquareAuthorization(ctx: Pick<ServerContext, "db" | "workspaceId" | "actor">, base: string, config = requireSquareConfig(), opts: { instanceId?: string; scopes?: string[] } = {}): Promise<string> {
+  // An instance's state carries its id so the shared callback knows whose database holds it.
+  const state = opts.instanceId ? `${opts.instanceId}__${randomBytes(18).toString("hex")}` : randomBytes(24).toString("base64url");
   const doc: OAuthState = { workspaceId: ctx.workspaceId, uid: ctx.actor.id, provider: "square", createdAt: new Date().toISOString() };
   await ctx.db.doc(`${OAUTH_STATES}/${state}`).set(doc);
   const url = new URL(`${squareBase(config.environment)}/oauth2/authorize`);
   url.searchParams.set("client_id", config.applicationId);
-  url.searchParams.set("scope", SQUARE_SCOPES.join(" "));
+  url.searchParams.set("scope", (opts.scopes ?? SQUARE_SCOPES).join(" "));
   url.searchParams.set("state", state);
   url.searchParams.set("redirect_uri", squareRedirectUri(base));
   return url.toString();
+}
+
+/** The instance a Square sign-in started on, read from its state ("willoranch__…"); null for the shared product. */
+export function squareStateInstance(state: string): string | null {
+  return /^([a-z0-9-]+)__[0-9a-f]{32,}$/.exec(state)?.[1] ?? null;
+}
+
+/**
+ * Sellers who sign in with Square are covered by cumulusOS's app-level webhook
+ * subscription (set up once in the Square Developer Console, pointing at
+ * /api/integrations/square/events); its signature key is in the environment.
+ */
+export function appWebhookKey(): string {
+  return envValue("SQUARE_WEBHOOK_SIGNATURE_KEY");
 }
 
 export function consumeSquareState(db: Firestore, state: string): Promise<OAuthState> {

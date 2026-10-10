@@ -199,6 +199,27 @@ export function appUrl(req: Request): string {
   return forwardedHost ? `${forwardedProto}://${forwardedHost}` : origin;
 }
 
+/**
+ * The shared product's own address, where provider apps with a single
+ * registered redirect URL (Square) send sign-ins back, even when the sign-in
+ * started on an instance.
+ */
+export function sharedAppUrl(req: Request): string {
+  const configured = process.env.APP_URL?.trim().replace(/\/$/, "");
+  if (configured) return configured;
+  const host = requestHost(req);
+  const local = host.match(/^(?:[^.]+\.)?(localhost(?::\d+)?)$/);
+  if (local) return `http://${local[1]}`;
+  if (requestInstance(req)) return "https://cumulusos.com";
+  return appUrl(req);
+}
+
+/** An instance's own address, for sending the browser back after a sign-in that came through the shared host. */
+export function instanceAppUrl(instance: InstanceDef, req: Request): string {
+  const local = requestHost(req).match(/localhost(:\d+)?$/);
+  return local ? `http://${instance.id}.localhost${local[1] ?? ""}` : `https://${instance.hosts[0]}`;
+}
+
 export async function readJson<T>(req: Request): Promise<T> {
   try {
     return (await req.json()) as T;

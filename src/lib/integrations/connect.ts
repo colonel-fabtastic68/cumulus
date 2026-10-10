@@ -210,7 +210,7 @@ async function reconnectSquare(ctx: ServerContext, body: ConnectBody, req: Reque
     webhooks: [],
     createdAt: existing?.createdAt ?? now,
   };
-  if (hasFeature(ctx.instance, "ranch")) await subscribeRanchSquare(ctx, req, doc, merchant, active);
+  if (hasFeature(ctx.instance, "ranch")) await setUpRanchSquare(ctx, doc, merchant, active, appUrl(req));
   if (pasted) await ctx.store.batch([{ op: "put", collection: "integrations", doc }, activityOp(ctx.actor, "integration.connected", `Connected Square (${doc.config!.businessName})`, { entityType: "integration", entityId: "square" })]);
   else await ctx.store.put("integrations", doc);
   return doc;
@@ -218,24 +218,29 @@ async function reconnectSquare(ctx: ServerContext, body: ConnectBody, req: Reque
 
 /**
  * Ranch instances count and sell from one Square location and hear about
- * count changes as they happen: the seller's own application (a pasted
- * personal token; Square only lets an app's own token manage its webhooks)
- * subscribes to inventory.count.updated, delivered to this instance's host.
- * Without a subscription the daily pass and Sync now still mirror the counts.
+ * count changes as they happen. A seller who signed in with Square is covered
+ * by cumulusOS's app-level webhook subscription (routed by merchant in
+ * /api/integrations/square/events). A pasted personal token subscribes its own
+ * application to inventory.count.updated, delivered to this instance's host
+ * (Square only lets an app's own token manage its webhooks). Without either,
+ * the daily pass and Sync now keep the counts in step.
  */
-async function subscribeRanchSquare(ctx: ServerContext, req: Request, doc: Integration, merchant: square.SquareMerchant, active: square.SquareLocation[]): Promise<void> {
+export async function setUpRanchSquare(ctx: ServerContext, doc: Integration, merchant: square.SquareMerchant, active: square.SquareLocation[], notificationBase?: string): Promise<void> {
   const config = doc.config!;
   if (!config.ranchLocationId || !active.some((l) => l.id === config.ranchLocationId)) {
     config.ranchLocationId = (merchant.main_location_id && active.some((l) => l.id === merchant.main_location_id) ? merchant.main_location_id : active[0]?.id) ?? "";
   }
   const secrets = await readSecrets(ctx, "square");
-  if (!secrets?.accessToken || !square.isPersonalToken(secrets)) {
-    doc.lastError = "Live Square updates need your own Square application's access token; counts update on Sync now and the daily pass until then.";
+  if (!secrets?.accessToken) return;
+  if (!square.isPersonalToken(secrets)) {
+    doc.webhooks = square.appWebhookKey() ? [{ id: "app", topic: "inventory.count.updated" }] : [];
+    doc.lastError = undefined;
     return;
   }
+  if (!notificationBase) return;
   const environment = (secrets.environment as square.SquareEnvironment | undefined) ?? "production";
   if (secrets.webhookSubscriptionId) await square.deleteWebhookSubscription(environment, secrets.accessToken, secrets.webhookSubscriptionId).catch(() => undefined);
-  const url = `${appUrl(req)}/api/integrations/square/webhook?ws=${encodeURIComponent(ctx.workspaceId)}`;
+  const url = `${notificationBase}/api/integrations/square/webhook?ws=${encodeURIComponent(ctx.workspaceId)}`;
   try {
     const sub = await square.createWebhookSubscription(environment, secrets.accessToken, { name: `cumulusOS ${ctx.instance?.brand.name ?? "ranch"} counts`, eventTypes: ["inventory.count.updated"], notificationUrl: url });
     await writeSecrets(ctx, "square", { ...secrets, webhookSubscriptionId: sub.id, webhookSignatureKey: sub.signatureKey, webhookUrl: url });
