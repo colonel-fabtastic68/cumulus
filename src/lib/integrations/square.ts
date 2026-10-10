@@ -295,24 +295,50 @@ export async function verifySquareAccessToken(environment: SquareEnvironment, ac
 
 // ---- writes and webhooks (ranch bridge) -------------------------------------------
 
-/** A catalog object as the ranch bridge reads it: items with nested variations, and measurement units. */
-export interface SquareCatalogObject {
+/** Where a catalog object is sold (copied onto new variations so they match their item). */
+export interface SquarePresence {
+  present_at_all_locations?: boolean;
+  present_at_location_ids?: string[];
+  absent_at_location_ids?: string[];
+}
+
+/** An item variation as the ranch bridge reads and writes it. */
+export interface SquareVariationObject extends SquarePresence {
+  id: string;
+  version?: number;
+  created_at?: string;
+  updated_at?: string;
+  is_deleted?: boolean;
+  item_variation_data?: {
+    item_id?: string;
+    name?: string;
+    sku?: string;
+    pricing_type?: string;
+    price_money?: { amount?: number; currency?: string };
+    track_inventory?: boolean;
+    measurement_unit_id?: string;
+    item_option_values?: Array<{ item_option_id?: string; item_option_value_id?: string }>;
+    sellable?: boolean;
+    stockable?: boolean;
+  };
+}
+
+/** A catalog object as the ranch bridge reads it: items with nested variations, measurement units and item options. */
+export interface SquareCatalogObject extends SquarePresence {
   type: string;
   id: string;
+  version?: number;
   created_at?: string;
   updated_at?: string;
   is_deleted?: boolean;
   item_data?: {
     name?: string;
-    variations?: Array<{
-      id: string;
-      created_at?: string;
-      updated_at?: string;
-      is_deleted?: boolean;
-      item_variation_data?: { item_id?: string; name?: string; sku?: string; price_money?: { amount?: number }; track_inventory?: boolean; measurement_unit_id?: string };
-    }>;
+    /** The options (Willo Ranch: "Lot #") whose values tell the item's variations apart. */
+    item_options?: Array<{ item_option_id?: string }>;
+    variations?: SquareVariationObject[];
   };
-  measurement_unit_data?: { measurement_unit?: { weight_unit?: string; custom_unit?: { name?: string } } };
+  measurement_unit_data?: { measurement_unit?: { weight_unit?: string; custom_unit?: { name?: string } }; precision?: number };
+  item_option_data?: { name?: string; display_name?: string; values?: Array<{ id: string; is_deleted?: boolean; item_option_value_data?: { item_option_id?: string; name?: string } }> };
 }
 
 /** Every catalog object of the given types (variations come nested in their items). */
@@ -362,7 +388,9 @@ export async function batchChangeInventory(environment: SquareEnvironment, token
         adjustment: {
           catalog_object_id: a.variationId,
           catalog_object_type: "ITEM_VARIATION",
-          location_id: a.locationId,
+          // Since Square-Version 2026-07-15 an adjustment names its location on both sides; location_id is gone.
+          from_location_id: a.locationId,
+          to_location_id: a.locationId,
           quantity: squareQuantity(a.quantity),
           from_state: a.fromState,
           to_state: a.toState,
@@ -372,6 +400,124 @@ export async function batchChangeInventory(environment: SquareEnvironment, token
       })),
     });
   }
+}
+
+/** Where a Square inventory change came from. */
+export interface SquareSource {
+  /** SQUARE_POS, EXTERNAL_API, BILLING, APPOINTMENTS, INVOICES, ONLINE_STORE, PAYROLL, DASHBOARD, ITEM_LIBRARY_IMPORT or OTHER. */
+  product?: string;
+  application_id?: string;
+  name?: string;
+}
+
+/** One entry of Square's inventory history, as the ranch bridge reads it. */
+export interface SquareInventoryChange {
+  type: "ADJUSTMENT" | "PHYSICAL_COUNT" | "TRANSFER";
+  adjustment?: {
+    id: string;
+    reference_id?: string;
+    from_state?: string;
+    to_state?: string;
+    from_location_id?: string;
+    to_location_id?: string;
+    /** Versions before 2026-07-15. */
+    location_id?: string;
+    catalog_object_id?: string;
+    quantity?: string;
+    occurred_at?: string;
+    created_at?: string;
+    source?: SquareSource;
+    transaction_id?: string;
+    refund_id?: string;
+    /** Set when a recount produced this adjustment; the count itself is reported separately. */
+    physical_count_id?: string;
+  };
+  physical_count?: {
+    id: string;
+    reference_id?: string;
+    catalog_object_id?: string;
+    state?: string;
+    location_id?: string;
+    quantity?: string;
+    occurred_at?: string;
+    created_at?: string;
+    source?: SquareSource;
+  };
+}
+
+/**
+ * Square's inventory history (adjustments and recounts, oldest first) at the
+ * given locations, calculated after `updatedAfter`. Used to learn about counter
+ * sales one by one rather than as a changed total.
+ */
+export async function listInventoryChanges(environment: SquareEnvironment, token: string, input: { locationIds: string[]; updatedAfter: string; catalogObjectIds?: string[] }): Promise<SquareInventoryChange[]> {
+  const out: SquareInventoryChange[] = [];
+  const groups = input.catalogObjectIds ? Array.from({ length: Math.ceil(input.catalogObjectIds.length / 500) }, (_, i) => input.catalogObjectIds!.slice(i * 500, i * 500 + 500)) : [undefined];
+  for (const ids of groups) {
+    let cursor: string | undefined;
+    for (let page = 0; page < 50; page++) {
+      const data = await api<{ changes?: SquareInventoryChange[]; cursor?: string }>(environment, token, "POST", "inventory/changes/batch-retrieve", {
+        location_ids: input.locationIds,
+        ...(ids ? { catalog_object_ids: ids } : {}),
+        types: ["ADJUSTMENT", "PHYSICAL_COUNT"],
+        updated_after: input.updatedAfter,
+        limit: 1000,
+        cursor,
+      });
+      out.push(...(data.changes ?? []));
+      cursor = data.cursor;
+      if (!cursor) break;
+    }
+  }
+  return out;
+}
+
+export interface SquareCountSet {
+  variationId: string;
+  locationId: string;
+  /** The count Square should show, in the variation's unit. */
+  quantity: number;
+  occurredAt: string;
+  referenceId?: string;
+}
+
+/**
+ * Sets Square's in-stock count outright (PHYSICAL_COUNT), in one call per 100.
+ * Repeating the same count is harmless, which is why a bridge that owns the
+ * numbers prefers it to adjustments.
+ */
+export async function setInventoryCounts(environment: SquareEnvironment, token: string, counts: SquareCountSet[], idempotencyKey: string): Promise<void> {
+  for (let i = 0; i < counts.length; i += 100) {
+    const chunk = counts.slice(i, i + 100);
+    await api(environment, token, "POST", "inventory/changes/batch-create", {
+      idempotency_key: `${idempotencyKey}-${i / 100}`.slice(0, 128),
+      ignore_unchanged_counts: true,
+      changes: chunk.map((c) => ({
+        type: "PHYSICAL_COUNT",
+        physical_count: {
+          catalog_object_id: c.variationId,
+          catalog_object_type: "ITEM_VARIATION",
+          location_id: c.locationId,
+          state: "IN_STOCK",
+          quantity: squareQuantity(Math.max(0, c.quantity)),
+          occurred_at: c.occurredAt,
+          ...(c.referenceId ? { reference_id: c.referenceId.slice(0, 255) } : {}),
+        },
+      })),
+    });
+  }
+}
+
+/**
+ * Creates or updates catalog objects in one batch. Objects may refer to each
+ * other by "#client" ids; the returned map turns those into Square's ids.
+ */
+export async function upsertCatalogObjects(environment: SquareEnvironment, token: string, objects: Array<Record<string, unknown>>, idempotencyKey: string): Promise<Map<string, string>> {
+  const data = await api<{ id_mappings?: Array<{ client_object_id?: string; object_id?: string }> }>(environment, token, "POST", "catalog/batch-upsert", {
+    idempotency_key: idempotencyKey.slice(0, 128),
+    batches: [{ objects }],
+  });
+  return new Map((data.id_mappings ?? []).filter((m) => m.client_object_id && m.object_id).map((m) => [m.client_object_id!, m.object_id!]));
 }
 
 /**

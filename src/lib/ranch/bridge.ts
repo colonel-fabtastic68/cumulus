@@ -7,16 +7,24 @@ import { HttpError, readSecrets, type Secrets, type ServerContext } from "@/lib/
 import { wooCreds } from "@/lib/integrations/channelSync";
 import * as square from "@/lib/integrations/square";
 import * as woo from "@/lib/integrations/woocommerce";
-import { describePlan, planMirror, unitForSquare, type SquareCatalogRow } from "./squareMirror";
+import { describePlan, planMirror, unitForSquare, type MirrorPlan, type SquareCatalogRow } from "./squareMirror";
 import { expandOrder, listingsUsing, packsAvailable, type StoreLine } from "./packs";
+import { OUR_REFERENCE, describeSquareSync, planCountPush, planNewVariations, planSquareImport, ranchModeOf, readSquareHistory, variationPrecision, type ImportPlan, type RanchMode } from "./squareTruth";
 
 /**
- * The ranch bridge (route A): Square stays the record of what is in the
- * freezer per animal, cumulusOS tracks it as lots, and the web store sells
- * packs computed from those pounds.
+ * The ranch bridge. Square's "Lot #" variations are animals' shares of each
+ * cut, cumulusOS tracks them as lots, and the web store sells packs computed
+ * from those pounds. Who holds the counts depends on the mode (squareTruth.ts):
  *
+ * "square" (route A): Square is the record and cumulusOS mirrors it.
  *   Square counts  ──mirror──▶ cumulusOS lots ──packs──▶ WooCommerce stock + price
  *   WooCommerce order paid ──▶ cumulusOS sale (oldest lot first) ──▶ Square IN_STOCK → SOLD per lot
+ *
+ * "cumulus": cumulusOS is the record and sets Square's counts.
+ *   animals received / recounted here ──▶ Square counts (new animals become Lot # variations)
+ *   Square counter sales and refunds ──history──▶ cumulusOS sales and returns on the same lot
+ *   anything else changed in Square ──▶ reported, then put back
+ *   WooCommerce order paid ──▶ cumulusOS sale (oldest lot first) ──▶ Square counts
  *
  * Payments never pass through here: the store's own Square gateway takes them.
  */
@@ -29,6 +37,11 @@ export function isRanch(ctx: Pick<ServerContext, "instance">): boolean {
 
 export function requireRanch(ctx: Pick<ServerContext, "instance">): void {
   if (!isRanch(ctx)) throw new HttpError(404, "Not available here.");
+}
+
+/** Who holds the counts: Square (route A, the default) or cumulusOS. */
+export function ranchMode(integration: Pick<Integration, "config"> | null | undefined): RanchMode {
+  return ranchModeOf(integration?.config);
 }
 
 async function connected(ctx: ServerContext, id: "square" | "woocommerce"): Promise<{ integration: Integration; secrets: Secrets } | null> {
@@ -118,23 +131,8 @@ export interface MirrorResult {
   negatives: number;
 }
 
-/** Brings cumulusOS lots in line with Square's counts (all of them, or just the variations a webhook named). */
-export async function runSquareMirror(ctx: ServerContext, opts: { variationIds?: string[] } = {}): Promise<MirrorResult> {
-  const conn = await connected(ctx, "square");
-  if (!conn) return { summary: "Square is not connected", itemIds: [], negatives: 0 };
-  const { integration, secrets } = conn;
-  const locationId = squareLocationId(integration);
-  const { rows, counts } = await square.withSquareToken(ctx, secrets, async (token, env) => {
-    const objects = await square.listCatalogObjects(env, token, ["ITEM", "MEASUREMENT_UNIT"]);
-    const all = catalogRows(objects);
-    const wanted = opts.variationIds ? new Set(opts.variationIds) : null;
-    const ids = all.filter((r) => r.unit !== "ea" && r.trackInventory && (!wanted || wanted.has(r.variationId))).map((r) => r.variationId);
-    return { rows: all, counts: ids.length ? await square.inventoryCounts(env, token, ids, [locationId]) : new Map<string, number>() };
-  });
-  const now = nowIso();
-  const [items, lots, pending] = await Promise.all([ctx.store.list("items"), ctx.store.list("lots"), pendingSquare(ctx)]);
-  const plan = planMirror({ rows, counts, items, lots, pending, excludedSkus: new Set((integration.excludedSkus ?? []).map((s) => s.toUpperCase())), onlyVariationIds: opts.variationIds ? new Set(opts.variationIds) : undefined, now });
-
+/** Writes a mirror plan: new cuts, then new lots and count changes through the ledger. Returns the items whose stock changed. */
+async function applyMirrorPlan(ctx: ServerContext, plan: MirrorPlan, now: string, message: string): Promise<string[]> {
   // 1. Cuts first, so the movements below can find them.
   const created = new Map<string, string>();
   const itemOps: WriteOp[] = [];
@@ -160,7 +158,7 @@ export async function runSquareMirror(ctx: ServerContext, opts: { variationIds?:
     inputs.push({ itemId, type: "count", qty: nl.qty, lotId: lot.id, refType: "channel", reason: "Square count", note: nl.label, occurredAt: now });
     touched.add(itemId);
   });
-  const lotsById = new Map(lots.map((l) => [l.id, l]));
+  const lotsById = new Map((plan.changes.length ? await ctx.store.list("lots") : []).map((l) => [l.id, l]));
   for (const c of plan.changes) {
     const delta = round(c.to - c.from, 3);
     if (delta === 0) continue;
@@ -173,7 +171,6 @@ export async function runSquareMirror(ctx: ServerContext, opts: { variationIds?:
       inputs.push({ itemId: c.itemId, type: "count", qty: delta, fromLotIds: [c.lotId], refType: "channel", reason: "Square count", note: c.label, occurredAt: now });
     }
   }
-  const summary = describePlan(plan);
   if (inputs.length || lotDocs.length) {
     // New lots must exist before movementOps reads lots for the allocations; they only ever receive here.
     const mv = await movementOps(ctx.store, BRIDGE_ACTOR, inputs, { allowNegative: true });
@@ -182,11 +179,35 @@ export async function runSquareMirror(ctx: ServerContext, opts: { variationIds?:
       ...lotDocs.map<WriteOp>((doc) => ({ op: "put", collection: "lots", doc })),
       ...mv.ops,
       ...lotPatches,
-      activityOp(BRIDGE_ACTOR, "integration.synced", `Square counts: ${summary}`, { entityType: "integration", entityId: "square" }),
+      activityOp(BRIDGE_ACTOR, "integration.synced", message, { entityType: "integration", entityId: "square" }),
     ]);
   }
+  return Array.from(touched);
+}
+
+/** Brings cumulusOS lots in line with Square's counts (all of them, or just the variations a webhook named). */
+export async function runSquareMirror(ctx: ServerContext, opts: { variationIds?: string[] } = {}): Promise<MirrorResult> {
+  const conn = await connected(ctx, "square");
+  if (!conn) return { summary: "Square is not connected", itemIds: [], negatives: 0 };
+  const { integration, secrets } = conn;
+  // With cumulusOS holding the counts, Square's numbers never overwrite lots here.
+  if (ranchMode(integration) === "cumulus") return { summary: "cumulusOS holds the counts", itemIds: [], negatives: 0 };
+  const locationId = squareLocationId(integration);
+  const { rows, counts } = await square.withSquareToken(ctx, secrets, async (token, env) => {
+    const objects = await square.listCatalogObjects(env, token, ["ITEM", "MEASUREMENT_UNIT"]);
+    const all = catalogRows(objects);
+    const wanted = opts.variationIds ? new Set(opts.variationIds) : null;
+    const ids = all.filter((r) => r.unit !== "ea" && r.trackInventory && (!wanted || wanted.has(r.variationId))).map((r) => r.variationId);
+    return { rows: all, counts: ids.length ? await square.inventoryCounts(env, token, ids, [locationId]) : new Map<string, number>() };
+  });
+  const now = nowIso();
+  const [items, lots, pending] = await Promise.all([ctx.store.list("items"), ctx.store.list("lots"), pendingSquare(ctx)]);
+  const plan = planMirror({ rows, counts, items, lots, pending, excludedSkus: new Set((integration.excludedSkus ?? []).map((s) => s.toUpperCase())), onlyVariationIds: opts.variationIds ? new Set(opts.variationIds) : undefined, now });
+
+  const summary = describePlan(plan);
+  const touched = await applyMirrorPlan(ctx, plan, now, `Square counts: ${summary}`);
   await ctx.store.patch("integrations", "square", { status: "connected", lastSyncAt: now, lastSyncSummary: summary, lastError: undefined });
-  return { summary, itemIds: Array.from(touched), negatives: plan.negatives.length };
+  return { summary, itemIds: touched, negatives: plan.negatives.length };
 }
 
 // ---- cumulusOS → Square ----------------------------------------------------------------
@@ -205,9 +226,18 @@ export async function pushSquareForOrder(ctx: ServerContext, orderId: string, ki
   const lots = new Map((await ctx.store.list("lots")).map((l) => [l.id, l]));
   const mine = (await ctx.store.list("movements")).filter((m) => m.refType === "order" && m.refId === order.id);
   const locationId = squareLocationId(conn.integration);
-  const ref = `Web order ${order.externalRef ?? order.number}`;
+  const ref = `${OUR_REFERENCE}: web order ${order.externalRef ?? order.number}`;
   const occurredAt = nowIso();
   const pairs = kind === "sale" ? saleAllocations(mine) : mine.filter((m) => m.type === "rma_return" && m.lotId).map((m) => ({ lotId: m.lotId!, qty: m.qty }));
+  if (ranchMode(conn.integration) === "cumulus") {
+    // cumulusOS holds the counts: Square is set to what these lots now hold, which is safe to repeat.
+    try {
+      const r = await syncSquareFromCumulus(ctx, { lotIds: Array.from(new Set(pairs.map((p) => p.lotId))), reason: kind === "sale" ? `${ref} sold` : `${ref} put back` });
+      return set({ status: "pushed", adjustments: r.counts, at: occurredAt, error: r.problems[0] });
+    } catch (e) {
+      return set({ status: "failed", error: e instanceof Error ? e.message : String(e), at: occurredAt });
+    }
+  }
   const byVariation = new Map<string, number>();
   let unlinked = 0;
   for (const p of pairs) {
@@ -245,6 +275,332 @@ export async function retrySquarePushes(ctx: ServerContext): Promise<{ retried: 
     }
   }
   return { retried, failed };
+}
+
+// ---- cumulusOS as the source of truth ("cumulus" mode) -----------------------------------
+
+/** Each read of Square's history overlaps the last by this much, so a change Square records late is not missed; claims keep it from counting twice. */
+const HISTORY_OVERLAP_MS = 15 * 60_000;
+
+export interface SquareSyncResult {
+  summary: string;
+  /** Items whose stock changed here (counter sales and refunds), so their packs can be re-pushed. */
+  itemIds: string[];
+  sales: number;
+  returns: number;
+  elsewhere: number;
+  counts: number;
+  created: number;
+  /** Animal cuts someone added in Square, brought in as lots. */
+  adopted: number;
+  short: number;
+  problems: string[];
+}
+
+const normalLabel = (s: string | undefined) => (s ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+
+/** Counter sales and refunds into the lots they name: returns first, then sales, each through the ledger. */
+async function applySquareImport(ctx: ServerContext, plan: ImportPlan): Promise<string[]> {
+  const touched = new Set<string>();
+  if (plan.returns.length) {
+    const lots = new Map((await ctx.store.list("lots")).map((l) => [l.id, l]));
+    const lotQty = new Map<string, number>();
+    const inputs: MovementInput[] = [];
+    for (const r of plan.returns) {
+      const lot = lots.get(r.lotId);
+      if (!lot) continue;
+      inputs.push({ itemId: r.itemId, type: "rma_return", qty: r.qty, lotId: r.lotId, refType: "channel", reason: "Square counter refund", note: `${lot.supplierLot ?? ""} · ${r.via}`.trim(), occurredAt: r.occurredAt });
+      lotQty.set(r.lotId, round((lotQty.get(r.lotId) ?? lot.qtyRemaining) + r.qty, 3));
+      touched.add(r.itemId);
+    }
+    if (inputs.length) {
+      const mv = await movementOps(ctx.store, BRIDGE_ACTOR, inputs);
+      await ctx.store.batch([...mv.ops, ...Array.from(lotQty.entries()).map<WriteOp>(([id, qtyRemaining]) => ({ op: "patch", collection: "lots", id, patch: { qtyRemaining } }))]);
+    }
+  }
+  const sales = plan.sales.filter((s) => s.qty > 0);
+  if (sales.length) {
+    const lots = new Map((await ctx.store.list("lots")).map((l) => [l.id, l]));
+    const inputs: MovementInput[] = sales.map((s) => ({ itemId: s.itemId, type: "sale", qty: -s.qty, fromLotIds: [s.lotId], refType: "channel", reason: "Square counter sale", note: `${lots.get(s.lotId)?.supplierLot ?? ""} · ${s.via}`.trim(), occurredAt: s.occurredAt }));
+    sales.forEach((s) => touched.add(s.itemId));
+    const mv = await movementOps(ctx.store, BRIDGE_ACTOR, inputs);
+    await ctx.store.batch(mv.ops);
+  }
+  return Array.from(touched);
+}
+
+/**
+ * The cumulus-mode pass: counter sales and refunds come in from Square's
+ * history, lots received here that Square does not list yet become "Lot #"
+ * variations, and Square's counts are set to what the lots hold (the ones
+ * named, or all of them). Changes made in Square some other way are reported
+ * in the activity log and put back by the same count push.
+ */
+export async function syncSquareFromCumulus(ctx: ServerContext, opts: { lotIds?: string[]; variationIds?: string[]; reason?: string } = {}): Promise<SquareSyncResult> {
+  const result: SquareSyncResult = { summary: "", itemIds: [], sales: 0, returns: 0, elsewhere: 0, counts: 0, created: 0, adopted: 0, short: 0, problems: [] };
+  const conn = await connected(ctx, "square");
+  if (!conn) return { ...result, summary: "Square is not connected" };
+  const { integration, secrets } = conn;
+  if (ranchMode(integration) !== "cumulus") return { ...result, summary: "Square holds the counts" };
+  const locationId = squareLocationId(integration);
+  const since = integration.config?.ranchChangesAfter || nowIso();
+  const reason = opts.reason ?? "sync";
+
+  return square.withSquareToken(ctx, secrets, async (token, env) => {
+    const [history, catalog] = await Promise.all([
+      square.listInventoryChanges(env, token, { locationIds: [locationId], updatedAfter: new Date(Date.parse(since) - HISTORY_OVERLAP_MS).toISOString() }),
+      square.listCatalogObjects(env, token, ["ITEM", "MEASUREMENT_UNIT", "ITEM_OPTION"]),
+    ]);
+
+    // 1. Counter sales and refunds, each Square change claimed once.
+    const { events, latest } = readSquareHistory(history, locationId);
+    const fresh = [];
+    for (const e of events) if (await claim(ctx, `sq-${e.id}`)) fresh.push(e);
+    const plan = planSquareImport(fresh, await ctx.store.list("lots"));
+    try {
+      result.itemIds = await applySquareImport(ctx, plan);
+    } catch (e) {
+      await Promise.all(fresh.map((ev) => release(ctx, `sq-${ev.id}`)));
+      throw e;
+    }
+    result.sales = plan.sales.length;
+    result.returns = plan.returns.length;
+    result.short = plan.sales.filter((s) => s.short > 0).length;
+    result.elsewhere = plan.elsewhere.length;
+
+    // Which lots to set: the ones asked for, plus any the counter oversold or someone changed in Square.
+    const items = await ctx.store.list("items");
+    let lots = await ctx.store.list("lots");
+    const wantedVariations = opts.variationIds ? new Set(opts.variationIds) : null;
+    const scope = opts.lotIds || opts.variationIds ? new Set<string>([...(opts.lotIds ?? []), ...lots.filter((l) => l.externalIds?.square && wantedVariations?.has(l.externalIds.square)).map((l) => l.id)]) : null;
+    if (scope) {
+      for (const s of plan.sales) if (s.short > 0) scope.add(s.lotId);
+      for (const e of plan.elsewhere) if (e.lotId) scope.add(e.lotId);
+    }
+
+    // Square variations no lot follows. One with stock (an animal someone added in Square) is brought in as a
+    // lot, so nothing on the shelf goes missing; one below zero (an old animal the counter oversold) is set to 0.
+    const strayZero: string[] = [];
+    if (!opts.lotIds || opts.variationIds) {
+      const linkedNow = new Set(lots.map((l) => l.externalIds?.square).filter((v): v is string => !!v));
+      const rows = catalogRows(catalog).filter((r) => r.unit !== "ea" && r.trackInventory);
+      const strays = rows.filter((r) => !linkedNow.has(r.variationId) && (!wantedVariations || wantedVariations.has(r.variationId)));
+      if (strays.length) {
+        const strayCounts = await square.inventoryCounts(env, token, strays.map((r) => r.variationId), [locationId]);
+        for (const r of strays) if ((strayCounts.get(r.variationId) ?? 0) < 0) strayZero.push(r.variationId);
+        const adopt = new Set(strays.filter((r) => (strayCounts.get(r.variationId) ?? 0) > 0).map((r) => r.variationId));
+        if (adopt.size) {
+          const mplan = planMirror({ rows, counts: strayCounts, items, lots, excludedSkus: new Set((integration.excludedSkus ?? []).map((x) => x.toUpperCase())), onlyVariationIds: adopt, now: nowIso() });
+          const adoptPlan: MirrorPlan = { ...mplan, changes: [], itemPatches: [] };
+          if (adoptPlan.newLots.length) {
+            const labels = Array.from(new Set(adoptPlan.newLots.map((l) => l.label))).slice(0, 5).join(", ");
+            result.itemIds.push(...(await applyMirrorPlan(ctx, adoptPlan, nowIso(), `Square: brought in ${adoptPlan.newLots.length} animal cut${adoptPlan.newLots.length === 1 ? "" : "s"} added in Square (${labels}). Receive animals on Animals so Square follows from the start.`)));
+            result.adopted = adoptPlan.newLots.length;
+            lots = await ctx.store.list("lots");
+          }
+        }
+      }
+    }
+
+    // 2. Lots received here that Square does not list yet become variations on their cut.
+    const squareItems = new Set(items.filter((i) => i.externalIds?.square).map((i) => i.id));
+    const unlinked = lots.filter((l) => !l.externalIds?.square && l.qtyRemaining > 0 && squareItems.has(l.itemId) && (!scope || scope.has(l.id)));
+    if (unlinked.length) {
+      const linked = new Set(lots.map((l) => l.externalIds?.square).filter((v): v is string => !!v));
+      const vp = planNewVariations(unlinked, new Map(items.map((i) => [i.id, i])), catalog, linked);
+      result.problems.push(...vp.problems);
+      const ids = vp.objects.length ? await square.upsertCatalogObjects(env, token, vp.objects, `cumulus-animal-${newId("u")}`) : new Map<string, string>();
+      const patches: WriteOp[] = [];
+      for (const link of vp.links) {
+        const variationId = link.variationId ?? (link.clientId ? ids.get(link.clientId) : undefined);
+        if (!variationId) {
+          result.problems.push("Square did not return a variation for a new animal; try Sync now.");
+          continue;
+        }
+        patches.push({ op: "patch", collection: "lots", id: link.lotId, patch: { externalIds: { square: variationId } } });
+        if (link.clientId) result.created++;
+        scope?.add(link.lotId);
+      }
+      if (patches.length) {
+        await ctx.store.batch(patches);
+        lots = await ctx.store.list("lots");
+      }
+    }
+
+    // 3. Square's counts set to what the lots hold.
+    const precision = variationPrecision(catalog);
+    const targets = lots.filter((l) => l.externalIds?.square && (!scope || scope.has(l.id)));
+    const counts = targets.length ? await square.inventoryCounts(env, token, targets.map((l) => l.externalIds!.square!), [locationId]) : new Map<string, number>();
+    const pushes = [...planCountPush(targets, counts, precision).map((p) => ({ variationId: p.variationId, quantity: p.to })), ...strayZero.map((variationId) => ({ variationId, quantity: 0 }))];
+    if (pushes.length) {
+      const at = nowIso();
+      await square.setInventoryCounts(env, token, pushes.map((p) => ({ ...p, locationId, occurredAt: at, referenceId: `${OUR_REFERENCE}: ${reason}` })), `cumulus-counts-${newId("c")}`);
+    }
+    result.counts = pushes.length;
+
+    result.summary = describeSquareSync({ ...result, salesLb: plan.sales.reduce((a, s) => a + s.qty, 0) });
+    const notable = plan.sales.length || plan.returns.length || plan.elsewhere.length || result.created || strayZero.length;
+    if (notable) {
+      const lotById = new Map(lots.map((l) => [l.id, l]));
+      const itemName = new Map(items.map((i) => [i.id, i.name]));
+      const what = (lotId?: string) => {
+        const lot = lotId ? lotById.get(lotId) : undefined;
+        return lot ? `${itemName.get(lot.itemId) ?? "a cut"} ${lot.supplierLot ?? lot.number ?? ""}`.trim() : "a cut";
+      };
+      const putBack = plan.elsewhere.slice(0, 5).map((e) => `${what(e.lotId)} (${e.detail}, ${e.via})`);
+      await ctx.store.batch([activityOp(BRIDGE_ACTOR, "integration.synced", `Square: ${result.summary}${putBack.length ? `. Put back to cumulusOS's count: ${putBack.join("; ")}${plan.elsewhere.length > 5 ? "…" : ""}` : ""}`, { entityType: "integration", entityId: "square" })]);
+    }
+    const fresher = await ctx.store.get("integrations", "square");
+    const cursor = latest && latest > since ? latest : since;
+    await ctx.store.patch("integrations", "square", { status: "connected", config: { ...(fresher?.config ?? integration.config), ranchChangesAfter: cursor }, lastSyncAt: nowIso(), lastSyncSummary: result.summary, lastError: result.problems[0] });
+    return result;
+  });
+}
+
+export interface ModePlan {
+  mode: RanchMode;
+  applied: boolean;
+  /** Square counts that change when cumulusOS takes over (mostly counts below zero going to 0). */
+  changes: Array<{ cut: string; animal: string; from: number; to: number }>;
+  changed: number;
+  /** Counts below zero in Square that become 0. */
+  negatives: number;
+  negativeLb: number;
+  summary: string;
+}
+
+/**
+ * Hands the counts to cumulusOS (or back to Square). Taking over first brings
+ * every lot up to Square's current counts, then sets Square to match cumulusOS,
+ * which mostly means Square's counts below zero become 0. `dryRun` reports that
+ * without changing Square or the mode.
+ */
+export async function switchRanchMode(ctx: ServerContext, to: RanchMode, opts: { dryRun?: boolean } = {}): Promise<ModePlan> {
+  requireRanch(ctx);
+  const conn = await connected(ctx, "square");
+  if (!conn) throw new HttpError(409, "Connect Square first.");
+  const from = ranchMode(conn.integration);
+  const base: ModePlan = { mode: to, applied: false, changes: [], changed: 0, negatives: 0, negativeLb: 0, summary: "" };
+  if (to === "square") {
+    if (opts.dryRun) return { ...base, summary: "Square holds the counts again: receive animals and recount in Square, and cumulusOS follows its numbers." };
+    const config = { ...(conn.integration.config ?? {}) };
+    delete config.ranchChangesAfter;
+    await ctx.store.patch("integrations", "square", { config: { ...config, ranchMode: "square" } });
+    const mirror = await runSquareMirror(ctx);
+    await ctx.store.batch([activityOp(ctx.actor, "integration.synced", `Square holds the ranch counts again (${mirror.summary})`, { entityType: "integration", entityId: "square" })]);
+    return { ...base, applied: true, summary: mirror.summary };
+  }
+  // Up to date with Square before taking over, so nothing sold at the counter is lost.
+  if (from === "square") await runSquareMirror(ctx);
+  const [lots, items] = await Promise.all([ctx.store.list("lots"), ctx.store.list("items")]);
+  const linkedIds = new Set(lots.map((l) => l.externalIds?.square).filter((v): v is string => !!v));
+  const locationId = squareLocationId(conn.integration);
+  const { counts, precision, rows } = await square.withSquareToken(ctx, conn.secrets, async (token, env) => {
+    const catalog = await square.listCatalogObjects(env, token, ["ITEM", "MEASUREMENT_UNIT"]);
+    const rows = catalogRows(catalog).filter((r) => r.unit !== "ea" && r.trackInventory);
+    return { rows, precision: variationPrecision(catalog), counts: await square.inventoryCounts(env, token, Array.from(new Set([...linkedIds, ...rows.map((r) => r.variationId)])), [locationId]) };
+  });
+  const lotById = new Map(lots.map((l) => [l.id, l]));
+  const itemName = new Map(items.map((i) => [i.id, i.name]));
+  // Every Square count that changes: lots that differ, and animals with no lot here that are below zero (sold out, oversold).
+  const pushes = [
+    ...planCountPush(lots.filter((l) => l.externalIds?.square), counts, precision).map((p) => ({ cut: itemName.get(lotById.get(p.lotId)?.itemId ?? "") ?? "A cut", animal: lotById.get(p.lotId)?.supplierLot ?? "", from: p.from, to: p.to })),
+    ...rows.filter((r) => !linkedIds.has(r.variationId) && (counts.get(r.variationId) ?? 0) < 0).map((r) => ({ cut: r.itemName, animal: r.variationName, from: counts.get(r.variationId) ?? 0, to: 0 })),
+  ];
+  const negatives = pushes.filter((p) => p.from < 0);
+  const plan: ModePlan = {
+    ...base,
+    changes: [...pushes].sort((a, b) => Math.abs(b.from - b.to) - Math.abs(a.from - a.to)).slice(0, 12),
+    changed: pushes.length,
+    negatives: negatives.length,
+    negativeLb: round(negatives.reduce((a, p) => a + p.from, 0), 2),
+    summary: pushes.length ? `${pushes.length} Square count${pushes.length === 1 ? "" : "s"} change${pushes.length === 1 ? "s" : ""}${negatives.length ? `, ${negatives.length} of them below zero going to 0` : ""}.` : "Square already matches cumulusOS.",
+  };
+  if (opts.dryRun) return plan;
+  await ctx.store.patch("integrations", "square", { config: { ...(conn.integration.config ?? {}), ranchMode: "cumulus", ranchChangesAfter: nowIso() } });
+  const r = await syncSquareFromCumulus(ctx, { reason: "cumulusOS became the source of truth" });
+  await ctx.store.batch([activityOp(ctx.actor, "integration.synced", `cumulusOS now holds the ranch counts; Square follows (${r.summary})`, { entityType: "integration", entityId: "square" })]);
+  return { ...plan, applied: true, summary: r.summary };
+}
+
+function requireCumulusCounts(integration: Integration | null): void {
+  if (integration && integration.status !== "not_connected" && ranchMode(integration) !== "cumulus") {
+    throw new HttpError(409, "Square holds the counts right now, so receive and recount in Square. To do it here, make cumulusOS the source of truth on Square & store.");
+  }
+}
+
+/**
+ * Receives an animal: one lot per cut with its pounds, labelled the way the
+ * counter knows it ("1980 - 31F - PURE"). With Square connected, each lot
+ * becomes that animal's Lot # variation on the cut and Square's count is set.
+ */
+export async function receiveAnimal(ctx: ServerContext, input: { label: string; receivedAt?: string; cuts: Array<{ itemId: string; qty: number }> }): Promise<{ lots: number; pounds: number; summary: string; problems: string[] }> {
+  requireRanch(ctx);
+  const integration = await ctx.store.get("integrations", "square");
+  requireCumulusCounts(integration);
+  const label = input.label.trim().replace(/\s+/g, " ");
+  if (!label) throw new HttpError(400, "Give the animal its Lot # (for example 1980 - 31F - PURE).");
+  if (label.length > 120) throw new HttpError(400, "That Lot # is too long.");
+  const cuts = input.cuts.map((c) => ({ itemId: c.itemId, qty: round(Number(c.qty), 3) })).filter((c) => c.qty > 0);
+  if (cuts.length === 0) throw new HttpError(400, "Enter the pounds of at least one cut.");
+  if (new Set(cuts.map((c) => c.itemId)).size !== cuts.length) throw new HttpError(400, "Each cut appears once.");
+  const receivedAt = input.receivedAt && !Number.isNaN(Date.parse(input.receivedAt)) ? new Date(input.receivedAt).toISOString() : nowIso();
+  const [items, lots] = await Promise.all([ctx.store.list("items"), ctx.store.list("lots")]);
+  const byId = new Map(items.map((i) => [i.id, i]));
+  for (const c of cuts) {
+    const item = byId.get(c.itemId);
+    if (!item) throw new HttpError(400, "One of the cuts no longer exists; reload and try again.");
+    if (lots.some((l) => l.itemId === c.itemId && normalLabel(l.supplierLot) === normalLabel(label))) throw new HttpError(409, `${item.name} already has animal ${label}. Recount that lot on Animals instead.`);
+  }
+  const { numbers, ops: numberOps } = await nextNumbers(ctx.store, { lot: cuts.length });
+  const lotDocs: Lot[] = cuts.map((c, i) => ({ id: newId("lot"), number: numbers.lot[i], itemId: c.itemId, supplierLot: label, source: "receipt", qtyReceived: c.qty, qtyRemaining: c.qty, unitCost: 0, receivedAt }));
+  const mv = await movementOps(ctx.store, ctx.actor, lotDocs.map((l) => ({ itemId: l.itemId, type: "receipt", qty: l.qtyReceived, lotId: l.id, refType: "manual", reason: "Animal received", note: label, occurredAt: receivedAt })));
+  const pounds = round(cuts.reduce((a, c) => a + c.qty, 0), 3);
+  await ctx.store.batch([...numberOps, ...lotDocs.map<WriteOp>((doc) => ({ op: "put", collection: "lots", doc })), ...mv.ops, activityOp(ctx.actor, "stock.received", `Animal ${label} received: ${pounds} lb across ${cuts.length} cut${cuts.length === 1 ? "" : "s"}`)]);
+  let summary = `${pounds} lb across ${cuts.length} cut${cuts.length === 1 ? "" : "s"}`;
+  const problems: string[] = [];
+  if (integration && integration.status !== "not_connected") {
+    try {
+      const r = await syncSquareFromCumulus(ctx, { lotIds: lotDocs.map((l) => l.id), reason: `animal ${label} received` });
+      summary += `; Square: ${r.summary}`;
+      problems.push(...r.problems);
+    } catch (e) {
+      problems.push(`Saved here, but Square was not updated: ${e instanceof Error ? e.message : String(e)}. Sync now tries again.`);
+    }
+  }
+  await pushPacks(ctx, { itemIds: cuts.map((c) => c.itemId) }).catch(() => undefined);
+  return { lots: lotDocs.length, pounds, summary, problems };
+}
+
+/** Sets one lot (one animal's share of a cut) to the pounds counted, then Square's count to match. */
+export async function recountLot(ctx: ServerContext, input: { lotId: string; qty: number; note?: string }): Promise<{ summary: string; problems: string[] }> {
+  requireRanch(ctx);
+  const integration = await ctx.store.get("integrations", "square");
+  requireCumulusCounts(integration);
+  const lot = await ctx.store.get("lots", input.lotId);
+  if (!lot) throw new HttpError(404, "That lot no longer exists.");
+  const qty = round(Number(input.qty), 3);
+  if (!Number.isFinite(qty) || qty < 0) throw new HttpError(400, "Enter the pounds counted (0 or more).");
+  const delta = round(qty - lot.qtyRemaining, 3);
+  if (delta === 0) return { summary: "unchanged", problems: [] };
+  const note = [lot.supplierLot, input.note?.trim()].filter(Boolean).join(" · ") || undefined;
+  const mv = await movementOps(ctx.store, ctx.actor, [delta > 0 ? { itemId: lot.itemId, type: "count", qty: delta, lotId: lot.id, refType: "count", reason: "Recount", note } : { itemId: lot.itemId, type: "count", qty: delta, fromLotIds: [lot.id], refType: "count", reason: "Recount", note }]);
+  const ops: WriteOp[] = [...mv.ops];
+  if (delta > 0) ops.push({ op: "patch", collection: "lots", id: lot.id, patch: { qtyRemaining: qty, qtyReceived: Math.max(lot.qtyReceived, qty) } });
+  await ctx.store.batch(ops);
+  const problems: string[] = [];
+  let summary = `${lot.supplierLot ?? lot.number ?? "Lot"} now ${qty} lb`;
+  if (integration && integration.status !== "not_connected") {
+    try {
+      const r = await syncSquareFromCumulus(ctx, { lotIds: [lot.id], reason: "recount" });
+      summary += `; Square: ${r.summary}`;
+      problems.push(...r.problems);
+    } catch (e) {
+      problems.push(`Saved here, but Square was not updated: ${e instanceof Error ? e.message : String(e)}. Sync now tries again.`);
+    }
+  }
+  await pushPacks(ctx, { itemIds: [lot.itemId] }).catch(() => undefined);
+  return { summary, problems };
 }
 
 // ---- cumulusOS → WooCommerce -------------------------------------------------------------
@@ -440,6 +796,13 @@ export async function handleSquareCountWebhook(ctx: ServerContext, payload: unkn
   const counts = (payload as { data?: { object?: { inventory_counts?: Array<{ catalog_object_id?: string }> } } })?.data?.object?.inventory_counts ?? [];
   const ids = Array.from(new Set(counts.map((c) => c.catalog_object_id).filter((x): x is string => !!x)));
   if (ids.length === 0) return "no counts";
+  const integration = await ctx.store.get("integrations", "square");
+  if (ranchMode(integration) === "cumulus") {
+    // A counter sale comes in as a sale; any other change made in Square is put back. Our own count pushes land here too and change nothing.
+    const r = await syncSquareFromCumulus(ctx, { variationIds: ids, reason: "Square changed" });
+    if (r.itemIds.length) await pushPacks(ctx, { itemIds: r.itemIds }).catch(() => undefined);
+    return r.summary;
+  }
   const mirror = await runSquareMirror(ctx, { variationIds: ids });
   if (mirror.itemIds.length) await pushPacks(ctx, { itemIds: mirror.itemIds }).catch(() => undefined);
   return mirror.summary;
@@ -453,7 +816,8 @@ export async function ranchSync(ctx: ServerContext): Promise<{ summary: string; 
   requireRanch(ctx);
   const lines: string[] = [];
   try {
-    lines.push(`Square: ${(await runSquareMirror(ctx)).summary}`);
+    const integration = await ctx.store.get("integrations", "square");
+    lines.push(`Square: ${ranchMode(integration) === "cumulus" ? (await syncSquareFromCumulus(ctx, { reason: "sync" })).summary : (await runSquareMirror(ctx)).summary}`);
   } catch (e) {
     lines.push(`Square: ${e instanceof Error ? e.message : String(e)}`);
     await ctx.store.patch("integrations", "square", { lastError: e instanceof Error ? e.message : String(e) }).catch(() => {});

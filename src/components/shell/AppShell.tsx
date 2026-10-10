@@ -7,6 +7,8 @@ import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { DemoBar } from "./DemoBar";
 import { StockPushBridge } from "@/components/workspace/integrations/StockPushBridge";
+import { RanchSquareBridge } from "@/components/ranch/RanchSquareBridge";
+import { hasFeature } from "@/lib/instances";
 import { AgentPanel } from "@/components/agent/AgentPanel";
 import { useAuth } from "@/lib/auth";
 import { useSettings, useStoreContext } from "@/lib/store/provider";
@@ -200,6 +202,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {isDemo() && <DemoBar />}
         <TopBar onMenu={() => setMobileNav(true)} />
         <StockPushBridge />
+        {hasFeature(currentInstance(), "ranch") && <RanchSquareBridge />}
         <main className="@container min-h-0 flex-1 overflow-y-auto">
           <PreviewBar />
           {children}
