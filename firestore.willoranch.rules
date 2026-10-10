@@ -2,17 +2,16 @@ rules_version = '2';
 // Rules for the "willoranch" Firestore database: the Willo Ranch bespoke instance
 // (src/lib/instances.ts). Nothing here is shared with the default database.
 //
-// Only accounts in Willo Ranch's own Identity Platform tenant get in. Replace
-// the placeholder in instanceTenant() with the tenant id (the same value as the
-// WILLORANCH_AUTH_TENANT env var) before deploying; until then nobody can read
-// or write anything, which is the safe default.
+// Only accounts in Willo Ranch's own Identity Platform tenant get in.
+// instanceTenant() must equal the WILLORANCH_AUTH_TENANT env var; if the tenant
+// is ever recreated, change both or nobody can read or write anything.
 //
 // Accounts and memberships are created by the operator (scripts/instance.ts);
 // people inside the workspace cannot add members, invite, or create workspaces.
 service cloud.firestore {
   match /databases/{database}/documents {
     function instanceTenant() {
-      return 'REPLACE_WITH_WILLORANCH_TENANT_ID';
+      return 'willoranch-cogr6';
     }
     function signedIn() {
       return request.auth != null && request.auth.token.firebase.get('tenant', '') == instanceTenant();
