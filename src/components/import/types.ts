@@ -102,6 +102,8 @@ export interface ReviewRow {
   /** 1-based row number in the source (header excluded). */
   line: number;
   sku: string;
+  /** The source had no SKU here: an item with the same name lent its SKU ("matched"), or one was made from the name ("made"). */
+  skuFilled?: "matched" | "made";
   status: ReviewStatus;
   message?: string;
   row: ImportRow;

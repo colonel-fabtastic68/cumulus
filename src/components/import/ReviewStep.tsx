@@ -20,11 +20,12 @@ const STATUS_LABEL: Record<ReviewStatus, string> = { new: "New", update: "Update
 interface ReviewStepProps {
   source: ParsedSource;
   mapping: ColumnMapping;
+  fillSkus?: boolean;
   onBack: () => void;
   onDone: (result: ImportResult, attempted: number) => void;
 }
 
-export function ReviewStep({ source, mapping, onBack, onDone }: ReviewStepProps) {
+export function ReviewStep({ source, mapping, fillSkus, onBack, onDone }: ReviewStepProps) {
   const store = useStore();
   const user = useCurrentUser();
   const settings = useSettings();
@@ -38,7 +39,7 @@ export function ReviewStep({ source, mapping, onBack, onDone }: ReviewStepProps)
   const [query, setQuery] = useState("");
   const [importing, setImporting] = useState(false);
 
-  const reviewRows = useMemo(() => buildReviewRows(source.rows, mapping, itemsBySku, source.kind === "generic" ? undefined : source.kind), [source.rows, mapping, itemsBySku, source.kind]);
+  const reviewRows = useMemo(() => buildReviewRows(source.rows, mapping, itemsBySku, source.kind === "generic" ? undefined : source.kind, { fillSkus }), [source.rows, mapping, itemsBySku, source.kind, fillSkus]);
   const counts = useMemo(() => {
     const c = { all: reviewRows.length, new: 0, update: 0, error: 0 };
     for (const r of reviewRows) c[r.status]++;
@@ -54,7 +55,12 @@ export function ReviewStep({ source, mapping, onBack, onDone }: ReviewStepProps)
   const columns = useMemo<Column<ReviewRow>[]>(
     () => [
       { key: "line", header: "Row", width: "56px", align: "right", sortValue: (r) => r.line, render: (r) => <span className="text-text-tertiary">{r.line}</span> },
-      { key: "sku", header: "SKU", sortValue: (r) => r.sku, render: (r) => <span className="font-mono text-[12.5px] text-text">{r.sku || <span className="text-text-tertiary">—</span>}</span> },
+      { key: "sku", header: "SKU", sortValue: (r) => r.sku, render: (r) => (
+          <span className="font-mono text-[12.5px] text-text">
+            {r.sku || <span className="text-text-tertiary">—</span>}
+            {r.skuFilled && <span className="ml-1.5 font-sans text-[11.5px] text-text-tertiary">{r.skuFilled === "matched" ? "matched by name" : "made from name"}</span>}
+          </span>
+        ) },
       {
         key: "name",
         header: "Name",

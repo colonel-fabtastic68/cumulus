@@ -70,8 +70,8 @@ export default function IntegrationsPage() {
         {mode !== "firestore" && (
           <Banner tone="info" title={isDemo() ? "Connections need an account" : "Live connections run in the hosted version"}>
             {isDemo()
-              ? "The demo runs entirely in your browser, so there is nowhere to keep store or carrier credentials. Create an account to connect Shopify, WooCommerce, QuickBooks, Square, Clover or a carrier to your own workspace. CSV import works here too."
-              : "This install is in local mode, so there is no server to hold API credentials. Sign in to a hosted workspace to connect a store or carrier. CSV import works everywhere."}
+              ? "The demo runs entirely in your browser, so there is nowhere to keep store or carrier credentials. Create an account to connect Shopify, WooCommerce, QuickBooks, Square, Clover or a carrier to your own workspace. Spreadsheet import (Excel or CSV) works here too."
+              : "This install is in local mode, so there is no server to hold API credentials. Sign in to a hosted workspace to connect a store or carrier. Spreadsheet import (Excel or CSV) works everywhere."}
           </Banner>
         )}
 

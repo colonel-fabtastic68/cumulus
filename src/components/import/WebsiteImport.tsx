@@ -96,7 +96,7 @@ export function WebsiteImport({ onboarding }: { onboarding?: boolean }) {
 
       {!hosted ? (
         <Banner tone="info" className="mt-4">
-          Reading a website needs the hosted version. Upload a CSV below in the meantime.
+          Reading a website needs the hosted version. Upload a spreadsheet (Excel or CSV) below in the meantime.
         </Banner>
       ) : (
         <form

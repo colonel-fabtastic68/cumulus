@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ArrowLeft, ArrowRight, RotateCcw, Sparkles } from "lucide-react";
-import { Badge, Banner, Button, Card, Combobox, SimpleTable, useToast, type ComboboxOption } from "@/components/ui";
+import { Badge, Banner, Button, Card, Combobox, SimpleTable, Toggle, useToast, type ComboboxOption } from "@/components/ui";
 import { customColumns, guessMapping, invertMapping, isMappingTarget, setMappingTarget } from "./mapping";
 import { FIELD_LABELS, TARGET_FIELDS, customTarget, isCustomTarget, targetLabel, type ColumnMapping, type MappingTarget, type ParsedSource, type TargetField } from "./types";
 
@@ -21,11 +21,13 @@ interface MapStepProps {
   source: ParsedSource;
   mapping: ColumnMapping;
   onMappingChange: (mapping: ColumnMapping) => void;
+  fillSkus: boolean;
+  onFillSkus: (on: boolean) => void;
   onBack: () => void;
   onContinue: () => void;
 }
 
-export function MapStep({ source, mapping, onMappingChange, onBack, onContinue }: MapStepProps) {
+export function MapStep({ source, mapping, onMappingChange, fillSkus, onFillSkus, onBack, onContinue }: MapStepProps) {
   const toast = useToast();
   const [aiBusy, setAiBusy] = useState(false);
   const [aiHint, setAiHint] = useState<{ tone: "info" | "warning"; text: string } | null>(null);
@@ -142,9 +144,21 @@ export function MapStep({ source, mapping, onMappingChange, onBack, onContinue }
         </ul>
       </Card>
 
-      {!skuMapped && (
-        <Banner tone="critical" title="Map a column to SKU to continue">
-          Items are matched by SKU. Choose the column that holds your part numbers.
+      <Card>
+        <Toggle
+          label="Fill in missing SKUs"
+          checked={fillSkus}
+          onChange={onFillSkus}
+          help={
+            skuMapped
+              ? "Rows with a blank SKU get one: an item already here with the same name keeps its SKU, anything new gets one made from its name (Wagyu Ribeye → WAGYU-RIBEYE)."
+              : "This sheet has no SKU column. Items already here are matched by name and keep their SKUs; new ones get a SKU made from the name (Wagyu Ribeye → WAGYU-RIBEYE). You can change any of them on the item afterwards."
+          }
+        />
+      </Card>
+      {!skuMapped && !fillSkus && (
+        <Banner tone="critical" title="Map a column to SKU, or fill them in, to continue">
+          Items are matched by SKU. Choose the column that holds your part numbers, or turn on Fill in missing SKUs.
         </Banner>
       )}
       {skuMapped && !nameMapped && (
@@ -201,7 +215,7 @@ export function MapStep({ source, mapping, onMappingChange, onBack, onContinue }
         <Button icon={<ArrowLeft />} onClick={onBack}>
           Back
         </Button>
-        <Button variant="primary" iconRight={<ArrowRight />} onClick={onContinue} disabled={!skuMapped}>
+        <Button variant="primary" iconRight={<ArrowRight />} onClick={onContinue} disabled={!skuMapped && !fillSkus}>
           Continue to review
         </Button>
       </div>

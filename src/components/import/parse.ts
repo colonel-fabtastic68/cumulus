@@ -1,5 +1,6 @@
 import Papa from "papaparse";
 import { uniq } from "@/lib/utils";
+import { headerRowIndex, isSpreadsheetFile, readSpreadsheet } from "@/lib/spreadsheet";
 import { detectSourceKind } from "./mapping";
 import type { ParsedSource } from "./types";
 
@@ -33,7 +34,31 @@ export function toParsedSource(name: string, results: Papa.ParseResult<RawRow>):
   return { name, headers, rows, warnings, kind: detectSourceKind(headers) };
 }
 
-export function parseFile(file: File): Promise<ParsedSource> {
+/** A spreadsheet's rows (from the header row on) as a source; repeated header names get a number. */
+export function fromTable(name: string, table: string[][]): ParsedSource {
+  const start = headerRowIndex(table);
+  const seen = new Map<string, number>();
+  const headers = (table[start] ?? []).map((h, i) => {
+    const base = h.trim() || `Column ${i + 1}`;
+    const n = (seen.get(base) ?? 0) + 1;
+    seen.set(base, n);
+    return n === 1 ? base : `${base} (${n})`;
+  });
+  const keep = headers.map((_, i) => table.slice(start + 1).some((r) => (r[i] ?? "").trim() !== "") || (table[start]?.[i] ?? "").trim() !== "");
+  const used = headers.filter((_, i) => keep[i]);
+  const rows = table
+    .slice(start + 1)
+    .map((r) => Object.fromEntries(headers.map((h, i) => [h, (r[i] ?? "").trim()]).filter((_, i) => keep[i])) as Record<string, string>)
+    .filter((row) => used.some((h) => row[h] !== ""));
+  const warnings = start > 0 ? [`Skipped ${start} line${start === 1 ? "" : "s"} above the header row.`] : [];
+  return { name, headers: used, rows, warnings, kind: detectSourceKind(used) };
+}
+
+export async function parseFile(file: File): Promise<ParsedSource> {
+  if (isSpreadsheetFile(file)) {
+    const { sheet, rows } = await readSpreadsheet(file);
+    return fromTable(sheet ? `${file.name} · ${sheet}` : file.name, rows);
+  }
   return new Promise((resolve, reject) => {
     Papa.parse<RawRow>(file, {
       ...PARSE_OPTIONS,

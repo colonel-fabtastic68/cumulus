@@ -155,7 +155,9 @@ const TARGET_BY_COMPACT = new Map<string, TargetField>(TARGET_FIELDS.map((f) => 
 export function detectSourceKind(headers: string[]): SourceKind {
   const n = new Set(headers.map(normalizeHeader));
   if (n.has("variant sku") || (n.has("handle") && n.has("title")) || n.has("variant inventory qty")) return "shopify";
-  if (n.has("regular price") || n.has("short description") || (n.has("categories") && n.has("sku"))) return "woocommerce";
+  // Square's item library export also has Categories and SKU; its Token and Variation Name columns tell it apart.
+  const square = n.has("token") && n.has("variation name");
+  if (!square && (n.has("regular price") || n.has("short description") || (n.has("categories") && n.has("sku")))) return "woocommerce";
   return "generic";
 }
 

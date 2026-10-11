@@ -6,6 +6,7 @@ import { Badge, Banner, Button, Card, CardHeader, TextArea, useToast } from "@/c
 import { pluralize } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { parseFile, parsePasted } from "./parse";
+import { SPREADSHEET_ACCEPT, isSpreadsheetFile } from "@/lib/spreadsheet";
 import { downloadTemplateCsv } from "./template";
 import type { ParsedSource } from "./types";
 
@@ -27,8 +28,8 @@ export function UploadStep({ source, onSource, onClear, onContinue }: UploadStep
 
   const acceptFile = async (file: File | undefined) => {
     if (!file) return;
-    if (!/\.(csv|tsv|txt)$/i.test(file.name) && !/text\/(csv|tab-separated-values|plain)/.test(file.type)) {
-      toast("Choose a .csv, .tsv or .txt file.", "critical");
+    if (!/\.(csv|tsv|txt)$/i.test(file.name) && !/text\/(csv|tab-separated-values|plain)/.test(file.type) && !isSpreadsheetFile(file)) {
+      toast("Choose an Excel (.xlsx), .csv, .tsv or .txt file.", "critical");
       return;
     }
     setBusy(true);
@@ -125,11 +126,11 @@ export function UploadStep({ source, onSource, onClear, onContinue }: UploadStep
                 <UploadCloud className="h-5 w-5" />
               </span>
               <div className="text-[13.5px] font-medium text-text">{busy ? "Reading file…" : "Drop a file here, or click to choose"}</div>
-              <div className="mt-1 text-[12.5px] text-text-secondary">.csv, .tsv or .txt</div>
+              <div className="mt-1 text-[12.5px] text-text-secondary">Excel (.xlsx), .csv, .tsv or .txt</div>
               <input
                 ref={inputRef}
                 type="file"
-                accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain"
+                accept={`.csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain,${SPREADSHEET_ACCEPT}`}
                 className="hidden"
                 onChange={(e) => {
                   void acceptFile(e.target.files?.[0]);

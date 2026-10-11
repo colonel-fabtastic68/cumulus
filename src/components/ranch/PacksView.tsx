@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { ClipboardPaste, Package, Plus, Send, Store, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ClipboardPaste, FileUp, Package, Plus, Send, Store, Trash2 } from "lucide-react";
 import type { Item, PackComponent, PackListing } from "@/lib/types";
 import { useCollection, useSettings, useStore } from "@/lib/store/provider";
 import { canWrite, useCurrentUser } from "@/lib/auth";
@@ -9,6 +9,8 @@ import { useApi } from "@/lib/api-client";
 import { useSession } from "@/lib/session";
 import { formatMoney, formatQty } from "@/lib/format";
 import { newId, nowIso } from "@/lib/utils";
+import { skuFromName } from "@/lib/sku";
+import { SPREADSHEET_ACCEPT, isSpreadsheetFile, readSpreadsheet, rowsToTsv } from "@/lib/spreadsheet";
 import { newListingFor, packWeight, packsAvailable, parsePriceSheet, pricePerPound, suggestItem, type SheetRow } from "@/lib/ranch/packs";
 import { Badge, Banner, Button, Combobox, EmptyState, IconButton, Modal, Page, Select, SimpleTable, Table, TextArea, TextField, Toggle, useToast, type Column } from "@/components/ui";
 
@@ -199,7 +201,7 @@ export function PacksView() {
         <>
           {writable && (
             <Button icon={<ClipboardPaste />} onClick={() => setPasting(true)}>
-              Paste price sheet
+              Import price sheet
             </Button>
           )}
           {writable && wooConnected && offStore.length > 0 && (
@@ -233,11 +235,11 @@ export function PacksView() {
             <EmptyState
               icon={<Package />}
               title="No web packs yet"
-              description="The store sells packs, not the counter's per-pound cuts. Paste the price sheet (or add packs one by one) with the cut each comes from and its weight; then Create on the store puts them on WooCommerce."
+              description="The store sells packs, not the counter's per-pound cuts. Import the price sheet (or add packs one by one) with the cut each comes from and its weight; then Create on the store puts them on WooCommerce."
               action={
                 writable ? (
                   <Button icon={<ClipboardPaste />} onClick={() => setPasting(true)}>
-                    Paste price sheet
+                    Import price sheet
                   </Button>
                 ) : undefined
               }
@@ -258,6 +260,7 @@ function PackFormModal({ listing, items, wooConnected, onClose, onSaved }: { lis
   const store = useStore();
   const toast = useToast();
   const { products, error: productsError } = useStoreProducts(wooConnected);
+  const allPacks = useCollection("packs");
   const [name, setName] = useState(listing?.name ?? "");
   const [sku, setSku] = useState(listing?.sku ?? "");
   const [productKey, setProductKey] = useState(listing?.woo ? `${listing.woo.productId}:${listing.woo.variationId ?? ""}` : "");
@@ -285,7 +288,6 @@ function PackFormModal({ listing, items, wooConnected, onClose, onSaved }: { lis
     const e: Record<string, string> = {};
     const usable = components.filter((c) => c.itemId && c.qty > 0);
     if (!name.trim()) e.name = "Name the product.";
-    if (!sku.trim() && !productKey) e.sku = "Enter the store SKU or pick the store product.";
     const p = Number(price);
     if (!(p >= 0) || price.trim() === "") e.price = "Enter the web price.";
     if (usable.length === 0) e.components = "Pick the cut this pack comes from and its weight.";
@@ -296,7 +298,8 @@ function PackFormModal({ listing, items, wooConnected, onClose, onSaved }: { lis
     const doc: PackListing = {
       ...(listing ?? newListingFor({ name }, newId("pk"), now)),
       name: name.trim(),
-      sku: sku.trim().toUpperCase(),
+      // No SKU and no store product: one is made from the name, unique among the packs.
+      sku: sku.trim().toUpperCase() || product?.sku?.toUpperCase() || skuFromName(name, new Set(allPacks.filter((x) => x.id !== listing?.id).map((x) => x.sku.toUpperCase()).filter(Boolean))),
       woo: product ? { productId: product.productId, ...(product.variationId ? { variationId: product.variationId } : {}) } : listing?.woo,
       components: usable.map((c) => ({ itemId: c.itemId, qty: Math.round(c.qty * 1000) / 1000 })),
       packLabel: packLabel.trim() || undefined,
@@ -355,7 +358,7 @@ function PackFormModal({ listing, items, wooConnected, onClose, onSaved }: { lis
         )}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <TextField label="Product name" value={name} onChange={(e) => setName(e.target.value)} error={errors.name} placeholder="Wagyu Ribeye" />
-          <TextField label="Store SKU" value={sku} onChange={(e) => setSku(e.target.value)} error={errors.sku} placeholder="WR-WAG-RIB" help="Web orders find this pack by the store product, then by SKU." />
+          <TextField label="Store SKU" value={sku} onChange={(e) => setSku(e.target.value)} error={errors.sku} placeholder={name.trim() ? skuFromName(name, new Set()) : "Made from the name"} help="Web orders find this pack by the store product, then by SKU. Leave it blank to use one made from the name." />
           <TextField label="Web price" type="number" min={0} step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} error={errors.price} prefix="$" />
           <TextField label="Pack size label" value={packLabel} onChange={(e) => setPackLabel(e.target.value)} placeholder="2 × 8 oz avg/pack" />
         </div>
@@ -397,11 +400,12 @@ function PackFormModal({ listing, items, wooConnected, onClose, onSaved }: { lis
 
 // ---- the price sheet ----------------------------------------------------------------------
 
-interface SheetChoice extends SheetRow {
+interface SheetChoice extends Omit<SheetRow, "sku"> {
   include: boolean;
   itemId: string;
   weight: string;
   productKey: string;
+  sku: string;
 }
 
 function PriceSheetModal({ items, existing, wooConnected, onClose }: { items: Item[]; existing: PackListing[]; wooConnected: boolean; onClose: () => void }) {
@@ -417,21 +421,42 @@ function PriceSheetModal({ items, existing, wooConnected, onClose }: { items: It
   const productOptions = useMemo(() => [{ value: "", label: "Match by SKU later" }, ...products.map((p) => ({ value: `${p.productId}:${p.variationId ?? ""}`, label: `${p.name}${p.sku ? ` (${p.sku})` : ""}` }))], [products]);
   const taken = useMemo(() => new Set(existing.map((l) => norm(l.name))), [existing]);
 
-  const read = () => {
-    const parsed = parsePriceSheet(text);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const read = (sheet = text) => {
+    const parsed = parsePriceSheet(sheet);
     if (parsed.error) {
       setError(parsed.error);
       setRows(null);
       return;
     }
     setError(null);
+    // SKUs: the sheet's own, else the store product's, else one made from the name, unique among the packs and the sheet.
+    const usedSkus = new Set(existing.map((l) => l.sku.toUpperCase()).filter(Boolean));
+    const matched = parsed.rows.map((r) => matchProduct(r.name, products));
+    parsed.rows.forEach((r, i) => {
+      const given = r.sku || matched[i]?.sku?.toUpperCase();
+      if (given) usedSkus.add(given);
+    });
     setRows(
-      parsed.rows.map((r) => {
-        const product = matchProduct(r.name, products);
+      parsed.rows.map((r, i) => {
+        const product = matched[i];
         const boxed = /box|bundle/i.test(`${r.name} ${r.category ?? ""}`);
-        return { ...r, include: !taken.has(norm(r.name)), itemId: boxed ? "" : (suggestItem(r.name, cuts)?.id ?? ""), weight: r.packWeight ? String(r.packWeight) : "", productKey: product ? `${product.productId}:${product.variationId ?? ""}` : "" };
+        const sku = r.sku || product?.sku?.toUpperCase() || skuFromName(r.name, usedSkus);
+        return { ...r, sku, include: !taken.has(norm(r.name)), itemId: boxed ? "" : (suggestItem(r.name, cuts)?.id ?? ""), weight: r.packWeight ? String(r.packWeight) : "", productKey: product ? `${product.productId}:${product.variationId ?? ""}` : "" };
       }),
     );
+  };
+
+  const openFile = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const sheet = isSpreadsheetFile(file) ? rowsToTsv((await readSpreadsheet(file)).rows) : await file.text();
+      setText(sheet);
+      read(sheet);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not read that file.");
+    }
   };
 
   const save = async () => {
@@ -442,7 +467,7 @@ function PriceSheetModal({ items, existing, wooConnected, onClose }: { items: It
       .filter((r) => r.include)
       .map((r) => {
         const product = products.find((p) => `${p.productId}:${p.variationId ?? ""}` === r.productKey);
-        const doc = newListingFor({ name: r.name, sku: product?.sku, itemId: r.itemId || undefined, weight: Number(r.weight) || null, price: r.price, packLabel: r.packLabel, category: r.category }, newId("pk"), now);
+        const doc = newListingFor({ name: r.name, sku: r.sku.trim() || product?.sku, itemId: r.itemId || undefined, weight: Number(r.weight) || null, price: r.price, packLabel: r.packLabel, category: r.category }, newId("pk"), now);
         return product ? { ...doc, woo: { productId: product.productId, ...(product.variationId ? { variationId: product.variationId } : {}) } } : doc;
       });
     try {
@@ -464,8 +489,8 @@ function PriceSheetModal({ items, existing, wooConnected, onClose }: { items: It
       open
       onClose={onClose}
       size="xl"
-      title="Paste the price sheet"
-      subtitle="Copy the rows from the spreadsheet (header row included). Each product becomes a web pack; check the cut and weight before adding."
+      title="Import the price sheet"
+      subtitle="Open the spreadsheet (Excel or CSV) or paste its rows, header row included. Each product becomes a web pack; check the cut, weight and SKU before adding."
       footer={
         <div className="flex gap-2">
           <Button onClick={onClose}>Cancel</Button>
@@ -474,7 +499,7 @@ function PriceSheetModal({ items, existing, wooConnected, onClose }: { items: It
               Add {rows.filter((r) => r.include).length} packs
             </Button>
           ) : (
-            <Button variant="primary" disabled={!text.trim()} onClick={read}>
+            <Button variant="primary" disabled={!text.trim()} onClick={() => read()}>
               Read sheet
             </Button>
           )}
@@ -483,6 +508,22 @@ function PriceSheetModal({ items, existing, wooConnected, onClose }: { items: It
     >
       {!rows ? (
         <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button icon={<FileUp />} onClick={() => fileRef.current?.click()}>
+              Open a spreadsheet
+            </Button>
+            <span className="text-[12.5px] text-text-secondary">Excel (.xlsx), .csv or .tsv, or paste the rows below.</span>
+            <input
+              ref={fileRef}
+              type="file"
+              className="hidden"
+              accept={`.csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain,${SPREADSHEET_ACCEPT}`}
+              onChange={(e) => {
+                void openFile(e.target.files?.[0]);
+                e.target.value = "";
+              }}
+            />
+          </div>
           <TextArea aria-label="Price sheet" rows={12} value={text} onChange={(e) => setText(e.target.value)} placeholder={"Product Name\tPack Size\tPrice\nWagyu Ribeye\t1lb avg/pack\t$70"} className="font-mono text-[12px]" />
           {error && <Banner tone="critical">{error}</Banner>}
         </div>
@@ -496,6 +537,7 @@ function PriceSheetModal({ items, existing, wooConnected, onClose }: { items: It
                 <th className="py-2 pr-2 font-medium">Cut</th>
                 <th className="py-2 pr-2 font-medium">lb / pack</th>
                 <th className="py-2 pr-2 text-right font-medium">Price</th>
+                <th className="py-2 pr-2 font-medium">SKU</th>
                 {wooConnected && <th className="py-2 font-medium">Store product</th>}
               </tr>
             </thead>
@@ -519,9 +561,21 @@ function PriceSheetModal({ items, existing, wooConnected, onClose }: { items: It
                     <TextField aria-label="Pounds per pack" type="number" min={0} step="any" value={r.weight} onChange={(e) => update(i, { weight: e.target.value })} />
                   </td>
                   <td className="py-2 pr-2 text-right tabular-nums">{r.price !== null ? formatMoney(r.price) : "–"}</td>
+                  <td className="w-[190px] py-2 pr-2">
+                    <TextField aria-label={`SKU for ${r.name}`} value={r.sku} onChange={(e) => update(i, { sku: e.target.value.toUpperCase() })} />
+                  </td>
                   {wooConnected && (
                     <td className="w-[240px] py-2">
-                      <Select aria-label="Store product" options={productOptions} value={r.productKey} onChange={(e) => update(i, { productKey: e.target.value })} />
+                      <Select
+                        aria-label="Store product"
+                        options={productOptions}
+                        value={r.productKey}
+                        onChange={(e) => {
+                          const p = products.find((x) => `${x.productId}:${x.variationId ?? ""}` === e.target.value);
+                          // Linking a store product takes its SKU, so web orders match either way.
+                          update(i, { productKey: e.target.value, ...(p?.sku ? { sku: p.sku.toUpperCase() } : {}) });
+                        }}
+                      />
                     </td>
                   )}
                 </tr>

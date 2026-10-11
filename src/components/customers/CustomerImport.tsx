@@ -8,6 +8,7 @@ import { CUSTOMER_FIELDS, guessCustomerMapping, importCustomers, rowToCustomer, 
 import { useStore } from "@/lib/store/provider";
 import { pluralize } from "@/lib/format";
 import { parseFile } from "@/components/import/parse";
+import { SPREADSHEET_ACCEPT } from "@/lib/spreadsheet";
 import type { ParsedSource } from "@/components/import/types";
 
 const LABELS: Record<CustomerField, string> = { name: "Name", email: "Email", phone: "Phone", company: "Company", street1: "Street", street2: "Street 2", city: "City", state: "State", zip: "ZIP", country: "Country", tags: "Tags", notes: "Notes" };
@@ -65,11 +66,11 @@ export function CustomerImport() {
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="text-[14px] font-semibold text-text">Import customers</h2>
-          <p className="mt-0.5 text-[12.5px] text-text-secondary">A CSV with names, emails, phones and addresses. Existing customers are matched by email, then by name, and updated rather than duplicated.</p>
+          <p className="mt-0.5 text-[12.5px] text-text-secondary">A CSV or Excel sheet with names, emails, phones and addresses. Existing customers are matched by email, then by name, and updated rather than duplicated.</p>
         </div>
-        <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] border border-border bg-surface px-3 text-[13px] font-medium text-text hover:bg-surface-hover">
-          <Upload className="h-3.5 w-3.5" /> Choose CSV
-          <input type="file" accept=".csv,text/csv" className="sr-only" onChange={(e) => e.target.files?.[0] && void onFile(e.target.files[0])} disabled={!writable} />
+        <label className="relative inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] border border-border bg-surface px-3 text-[13px] font-medium text-text hover:bg-surface-hover">
+          <Upload className="h-3.5 w-3.5" /> Choose file
+          <input type="file" accept={`.csv,text/csv,${SPREADSHEET_ACCEPT}`} className="sr-only" onChange={(e) => e.target.files?.[0] && void onFile(e.target.files[0])} disabled={!writable} />
         </label>
       </div>
       {done && <Banner tone="success" className="mt-4">{done}</Banner>}

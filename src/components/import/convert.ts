@@ -1,3 +1,4 @@
+import { skuFromName } from "@/lib/sku";
 import type { ImportRow } from "@/lib/inventory";
 import type { Item } from "@/lib/types";
 import { uniq } from "@/lib/utils";
@@ -129,13 +130,40 @@ export function changedFields(row: ImportRow, existing: Item): string[] {
 }
 
 /** Turn source rows into review rows with a New / Update / Error status. */
-export function buildReviewRows(rows: Record<string, string>[], mapping: ColumnMapping, itemsBySku: Map<string, Item>, source?: "shopify" | "woocommerce"): ReviewRow[] {
+/** Lower-case name with single spaces, for matching an import row to an existing item by name. */
+const nameKey = (s: string | undefined) => (s ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+
+export function buildReviewRows(rows: Record<string, string>[], mapping: ColumnMapping, itemsBySku: Map<string, Item>, source?: "shopify" | "woocommerce", opts: { fillSkus?: boolean } = {}): ReviewRow[] {
   const cols = invertMapping(mapping);
   const custom = customColumns(mapping);
   const seen = new Map<string, number>();
-  return rows.map((src, i) => {
+  const converted = rows.map((src) => convertRow(src, cols, custom, source));
+  // Rows without a SKU: an existing item with the same name keeps its SKU, otherwise one is made from the name,
+  // unique among the workspace's SKUs and the file's own.
+  const filled = new Map<number, "matched" | "made">();
+  if (opts.fillSkus) {
+    const byName = new Map<string, Item>();
+    for (const item of itemsBySku.values()) if (!byName.has(nameKey(item.name))) byName.set(nameKey(item.name), item);
+    const taken = new Set<string>([...itemsBySku.keys(), ...converted.map((c) => c.row.sku.trim().toUpperCase()).filter(Boolean)]);
+    const madeForName = new Map<string, string>();
+    converted.forEach((c, i) => {
+      if (c.row.sku.trim() || !c.row.name?.trim()) return;
+      const match = byName.get(nameKey(c.row.name));
+      if (match) {
+        c.row.sku = match.sku;
+        filled.set(i, "matched");
+        return;
+      }
+      // The same name twice in one file is one item: it gets one SKU (and the duplicate is reported as usual).
+      const key = nameKey(c.row.name);
+      c.row.sku = madeForName.get(key) ?? skuFromName(c.row.name, taken);
+      madeForName.set(key, c.row.sku);
+      filled.set(i, "made");
+    });
+  }
+  return rows.map((_, i) => {
     const line = i + 1;
-    const { row, errors } = convertRow(src, cols, custom, source);
+    const { row, errors } = converted[i]!;
     const sku = row.sku.trim().toUpperCase();
     const existing = sku ? itemsBySku.get(sku) : undefined;
     if (!sku) errors.unshift("Missing SKU");
@@ -146,6 +174,6 @@ export function buildReviewRows(rows: Record<string, string>[], mapping: ColumnM
     }
     if (sku && !existing && !row.name?.trim()) errors.push("Name is required for new items");
     const status: ReviewRow["status"] = errors.length ? "error" : existing ? "update" : "new";
-    return { line, sku, status, message: errors.length ? errors.join("; ") : undefined, row, existing, changedFields: existing && !errors.length ? changedFields(row, existing) : [] };
+    return { line, sku, ...(filled.has(i) ? { skuFilled: filled.get(i) } : {}), status, message: errors.length ? errors.join("; ") : undefined, row, existing, changedFields: existing && !errors.length ? changedFields(row, existing) : [] };
   });
 }

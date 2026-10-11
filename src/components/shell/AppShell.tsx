@@ -184,7 +184,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (!settings.companyName.trim() && !currentInstance()) return <Onboarding />;
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    // relative: anything a page positions absolutely (a visually hidden file input, say) stays inside the shell instead of
+    // stretching the document, so only <main> scrolls and the sidebar never moves.
+    <div className="relative flex h-screen overflow-hidden">
       <div className="hidden md:block">
         <Sidebar />
       </div>

@@ -3,6 +3,7 @@ import { activityOp, createOrder, itemDefaults, movementOps, nextNumbers, shipOr
 import type { WriteOp } from "@/lib/store/types";
 import { hasFeature } from "@/lib/instances";
 import { newId, nowIso, round } from "@/lib/utils";
+import { skuFromName } from "@/lib/sku";
 import { HttpError, readSecrets, type Secrets, type ServerContext } from "@/lib/integrations/server";
 import { wooCreds } from "@/lib/integrations/channelSync";
 import * as square from "@/lib/integrations/square";
@@ -682,15 +683,6 @@ export interface CreateProductsResult {
   linked: number;
   errors: string[];
   summary: string;
-}
-
-/** A store SKU made from a pack's name ("Wagyu Ribeye" → WAGYU-RIBEYE), unique among the ones taken. */
-function skuFromName(name: string, taken: Set<string>): string {
-  const base = name.toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40).replace(/-+$/, "") || "PACK";
-  let sku = base;
-  for (let n = 2; taken.has(sku); n++) sku = `${base}-${n}`;
-  taken.add(sku);
-  return sku;
 }
 
 /**

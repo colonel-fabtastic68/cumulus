@@ -16,21 +16,29 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([t
  */
 function useDialog(open: boolean, onClose: () => void, containerRef: React.RefObject<HTMLDivElement | null>, lockScroll: boolean) {
   const id = useId();
+  // The latest onClose, without re-running the setup below: parents usually pass a new arrow function on every
+  // render, and re-running would move focus back to the first field (opening a combobox there) mid-edit.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
   useEffect(() => {
     if (!open) return;
     dialogStack.push(id);
     const previous = document.activeElement as HTMLElement | null;
     const container = containerRef.current;
     const focusables = () => Array.from(container?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []).filter((el) => el.offsetParent !== null || el === document.activeElement);
-    // Focus the first field, else the first button, else the container itself.
-    const initial = focusables().find((el) => el.matches("input, select, textarea")) ?? focusables()[0];
+    // Focus the first field, else the first button, else the container itself. A search box that opens a list on focus
+    // (a combobox) is passed over when the dialog has another field, so the dialog does not open with a list dropped down.
+    const fields = focusables().filter((el) => el.matches("input, select, textarea"));
+    const initial = fields.find((el) => el.getAttribute("role") !== "combobox") ?? fields[0] ?? focusables()[0];
     (initial ?? container)?.focus({ preventScroll: true });
 
     const onKey = (e: KeyboardEvent) => {
       if (dialogStack[dialogStack.length - 1] !== id) return;
       if (e.key === "Escape") {
         e.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key === "Tab" && container) {
@@ -57,7 +65,7 @@ function useDialog(open: boolean, onClose: () => void, containerRef: React.RefOb
       if (lockScroll) document.body.style.overflow = prevOverflow;
       previous?.focus?.({ preventScroll: true });
     };
-  }, [open, onClose, id, containerRef, lockScroll]);
+  }, [open, id, containerRef, lockScroll]);
   return id;
 }
 

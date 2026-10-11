@@ -131,6 +131,8 @@ export interface SheetRow {
   /** Pounds per pack read from the label; null when it could not be read. */
   packWeight: number | null;
   price: number | null;
+  /** From a SKU column, when the sheet has one. */
+  sku?: string;
   category?: string;
   description?: string;
 }
@@ -172,6 +174,7 @@ export function parsePriceSheet(text: string): { rows: SheetRow[]; error?: strin
   const nameCol = col("product name", "product", "name");
   const sizeCol = col("pack size", "pack", "size");
   const priceCol = col("price");
+  const skuCol = header.findIndex((h) => h === "sku" || h.includes("sku"));
   const categoryCol = col("category");
   const descCol = col("short description", "description");
   if (nameCol < 0 || sizeCol < 0 || priceCol < 0) return { rows: [], error: "The header row needs Product Name, Pack Size and Price columns." };
@@ -188,6 +191,7 @@ export function parsePriceSheet(text: string): { rows: SheetRow[]; error?: strin
       packLabel,
       packWeight: parsePackSize(packLabel),
       price,
+      sku: skuCol >= 0 ? cells[skuCol]?.trim().toUpperCase() || undefined : undefined,
       category: categoryCol >= 0 ? cells[categoryCol]?.trim() || undefined : undefined,
       description: descCol >= 0 ? cells[descCol]?.trim() || undefined : undefined,
     });
