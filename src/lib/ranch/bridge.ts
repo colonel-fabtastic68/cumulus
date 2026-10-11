@@ -676,6 +676,77 @@ export async function pushPacks(ctx: ServerContext, opts: { itemIds?: string[]; 
   return result;
 }
 
+export interface CreateProductsResult {
+  created: number;
+  /** Packs whose SKU the store already had: linked rather than duplicated. */
+  linked: number;
+  errors: string[];
+  summary: string;
+}
+
+/** A store SKU made from a pack's name ("Wagyu Ribeye" → WAGYU-RIBEYE), unique among the ones taken. */
+function skuFromName(name: string, taken: Set<string>): string {
+  const base = name.toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40).replace(/-+$/, "") || "PACK";
+  let sku = base;
+  for (let n = 2; taken.has(sku); n++) sku = `${base}-${n}`;
+  taken.add(sku);
+  return sku;
+}
+
+/**
+ * Puts packs on the store: each active pack with a cut and no store product
+ * gets a simple WooCommerce product with its name, SKU (made from the name
+ * when it has none), web price, pack label as the description and the packs
+ * available as stock, as a draft unless `publish`. A product the store already
+ * has under that SKU is linked instead. Names, photos and descriptions are
+ * WooCommerce's to edit afterwards; stock and price stay in step from here.
+ */
+export async function createStoreProducts(ctx: ServerContext, opts: { listingIds?: string[]; publish?: boolean } = {}): Promise<CreateProductsResult> {
+  requireRanch(ctx);
+  const conn = await connected(ctx, "woocommerce");
+  if (!conn) throw new HttpError(409, "Connect WooCommerce under Integrations first.");
+  const creds = await wooCreds(ctx, conn.integration, conn.secrets);
+  const [all, items] = await Promise.all([ctx.store.list("packs"), ctx.store.list("items")]);
+  const byId = new Map(items.map((i) => [i.id, i]));
+  let listings = all.filter((l) => !l.woo && l.active && l.components.some((c) => c.qty > 0));
+  if (opts.listingIds) listings = listings.filter((l) => opts.listingIds!.includes(l.id));
+  const result: CreateProductsResult = { created: 0, linked: 0, errors: [], summary: "" };
+  if (listings.length === 0) return { ...result, summary: "every pack with a cut is already on the store" };
+  const taken = new Set(all.map((l) => l.sku.trim().toUpperCase()).filter(Boolean));
+  const skuOf = new Map(listings.map((l) => [l.id, l.sku.trim().toUpperCase() || skuFromName(l.name, taken)]));
+  const existing = await woo.findProductsBySku(creds, Array.from(skuOf.values()));
+  const category = woo.categoryResolver(creds);
+  const now = nowIso();
+  const patches: WriteOp[] = [];
+  const linkedIds: string[] = [];
+  for (const l of listings) {
+    const sku = skuOf.get(l.id)!;
+    const found = existing.get(sku);
+    if (found) {
+      result.linked++;
+      linkedIds.push(l.id);
+      patches.push({ op: "patch", collection: "packs", id: l.id, patch: { sku, woo: found, pushError: undefined, updatedAt: now } });
+      continue;
+    }
+    const stock = packsAvailable(l, byId);
+    try {
+      const { id } = await woo.createProduct(creds, { name: l.name, sku, price: l.price > 0 ? l.price : undefined, description: l.packLabel, stockQuantity: stock, publish: opts.publish === true, categoryId: await category(l.category) });
+      result.created++;
+      patches.push({ op: "patch", collection: "packs", id: l.id, patch: { sku, woo: { productId: id }, pushed: { stock, price: l.price, at: now }, pushError: undefined, updatedAt: now } });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      result.errors.push(`${l.name}: ${message}`);
+      patches.push({ op: "patch", collection: "packs", id: l.id, patch: { sku, pushError: message, updatedAt: now } });
+    }
+  }
+  if (patches.length) await ctx.store.batch(patches);
+  // Products that were already there get this pack's stock and price now.
+  if (linkedIds.length) await pushPacks(ctx, { listingIds: linkedIds, force: true }).catch((e) => result.errors.push(e instanceof Error ? e.message : String(e)));
+  result.summary = [result.created ? `${result.created} product${result.created === 1 ? "" : "s"} created${opts.publish ? "" : " as drafts"}` : "", result.linked ? `${result.linked} linked to products the store already had` : "", result.errors.length ? `${result.errors.length} failed` : ""].filter(Boolean).join(", ") || "nothing to create";
+  await ctx.store.batch([activityOp(ctx.actor, "integration.synced", `WooCommerce: ${result.summary}`, { entityType: "integration", entityId: "woocommerce" })]);
+  return result;
+}
+
 // ---- WooCommerce → cumulusOS ---------------------------------------------------------------
 
 const SOLD = new Set(["processing", "completed", "on-hold"]);

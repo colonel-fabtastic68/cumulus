@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ClipboardPaste, Package, Plus, Send, Trash2 } from "lucide-react";
+import { ClipboardPaste, Package, Plus, Send, Store, Trash2 } from "lucide-react";
 import type { Item, PackComponent, PackListing } from "@/lib/types";
 import { useCollection, useSettings, useStore } from "@/lib/store/provider";
 import { canWrite, useCurrentUser } from "@/lib/auth";
@@ -10,7 +10,7 @@ import { useSession } from "@/lib/session";
 import { formatMoney, formatQty } from "@/lib/format";
 import { newId, nowIso } from "@/lib/utils";
 import { newListingFor, packWeight, packsAvailable, parsePriceSheet, pricePerPound, suggestItem, type SheetRow } from "@/lib/ranch/packs";
-import { Badge, Banner, Button, Combobox, EmptyState, IconButton, Modal, Page, Select, Table, TextArea, TextField, Toggle, useToast, type Column } from "@/components/ui";
+import { Badge, Banner, Button, Combobox, EmptyState, IconButton, Modal, Page, Select, SimpleTable, Table, TextArea, TextField, Toggle, useToast, type Column } from "@/components/ui";
 
 interface StoreProduct {
   productId: string;
@@ -82,6 +82,9 @@ export function PacksView() {
   const wooConnected = integrations.some((i) => i.id === "woocommerce" && i.status === "connected");
   const currency = settings.currency || "USD";
   const rows = useMemo(() => [...packs].sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name)), [packs]);
+  // Packs the store has no product for yet (ones without a cut have nothing to sell).
+  const offStore = useMemo(() => packs.filter((l) => !l.woo && l.active && l.components.some((c) => c.qty > 0)), [packs]);
+  const [creating, setCreating] = useState(false);
 
   const push = async (opts: { listingIds?: string[]; force?: boolean } = {}) => {
     setPushing(true);
@@ -199,6 +202,11 @@ export function PacksView() {
               Paste price sheet
             </Button>
           )}
+          {writable && wooConnected && offStore.length > 0 && (
+            <Button icon={<Store />} onClick={() => setCreating(true)}>
+              Create on the store ({offStore.length})
+            </Button>
+          )}
           {writable && wooConnected && (
             <Button icon={<Send />} loading={pushing} onClick={() => void push({ force: true })}>
               Push to store
@@ -225,7 +233,7 @@ export function PacksView() {
             <EmptyState
               icon={<Package />}
               title="No web packs yet"
-              description="Add each store product with the cut it comes from and its average pack weight, or paste the price sheet to start from it."
+              description="The store sells packs, not the counter's per-pound cuts. Paste the price sheet (or add packs one by one) with the cut each comes from and its weight; then Create on the store puts them on WooCommerce."
               action={
                 writable ? (
                   <Button icon={<ClipboardPaste />} onClick={() => setPasting(true)}>
@@ -237,6 +245,7 @@ export function PacksView() {
           }
         />
       </div>
+      {creating && <CreateOnStoreModal listings={offStore} byId={byId} currency={currency} onClose={() => setCreating(false)} />}
       {editing && <PackFormModal listing={editing === "new" ? null : editing} items={items} wooConnected={wooConnected} onClose={() => setEditing(null)} onSaved={(id) => wooConnected && void push({ listingIds: [id] })} />}
       {pasting && <PriceSheetModal items={items} existing={packs} wooConnected={wooConnected} onClose={() => setPasting(false)} />}
     </Page>
@@ -522,6 +531,71 @@ function PriceSheetModal({ items, existing, wooConnected, onClose }: { items: It
           <p className="mt-2 text-[12.5px] text-text-tertiary">Boxes start without cuts: open each one afterwards and list what it holds, so selling a box takes the right pounds.</p>
         </div>
       )}
+    </Modal>
+  );
+}
+
+/** Creates WooCommerce products for packs the store does not have yet. */
+function CreateOnStoreModal({ listings, byId, currency, onClose }: { listings: PackListing[]; byId: Map<string, Item>; currency: string; onClose: () => void }) {
+  const api = useApi();
+  const toast = useToast();
+  const [publish, setPublish] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const create = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api<{ summary: string; errors: string[] }>("/api/ranch/store-products", { listingIds: listings.map((l) => l.id), publish });
+      if (r.errors.length) setError(r.errors.slice(0, 3).join(" · "));
+      else onClose();
+      toast(`Store: ${r.summary}`, r.errors.length ? "critical" : "success");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not create the products");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="lg"
+      title={`Create ${listings.length} product${listings.length === 1 ? "" : "s"} on the store`}
+      subtitle="Each pack becomes a WooCommerce product with its name, SKU, web price and packs available. A product the store already has under the same SKU is linked instead of duplicated."
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" loading={busy} onClick={() => void create()}>
+            {publish ? "Create and publish" : "Create as drafts"}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        {error && <Banner tone="critical">{error}</Banner>}
+        <Toggle label="Publish on the store now" checked={publish} onChange={setPublish} help="Off: they wait as drafts in WooCommerce so you can add photos and descriptions before they go live. Stock and price stay in step from here either way." />
+        <SimpleTable>
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>SKU</th>
+              <th className="text-right">Price</th>
+              <th className="text-right">Packs</th>
+            </tr>
+          </thead>
+          <tbody>
+            {listings.map((l) => (
+              <tr key={l.id}>
+                <td>{l.name}</td>
+                <td className="text-text-secondary">{l.sku || "Made from the name"}</td>
+                <td className="text-right tabular-nums">{l.price > 0 ? formatMoney(l.price, currency) : "–"}</td>
+                <td className="text-right tabular-nums">{packsAvailable(l, byId)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </SimpleTable>
+      </div>
     </Modal>
   );
 }

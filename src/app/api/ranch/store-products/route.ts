@@ -1,7 +1,7 @@
-import { authenticate, jsonError, loadConnected } from "@/lib/integrations/server";
+import { authenticate, jsonError, loadConnected, readJson } from "@/lib/integrations/server";
 import { wooCreds } from "@/lib/integrations/channelSync";
 import { listProducts } from "@/lib/integrations/woocommerce";
-import { requireRanch } from "@/lib/ranch/bridge";
+import { createStoreProducts, requireRanch } from "@/lib/ranch/bridge";
 
 export const maxDuration = 60;
 
@@ -22,6 +22,18 @@ export async function GET(req: Request) {
       status: product.status,
     }));
     return Response.json({ products });
+  } catch (e) {
+    return jsonError(e);
+  }
+}
+
+/** Creates store products for packs that have none: `{ listingIds?, publish? }` (drafts unless publish). */
+export async function POST(req: Request) {
+  try {
+    const ctx = await authenticate(req, { write: true });
+    const body = await readJson<{ listingIds?: unknown; publish?: unknown }>(req).catch(() => ({}) as { listingIds?: unknown; publish?: unknown });
+    const listingIds = Array.isArray(body.listingIds) ? body.listingIds.filter((x): x is string => typeof x === "string").slice(0, 500) : undefined;
+    return Response.json(await createStoreProducts(ctx, { listingIds, publish: body.publish === true }));
   } catch (e) {
     return jsonError(e);
   }
