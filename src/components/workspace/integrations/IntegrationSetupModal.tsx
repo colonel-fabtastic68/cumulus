@@ -224,6 +224,11 @@ function OAuthConnect({ def, integration, onClose }: { def: IntegrationDef; inte
       <SetupSteps def={def} />
       {needsShop && <TextField label="Store address" value={shop} onChange={(e) => setShop(e.target.value)} placeholder="your-store.myshopify.com" help="The .myshopify.com address from Shopify admin." autoComplete="off" autoFocus />}
       {error && <Banner tone="critical">{error}</Banner>}
+      {def.id === "square" && (
+        <p className="text-[12.5px] leading-5 text-text-secondary">
+          Square connects whichever Square account is signed in on this browser. If you also use Square for another business, sign out at squareup.com first or connect from a private window, and check the business name once you are back.
+        </p>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2">
         {offerPaste ? (
           <Button variant="plain" size="sm" onClick={() => setManual((v) => !v)}>
