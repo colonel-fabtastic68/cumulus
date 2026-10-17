@@ -32,7 +32,7 @@ const REFINE_PROMPT = `I just imported my catalog from my website. Help me fill 
  * and categories. Quantities and costs are never on a public site, so the
  * import leaves them blank and hands the rest to Strato.
  */
-export function WebsiteImport({ onboarding }: { onboarding?: boolean }) {
+export function WebsiteImport({ onboarding, onImported }: { onboarding?: boolean; onImported?: (result: { created: number; updated: number }) => void }) {
   const store = useStore();
   const user = useCurrentUser();
   const session = useSession();
@@ -69,6 +69,7 @@ export function WebsiteImport({ onboarding }: { onboarding?: boolean }) {
     try {
       const r = await importItems(store, user, result.rows.map((row) => ({ ...row, qty: undefined })));
       setDone({ created: r.created, updated: r.updated });
+      onImported?.({ created: r.created, updated: r.updated });
       toast(`Imported ${pluralize(r.created + r.updated, "item")} from ${result.site.replace(/^https?:\/\//, "")}`, "success");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

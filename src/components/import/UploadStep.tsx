@@ -7,6 +7,7 @@ import { pluralize } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { parseFile, parsePasted } from "./parse";
 import { SPREADSHEET_ACCEPT, isSpreadsheetFile } from "@/lib/spreadsheet";
+import { DOCUMENT_ACCEPT, DocumentReader, isDocumentFile } from "./DocumentReader";
 import { downloadTemplateCsv } from "./template";
 import type { ParsedSource } from "./types";
 
@@ -17,24 +18,38 @@ interface UploadStepProps {
   onSource: (source: ParsedSource) => void;
   onClear: () => void;
   onContinue: () => void;
+  /** A line about the business for Strato when it reads documents. */
+  hint?: string;
 }
 
-export function UploadStep({ source, onSource, onClear, onContinue }: UploadStepProps) {
+export function UploadStep({ source, onSource, onClear, onContinue, hint }: UploadStepProps) {
   const toast = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [pasted, setPasted] = useState("");
+  /** Photos, PDFs and text that is not a table go to Strato's reader below. */
+  const [forStrato, setForStrato] = useState<File[] | null>(null);
 
   const acceptFile = async (file: File | undefined) => {
     if (!file) return;
-    if (!/\.(csv|tsv|txt)$/i.test(file.name) && !/text\/(csv|tab-separated-values|plain)/.test(file.type) && !isSpreadsheetFile(file)) {
-      toast("Choose an Excel (.xlsx), .csv, .tsv or .txt file.", "critical");
+    const tabular = /\.(csv|tsv|txt)$/i.test(file.name) || /text\/(csv|tab-separated-values|plain)/.test(file.type) || isSpreadsheetFile(file);
+    if (!tabular) {
+      if (isDocumentFile(file)) {
+        setForStrato([file]);
+        return;
+      }
+      toast("Choose a spreadsheet (.xlsx, .csv, .tsv, .txt), a photo, a PDF or an XML file.", "critical");
       return;
     }
     setBusy(true);
     try {
       const parsed = await parseFile(file);
+      // A .txt with no columns is a plain list (or prose): let Strato read it instead.
+      if (parsed.headers.length < 2 && /\.txt$/i.test(file.name)) {
+        setForStrato([file]);
+        return;
+      }
       if (parsed.headers.length === 0) {
         toast("No header row found in that file.", "critical");
         return;
@@ -100,7 +115,7 @@ export function UploadStep({ source, onSource, onClear, onContinue }: UploadStep
       ) : (
         <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-2">
           <Card>
-            <CardHeader title="Upload a file" subtitle="CSV or tab-separated, with a header row. Shopify and WooCommerce product exports work as-is." />
+            <CardHeader title="Upload a file" subtitle="Excel, CSV or tab-separated, with a header row. Shopify, WooCommerce, Square, Clover and QuickBooks exports work as-is." />
             <div
               role="button"
               tabIndex={0}
@@ -126,11 +141,11 @@ export function UploadStep({ source, onSource, onClear, onContinue }: UploadStep
                 <UploadCloud className="h-5 w-5" />
               </span>
               <div className="text-[13.5px] font-medium text-text">{busy ? "Reading file…" : "Drop a file here, or click to choose"}</div>
-              <div className="mt-1 text-[12.5px] text-text-secondary">Excel (.xlsx), .csv, .tsv or .txt</div>
+              <div className="mt-1 text-[12.5px] text-text-secondary">Excel (.xlsx), .csv, .tsv, .txt, .xml, .pdf or photos</div>
               <input
                 ref={inputRef}
                 type="file"
-                accept={`.csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain,${SPREADSHEET_ACCEPT}`}
+                accept={`.csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain,${SPREADSHEET_ACCEPT},${DOCUMENT_ACCEPT}`}
                 className="hidden"
                 onChange={(e) => {
                   void acceptFile(e.target.files?.[0]);
@@ -159,6 +174,10 @@ export function UploadStep({ source, onSource, onClear, onContinue }: UploadStep
                 Use pasted data
               </Button>
             </div>
+          </Card>
+          <Card className="@3xl:col-span-2">
+            <CardHeader title="Paper, PDFs and other documents" subtitle="Count sheets, notebooks, supplier price lists, an XML export: Strato reads them into a table that goes through the same mapping and review." />
+            <DocumentReader onSource={onSource} hint={hint} incoming={forStrato} />
           </Card>
         </div>
       )}

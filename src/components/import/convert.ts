@@ -133,14 +133,27 @@ export function changedFields(row: ImportRow, existing: Item): string[] {
 /** Lower-case name with single spaces, for matching an import row to an existing item by name. */
 const nameKey = (s: string | undefined) => (s ?? "").trim().replace(/\s+/g, " ").toLowerCase();
 
-export function buildReviewRows(rows: Record<string, string>[], mapping: ColumnMapping, itemsBySku: Map<string, Item>, source?: "shopify" | "woocommerce", opts: { fillSkus?: boolean } = {}): ReviewRow[] {
+export function buildReviewRows(rows: Record<string, string>[], mapping: ColumnMapping, itemsBySku: Map<string, Item>, source?: "shopify" | "woocommerce", opts: { fillSkus?: boolean; overrides?: Map<number, Partial<ImportRow>> } = {}): ReviewRow[] {
   const cols = invertMapping(mapping);
   const custom = customColumns(mapping);
   const seen = new Map<string, number>();
-  const converted = rows.map((src) => convertRow(src, cols, custom, source));
+  const converted = rows.map((src, i) => {
+    const c = convertRow(src, cols, custom, source);
+    // Values Strato filled in (keyed by 1-based line) only land where the file left a blank.
+    const extra = opts.overrides?.get(i + 1);
+    if (extra) {
+      const target = c.row as unknown as Record<string, unknown>;
+      for (const [k, v] of Object.entries(extra)) if (v !== undefined && k !== "sku" && target[k] === undefined) target[k] = v;
+      if (extra.sku && !c.row.sku) c.row.sku = extra.sku;
+    }
+    return c;
+  });
   // Rows without a SKU: an existing item with the same name keeps its SKU, otherwise one is made from the name,
   // unique among the workspace's SKUs and the file's own.
-  const filled = new Map<number, "matched" | "made">();
+  const filled = new Map<number, "matched" | "made" | "strato">();
+  converted.forEach((c, i) => {
+    if (opts.overrides?.get(i + 1)?.sku && c.row.sku === opts.overrides.get(i + 1)?.sku) filled.set(i, "strato");
+  });
   if (opts.fillSkus) {
     const byName = new Map<string, Item>();
     for (const item of itemsBySku.values()) if (!byName.has(nameKey(item.name))) byName.set(nameKey(item.name), item);

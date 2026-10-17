@@ -44,6 +44,11 @@ export default function IntegrationsPage() {
     [toast],
   );
   const onError = useCallback((message: string) => toast(message, "critical"), [toast]);
+  // The guided setup links here with ?connect=square to open that connection's setup straight away.
+  const onConnect = useCallback((id: string) => {
+    const def = integrationDef(id);
+    if (def) setSetupId(def.id);
+  }, []);
 
   useEffect(() => {
     setPageContext({ page: "Integrations" });
@@ -65,6 +70,7 @@ export default function IntegrationsPage() {
       <Suspense>
         <QueryParamEffect param="connected" onValue={onConnected} />
         <QueryParamEffect param="error" onValue={onError} />
+        <QueryParamEffect param="connect" onValue={onConnect} />
       </Suspense>
       <div className="flex flex-col gap-5">
         {mode !== "firestore" && (

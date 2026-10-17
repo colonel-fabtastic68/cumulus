@@ -183,6 +183,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   // A fresh workspace (no company name yet) asks for its basics first. Instances are set up by the operator, so they skip it.
   if (!settings.companyName.trim() && !currentInstance()) return <Onboarding />;
 
+  // The guided setup takes the whole window: no sidebar or top bar, but Strato's panel stays within reach for its Help button.
+  if (pathname.startsWith("/onboarding")) {
+    return (
+      <div className="relative flex h-screen overflow-hidden">
+        <main className="@container min-h-0 flex-1 overflow-y-auto">{children}</main>
+        <AgentPanel />
+      </div>
+    );
+  }
+
   return (
     // relative: anything a page positions absolutely (a visually hidden file input, say) stays inside the shell instead of
     // stretching the document, so only <main> scrolls and the sidebar never moves.

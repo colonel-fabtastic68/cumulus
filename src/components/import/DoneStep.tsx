@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Boxes, CheckCircle2, Plug, RotateCcw } from "lucide-react";
 import { Button, Card, CardHeader, SimpleTable, Stat } from "@/components/ui";
 import { pluralize } from "@/lib/format";
@@ -10,9 +11,11 @@ interface DoneStepProps {
   sourceName: string;
   attempted: number;
   onRestart: () => void;
+  /** Replaces the default buttons (the walkthrough sends people to their workspace instead). */
+  actions?: ReactNode;
 }
 
-export function DoneStep({ result, sourceName, attempted, onRestart }: DoneStepProps) {
+export function DoneStep({ result, sourceName, attempted, onRestart, actions }: DoneStepProps) {
   const ok = result.errors.length === 0;
   return (
     <div className="flex flex-col gap-4">
@@ -26,15 +29,19 @@ export function DoneStep({ result, sourceName, attempted, onRestart }: DoneStepP
             {pluralize(attempted, "row")} from {sourceName} processed. Quantities were recorded as import movements so the stock ledger stays the source of truth.
           </p>
           <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-            <Button variant="primary" icon={<Boxes />} href="/inventory">
-              View inventory
-            </Button>
-            <Button icon={<RotateCcw />} onClick={onRestart}>
-              Import another file
-            </Button>
-            <Button variant="plain" icon={<Plug />} href="/integrations">
-              Connect Shopify or WooCommerce
-            </Button>
+            {actions ?? (
+              <>
+                <Button variant="primary" icon={<Boxes />} href="/inventory">
+                  View inventory
+                </Button>
+                <Button icon={<RotateCcw />} onClick={onRestart}>
+                  Import another file
+                </Button>
+                <Button variant="plain" icon={<Plug />} href="/integrations">
+                  Connect a store or POS
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </Card>

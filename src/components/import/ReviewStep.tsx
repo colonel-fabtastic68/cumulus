@@ -7,9 +7,11 @@ import { canWrite, useCurrentUser } from "@/lib/auth";
 import { formatMoney, formatQty, pluralize } from "@/lib/format";
 import { importItems, InventoryError, type ImportResult } from "@/lib/inventory";
 import { useItemsBySku, useSettings, useStore } from "@/lib/store/provider";
+import { describeAnswers } from "@/lib/onboarding";
 import { matches } from "@/lib/utils";
 import { buildReviewRows } from "./convert";
 import { ImportChanges } from "./ImportChanges";
+import { StratoFill, type Overrides } from "./StratoFill";
 import type { ColumnMapping, ParsedSource, ReviewRow, ReviewStatus } from "./types";
 
 type Filter = "all" | ReviewStatus;
@@ -21,11 +23,16 @@ interface ReviewStepProps {
   source: ParsedSource;
   mapping: ColumnMapping;
   fillSkus?: boolean;
+  /** Values Strato filled into blank cells, by 1-based line. Kept by the wizard so Back does not lose them. */
+  overrides?: Overrides;
+  onOverrides?: (next: Overrides) => void;
   onBack: () => void;
   onDone: (result: ImportResult, attempted: number) => void;
 }
 
-export function ReviewStep({ source, mapping, fillSkus, onBack, onDone }: ReviewStepProps) {
+const NO_OVERRIDES: Overrides = new Map();
+
+export function ReviewStep({ source, mapping, fillSkus, overrides = NO_OVERRIDES, onOverrides, onBack, onDone }: ReviewStepProps) {
   const store = useStore();
   const user = useCurrentUser();
   const settings = useSettings();
@@ -39,7 +46,10 @@ export function ReviewStep({ source, mapping, fillSkus, onBack, onDone }: Review
   const [query, setQuery] = useState("");
   const [importing, setImporting] = useState(false);
 
-  const reviewRows = useMemo(() => buildReviewRows(source.rows, mapping, itemsBySku, source.kind === "generic" ? undefined : source.kind, { fillSkus }), [source.rows, mapping, itemsBySku, source.kind, fillSkus]);
+  const sourceKind = source.kind === "generic" ? undefined : source.kind;
+  /** The file on its own, for counting what Strato could fill; the rows below carry the fills. */
+  const bareRows = useMemo(() => buildReviewRows(source.rows, mapping, itemsBySku, sourceKind, { fillSkus }), [source.rows, mapping, itemsBySku, sourceKind, fillSkus]);
+  const reviewRows = useMemo(() => (overrides.size ? buildReviewRows(source.rows, mapping, itemsBySku, sourceKind, { fillSkus, overrides }) : bareRows), [bareRows, source.rows, mapping, itemsBySku, sourceKind, fillSkus, overrides]);
   const counts = useMemo(() => {
     const c = { all: reviewRows.length, new: 0, update: 0, error: 0 };
     for (const r of reviewRows) c[r.status]++;
@@ -58,7 +68,7 @@ export function ReviewStep({ source, mapping, fillSkus, onBack, onDone }: Review
       { key: "sku", header: "SKU", sortValue: (r) => r.sku, render: (r) => (
           <span className="font-mono text-[12.5px] text-text">
             {r.sku || <span className="text-text-tertiary">—</span>}
-            {r.skuFilled && <span className="ml-1.5 font-sans text-[11.5px] text-text-tertiary">{r.skuFilled === "matched" ? "matched by name" : "made from name"}</span>}
+            {r.skuFilled && <span className="ml-1.5 font-sans text-[11.5px] text-text-tertiary">{r.skuFilled === "matched" ? "matched by name" : r.skuFilled === "strato" ? "from Strato" : "made from name"}</span>}
           </span>
         ) },
       {
@@ -124,6 +134,7 @@ export function ReviewStep({ source, mapping, fillSkus, onBack, onDone }: Review
         <SummaryTile label="Updates" value={counts.update} tone="info" />
         <SummaryTile label="Errors" value={counts.error} tone={counts.error ? "critical" : "default"} />
       </div>
+      {onOverrides && <StratoFill source={source} mapping={mapping} rows={bareRows} itemsBySku={itemsBySku} overrides={overrides} onOverrides={onOverrides} hint={describeAnswers(settings.onboarding)} />}
       <ImportChanges rows={reviewRows} />
 
       <Table

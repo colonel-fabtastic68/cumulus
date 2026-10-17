@@ -1044,7 +1044,27 @@ export interface WorkspaceSettings {
   numbering?: { orderPrefix?: string; purchaseOrderPrefix?: string };
   /** When an item counts as low stock (the Low chip, the low-stock view, reorder suggestions). */
   stockAlerts?: StockAlertRule;
+  /** Answers from the guided setup after the workspace was created; shapes the import hub and Strato's suggestions. */
+  onboarding?: OnboardingAnswers;
   updatedAt: string;
+}
+
+/** How the business runs inventory today and what it wants from cumulusOS. Every field is optional until the walkthrough is finished or skipped. */
+export interface OnboardingAnswers {
+  /** Where the data lives now: catalog integration ids (shopify, square, quickbooks…), "spreadsheet", "paper", "other" or "none". */
+  sources?: string[];
+  /** The app named under "other". */
+  otherSource?: string;
+  /** light: counts and a few items; partial: replace or integrate some tools; full: everything runs here. */
+  usage?: "light" | "partial" | "full";
+  /** What is tracked: finished-goods, parts, raw-materials, retail, food, supplies, equipment, livestock, other. */
+  itemKinds?: string[];
+  otherKinds?: string;
+  /** How the catalog came in at the end of the walkthrough. */
+  importedVia?: "file" | "paper" | "website" | "paste" | "scratch" | "integration";
+  startedAt?: string;
+  /** Set when the walkthrough was finished or skipped; the app never shows it again on its own. */
+  completedAt?: string;
 }
 
 /**

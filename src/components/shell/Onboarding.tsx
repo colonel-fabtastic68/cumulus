@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import { buildSeed } from "@/lib/seed";
 import { nowIso } from "@/lib/utils";
@@ -16,6 +17,7 @@ export function Onboarding() {
   const settings = useSettings();
   const members = useCollection("members");
   const user = useCurrentUser();
+  const router = useRouter();
   const [name, setName] = useState("");
   const [currency, setCurrency] = useState(settings.currency || "USD");
   const [busy, setBusy] = useState<"save" | "demo" | null>(null);
@@ -35,6 +37,8 @@ export function Onboarding() {
           doc: { id: `act_setup_${Date.now().toString(36)}`, type: "settings.updated", message: `${user.name} set up ${name.trim()}`, actorId: user.id, actorName: user.name, createdAt: nowIso() },
         },
       ]);
+      // Named: on to the guided setup (what they use today, what they track, then the import).
+      router.replace("/onboarding");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setBusy(null);

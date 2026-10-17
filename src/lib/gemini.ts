@@ -1,5 +1,6 @@
 import { createGoogle } from "@ai-sdk/google";
 import { APICallError, generateText, Output } from "ai";
+import type { ModelMessage } from "ai";
 import type { z } from "zod";
 
 /**
@@ -26,14 +27,20 @@ function shouldFallback(e: unknown): boolean {
   return /high demand|overloaded|503|429|UNAVAILABLE|RESOURCE_EXHAUSTED/i.test(msg);
 }
 
-export async function structured<T>(opts: { schema: z.ZodType<T>; system: string; prompt: string; abortSignal?: AbortSignal }): Promise<T> {
+export function geminiConfigured(): boolean {
+  return Boolean(process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY);
+}
+
+/** A structured call from a prompt string, or from messages when the input carries files (photos, PDFs). */
+export async function structured<T>(opts: { schema: z.ZodType<T>; system: string; prompt?: string; messages?: ModelMessage[]; abortSignal?: AbortSignal }): Promise<T> {
   const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY;
   if (!apiKey) throw new GeminiUnavailable();
   const google = createGoogle({ apiKey });
   let last: unknown;
   for (const id of [MODEL, ...FALLBACK_MODELS]) {
     try {
-      const { output } = await generateText({ model: google(id), output: Output.object({ schema: opts.schema }), system: opts.system, prompt: opts.prompt, abortSignal: opts.abortSignal });
+      const input = opts.messages ? { messages: opts.messages } : { prompt: opts.prompt ?? "" };
+      const { output } = await generateText({ model: google(id), output: Output.object({ schema: opts.schema }), system: opts.system, ...input, abortSignal: opts.abortSignal });
       return output as T;
     } catch (e) {
       last = e;

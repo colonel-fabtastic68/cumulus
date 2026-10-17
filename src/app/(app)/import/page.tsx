@@ -8,7 +8,6 @@ import { canWrite, useCurrentUser } from "@/lib/auth";
 import { ImportWizard } from "@/components/import/ImportWizard";
 import { CustomerImport } from "@/components/customers";
 import { WebsiteImport } from "@/components/import/WebsiteImport";
-import { APP_HOME } from "@/lib/auth-routes";
 
 export default function ImportPage() {
   const { setPageContext } = useAgent();
@@ -33,8 +32,8 @@ export default function ImportPage() {
         <QueryParamEffect param="onboarding" onValue={() => setOnboarding(true)} />
       </Suspense>
       {onboarding && (
-        <Banner tone="info" title="Your workspace is ready. Bring your catalog in first?" className="mb-5" action={<Button href={APP_HOME}>Skip for now</Button>}>
-          Paste your website below and your items appear in a minute. You can also upload a spreadsheet, or start empty and add items as you go.
+        <Banner tone="info" title="Your workspace is ready. Bring your catalog in first?" className="mb-5" action={<Button href="/onboarding">Guided setup</Button>}>
+          Paste your website below and your items appear in a minute. You can also upload a spreadsheet, photograph paper records, or start empty and add items as you go. The guided setup walks through it step by step.
         </Banner>
       )}
       <div className="mb-6">

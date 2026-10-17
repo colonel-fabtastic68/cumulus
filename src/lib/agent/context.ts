@@ -2,6 +2,7 @@ import type { WorkspaceSnapshot } from "@/lib/types";
 import { costingMethod, inventoryValue, isLowStock, reorderQty } from "@/lib/inventory";
 import { replenishmentPlan, replenishmentSummary } from "@/lib/replenishment";
 import { COSTING_LABELS } from "@/lib/valuation";
+import { describeAnswers } from "@/lib/onboarding";
 
 /** Compact text snapshot of the workspace for Strato's system prompt. */
 export function buildAgentContext(ws: Pick<WorkspaceSnapshot, "items" | "suppliers" | "orders" | "rmas" | "settings" | "members"> & Partial<Pick<WorkspaceSnapshot, "integrations" | "purchaseOrders" | "purchaseOrderTemplates" | "movements">>, extra: { page?: string; selectedSkus?: string[] } = {}): string {
@@ -14,6 +15,8 @@ export function buildAgentContext(ws: Pick<WorkspaceSnapshot, "items" | "supplie
   const openRmas = ws.rmas.filter((r) => r.status === "open" || r.status === "inspecting");
   const lines: string[] = [];
   lines.push(`Company: ${settings?.companyName ?? "Unknown"} · Currency: ${settings?.currency ?? "USD"} · Costing: ${COSTING_LABELS[costingMethod(settings)]} · Relieve components: ${settings?.relievePolicy ?? "on_build"} · Track in-use: ${settings?.trackInUse ? "yes" : "no"} · Inactivity window: ${settings?.inactivityDays ?? 120} days`);
+  const setup = describeAnswers(settings?.onboarding);
+  if (setup) lines.push(`Setup answers: ${setup}${settings?.onboarding?.completedAt ? "" : " (guided setup not finished yet)"}`);
   lines.push(`Items: ${ws.items.length} total (${active.length} active, ${ws.items.filter((i) => i.type === "assembly").length} assemblies) · Inventory value: ${inventoryValue(ws.items).toFixed(2)} · Below min: ${low.length}`);
   lines.push(`Categories: ${Array.from(cats.entries()).map(([c, n]) => `${c} (${n})`).join(", ")}`);
   lines.push(`Suppliers: ${ws.suppliers.map((s) => `${s.name}${s.leadTimeDays ? ` [${s.leadTimeDays}d]` : ""}`).join(", ") || "none"}`);
