@@ -3,13 +3,13 @@
 import { useMemo, useRef, useState } from "react";
 import { ClipboardCheck, Plus } from "lucide-react";
 import type { Item, PurchaseOrder, Receipt } from "@/lib/types";
-import { costingMethod, receiveStock, type ReceiveLineInput } from "@/lib/inventory";
+import { costingMethod, receiveStock, routedLocation, type ReceiveLineInput } from "@/lib/inventory";
 import { poIsOpen, poLineOpenQty, poOpenLines, receivePurchaseOrders } from "@/lib/purchaseOrders";
 import { COSTING_LABELS } from "@/lib/valuation";
 import { useDefaultLocation, useLocations } from "@/lib/locations";
 import { findItemByCode } from "@/lib/scan";
 import { ScanField } from "@/components/scan";
-import { ItemPicker } from "@/components/inventory";
+import { ItemPicker, RoutingNotice } from "@/components/inventory";
 import { useCollection, useItems, useSettings, useStore } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
 import { formatDate, formatMoney, formatNumber, fromDateInput, pluralize, toDateInput } from "@/lib/format";
@@ -50,10 +50,17 @@ function ReceiveForm({ open, onClose, onReceived }: ReceiveDrawerProps) {
   const locations = useLocations();
   const home = useDefaultLocation();
   const [locationId, setLocationId] = useState(home.id);
+  const [ignoreRouting, setIgnoreRouting] = useState(false);
   const [supplierId, setSupplierId] = useState("");
   const [reference, setReference] = useState("");
   const [date, setDate] = useState(() => toDateInput());
   const [lines, setLines] = useState<LineDraft[]>(() => [newLine()]);
+  // Lines whose part routes its deliveries somewhere other than the location chosen on this form.
+  const routedLines = lines.flatMap((l) => {
+    const to = l.item ? routedLocation("receive", l.item, locations) : undefined;
+    return l.item && to && to.id !== locationId ? [{ sku: l.item.sku, location: to.name }] : [];
+  });
+  const locationName = locations.find((l) => l.id === locationId)?.name ?? home.name;
   const [updateCost, setUpdateCost] = useState(true);
   const [trackLots, setTrackLots] = useState(false);
   const [note, setNote] = useState("");
@@ -155,7 +162,7 @@ function ReceiveForm({ open, onClose, onReceived }: ReceiveDrawerProps) {
     if (foreign) return setError(`${foreign.number} is an order to ${foreign.supplier}; pick that supplier or remove its lines`);
     setBusy(true);
     try {
-      const common = { reference: reference.trim() || undefined, receivedAt: fromDateInput(date), note: note.trim() || undefined, updateStandardCost: method === "standard" ? updateCost : undefined };
+      const common = { reference: reference.trim() || undefined, receivedAt: fromDateInput(date), note: note.trim() || undefined, updateStandardCost: method === "standard" ? updateCost : undefined, ignoreRouting: ignoreRouting || undefined };
       const receipt = poIds.length
         ? (await receivePurchaseOrders(store, user, poIds, { ...common, lines: payload, allowExtraLines: true })).receipt
         : await receiveStock(store, user, { ...common, supplierId: supplierId || undefined, lines: payload });
@@ -237,8 +244,9 @@ function ReceiveForm({ open, onClose, onReceived }: ReceiveDrawerProps) {
           </div>
         )}
         {locations.length > 1 && (
-          <Select label="Receive into" value={locationId} onChange={(e) => setLocationId(e.target.value)} options={locations.map((l) => ({ value: l.id, label: l.code ? `${l.name} (${l.code})` : l.name }))} help="Stock lands at this location; set a bin per line for put-away." />
+          <Select label="Receive into" value={locationId} onChange={(e) => setLocationId(e.target.value)} options={locations.map((l) => ({ value: l.id, label: l.code ? `${l.name} (${l.code})` : l.name }))} help="Stock lands at this location unless a part routes its deliveries elsewhere; set a bin per line for put-away." />
         )}
+        <RoutingNotice kind="receive" lines={routedLines} documentLocation={locationName} ignore={ignoreRouting} onIgnoreChange={setIgnoreRouting} />
         <FormGrid cols={2}>
           <TextField label="Reference" hint="(optional)" placeholder={poLineCount ? "Defaults to the order numbers" : "PO or packing slip number"} value={reference} onChange={(e) => setReference(e.target.value)} />
           <TextField

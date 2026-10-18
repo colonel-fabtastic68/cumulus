@@ -74,6 +74,13 @@ export interface Item {
   suppliers?: ItemSupplier[];
   /** Bin / shelf location. */
   location?: string;
+  /**
+   * Stock routing. A part can sit in several locations, so these say which one purchase orders
+   * receive into and which one sales orders relieve, unless the person receiving or shipping overrides it.
+   * Unset means the document's location (or the workspace default).
+   */
+  receiveLocationId?: ID;
+  fulfillLocationId?: ID;
   barcode?: string;
   /** Expected manufacturing waste for this item when consumed, as a percentage. */
   expectedWastePct?: number;
@@ -266,6 +273,8 @@ export interface ReceiptLine {
   checked?: boolean;
   /** Checklist: quantity actually found, when it was written down (differs from qty on a short or over delivery). */
   found?: number;
+  /** Where this line landed when it differs from the rest of the receipt (the part's own receive location). */
+  locationId?: ID;
 }
 
 export interface Receipt {
@@ -720,6 +729,8 @@ export type ShipmentProvider = "manual" | "shippo" | "easypost";
 export interface ShipmentLine {
   itemId: ID;
   qty: number;
+  /** Where this line was relieved from when it differs from the shipment's location (the part's own fulfillment location). */
+  locationId?: ID;
 }
 
 /** One parcel or hand-off against an order. An order can have several (partial shipments). */

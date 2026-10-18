@@ -3,8 +3,9 @@
 import { useMemo, useState } from "react";
 import { PackageCheck, RefreshCw, Truck } from "lucide-react";
 import type { Address, ParcelDefaults, SalesOrder, Shipment } from "@/lib/types";
-import { openQty, qtyAt, shipOrder } from "@/lib/inventory";
+import { openQty, qtyAt, routedLocation, shipOrder } from "@/lib/inventory";
 import { useDefaultLocation, useLocations } from "@/lib/locations";
+import { RoutingNotice } from "@/components/inventory";
 import { useCollection, useItemsById, useSettings, useStore } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
 import { useApi } from "@/lib/api-client";
@@ -53,12 +54,13 @@ function ShipForm({ order, onClose, onShipped }: ShipOrderModalProps & { order: 
   const carriersConnected = integrations.filter((i) => (i.id === "shippo" || i.id === "easypost") && i.status === "connected");
 
   const [locationId, setLocationId] = useState(home.id);
+  const [ignoreRouting, setIgnoreRouting] = useState(false);
   const openLines = useMemo(() => order.lines.filter((l) => openQty(l) > 0), [order]);
   const [qtys, setQtys] = useState<Record<string, string>>(() => {
     const out: Record<string, string> = {};
     for (const l of openLines) {
       const item = itemsById.get(l.itemId);
-      const available = item ? qtyAt(item, home.id, home.id) : 0;
+      const available = item ? qtyAt(item, routedLocation("fulfill", item, locations)?.id ?? home.id, home.id) : 0;
       out[l.itemId] = String(Math.max(0, Math.min(openQty(l), available)));
     }
     return out;
@@ -74,10 +76,21 @@ function ShipForm({ order, onClose, onShipped }: ShipOrderModalProps & { order: 
   const [busy, setBusy] = useState<"rates" | "ship" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Where a line is relieved from: the part's own fulfillment location unless routing is off for this shipment.
+  const fromFor = (itemId: string) => {
+    const item = itemsById.get(itemId);
+    return (item && !ignoreRouting ? routedLocation("fulfill", item, locations)?.id : undefined) ?? locationId;
+  };
+  const locationName = (id: string) => locations.find((x) => x.id === id)?.name ?? home.name;
   const availableAt = (itemId: string) => {
     const item = itemsById.get(itemId);
-    return item ? qtyAt(item, locationId, home.id) : 0;
+    return item ? qtyAt(item, fromFor(itemId), home.id) : 0;
   };
+  const routedLines = openLines.flatMap((l) => {
+    const item = itemsById.get(l.itemId);
+    const from = item ? routedLocation("fulfill", item, locations) : undefined;
+    return item && from && from.id !== locationId ? [{ sku: item.sku, location: from.name }] : [];
+  });
   const lines = openLines.map((l) => ({ itemId: l.itemId, qty: Number(qtys[l.itemId] ?? 0) })).filter((l) => Number.isFinite(l.qty) && l.qty > 0);
   const units = lines.reduce((a, l) => a + l.qty, 0);
   const leavesOpen = openLines.some((l) => openQty(l) > (Number(qtys[l.itemId]) || 0));
@@ -90,7 +103,7 @@ function ShipForm({ order, onClose, onShipped }: ShipOrderModalProps & { order: 
       const line = openLines.find((x) => x.itemId === l.itemId)!;
       const item = itemsById.get(l.itemId);
       if (l.qty > openQty(line)) return `${item?.sku ?? l.itemId}: only ${openQty(line)} is open`;
-      if (l.qty > availableAt(l.itemId)) return `${item?.sku ?? l.itemId}: only ${formatQty(availableAt(l.itemId), item?.unit)} at ${locations.find((x) => x.id === locationId)?.name ?? "this location"}`;
+      if (l.qty > availableAt(l.itemId)) return `${item?.sku ?? l.itemId}: only ${formatQty(availableAt(l.itemId), item?.unit)} at ${locationName(fromFor(l.itemId))}`;
     }
     return null;
   };
@@ -130,11 +143,11 @@ function ShipForm({ order, onClose, onShipped }: ShipOrderModalProps & { order: 
       if (mode === "label") {
         const rate = rates?.find((r) => r.rateId === rateId);
         if (!rate) throw new Error("Pick a rate first");
-        const res = await api<{ shipment: Shipment }>("/api/shipping/buy", { orderId: order.id, provider: rate.provider, rateId: rate.rateId, lines, locationId, shipTo: address });
+        const res = await api<{ shipment: Shipment }>("/api/shipping/buy", { orderId: order.id, provider: rate.provider, rateId: rate.rateId, lines, locationId, ignoreRouting: ignoreRouting || undefined, shipTo: address });
         toast(`Label bought · ${res.shipment.carrier ?? rate.carrier} ${res.shipment.trackingNumber ?? ""}`.trim(), "success");
         onShipped?.(res.shipment);
       } else {
-        const { shipment } = await shipOrder(store, user, { orderId: order.id, lines, locationId, carrier: carrier.trim() || undefined, trackingNumber: tracking.trim() || undefined, trackingUrl: trackingUrl.trim() || undefined });
+        const { shipment } = await shipOrder(store, user, { orderId: order.id, lines, locationId, ignoreRouting: ignoreRouting || undefined, carrier: carrier.trim() || undefined, trackingNumber: tracking.trim() || undefined, trackingUrl: trackingUrl.trim() || undefined });
         toast(leavesOpen ? `Shipped ${units} units on ${order.number}; the rest stays backordered` : `Shipped ${order.number}`, "success");
         onShipped?.(shipment);
       }
@@ -169,7 +182,8 @@ function ShipForm({ order, onClose, onShipped }: ShipOrderModalProps & { order: 
       }
     >
       <div className="flex flex-col gap-4">
-        {locations.length > 1 && <Select label="Ship from" value={locationId} onChange={(e) => setLocationId(e.target.value)} options={locations.map((l) => ({ value: l.id, label: l.name }))} />}
+        {locations.length > 1 && <Select label="Ship from" value={locationId} onChange={(e) => setLocationId(e.target.value)} options={locations.map((l) => ({ value: l.id, label: l.name }))} help="Lines are relieved here unless a part routes its shipments elsewhere." />}
+        <RoutingNotice kind="fulfill" lines={routedLines} documentLocation={locationName(locationId)} ignore={ignoreRouting} onIgnoreChange={setIgnoreRouting} />
         <SimpleTable>
           <thead>
             <tr>
@@ -184,6 +198,7 @@ function ShipForm({ order, onClose, onShipped }: ShipOrderModalProps & { order: 
               const item = itemsById.get(l.itemId);
               const available = availableAt(l.itemId);
               const short = available < openQty(l);
+              const from = fromFor(l.itemId);
               return (
                 <tr key={l.itemId}>
                   <td>
@@ -191,7 +206,10 @@ function ShipForm({ order, onClose, onShipped }: ShipOrderModalProps & { order: 
                     <div className="truncate text-[12px] text-text-secondary">{item?.name}</div>
                   </td>
                   <td className="text-right tabular">{formatQty(openQty(l), item?.unit)}</td>
-                  <td className={`text-right tabular ${short ? "font-medium text-warning" : ""}`}>{formatQty(available, item?.unit)}</td>
+                  <td className={`text-right tabular ${short ? "font-medium text-warning" : ""}`}>
+                    {formatQty(available, item?.unit)}
+                    {from !== locationId && <div className="text-[11px] font-normal text-text-tertiary">from {locationName(from)}</div>}
+                  </td>
                   <td className="text-right">
                     <TextField type="number" min={0} max={Math.min(openQty(l), available)} step="any" value={qtys[l.itemId] ?? ""} onChange={(e) => setQtys((q) => ({ ...q, [l.itemId]: e.target.value }))} aria-label={`Ship ${item?.sku ?? ""}`} className="w-24 text-right" containerClassName="ml-auto w-24" />
                   </td>

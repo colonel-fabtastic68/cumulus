@@ -6,6 +6,7 @@ import { ExternalLink, RefreshCw, Truck, XCircle } from "lucide-react";
 import type { SalesOrder, Shipment } from "@/lib/types";
 import { isOrderOpen, openQty } from "@/lib/inventory";
 import { useCollection, useItemsById, useSettings } from "@/lib/store/provider";
+import { useLocationName } from "@/lib/locations";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/api-client";
 import { formatDateTime, formatMoney, formatNumber, formatQty, formatRelative, pluralize } from "@/lib/format";
@@ -206,6 +207,7 @@ const TRACKING_TONE: Record<string, "default" | "info" | "success" | "warning" |
 
 function ShipmentRow({ shipment, currency }: { shipment: Shipment; currency: string }) {
   const itemsById = useItemsById();
+  const locationName = useLocationName();
   const { mode } = useSession();
   const api = useApi();
   const toast = useToast();
@@ -231,7 +233,7 @@ function ShipmentRow({ shipment, currency }: { shipment: Shipment; currency: str
       <span className="text-text-secondary" title={formatDateTime(shipment.shippedAt)}>
         {formatRelative(shipment.shippedAt)}
       </span>
-      <span className="text-text-secondary" title={shipment.lines.map((l) => `${itemsById.get(l.itemId)?.sku ?? l.itemId} × ${l.qty}`).join(", ")}>
+      <span className="text-text-secondary" title={shipment.lines.map((l) => `${itemsById.get(l.itemId)?.sku ?? l.itemId} × ${l.qty}${l.locationId ? ` from ${locationName(l.locationId)}` : ""}`).join(", ")}>
         {pluralize(units, "unit")} on {pluralize(shipment.lines.length, "line")}
       </span>
       {(shipment.carrier || shipment.service) && <span className="text-text">{[shipment.carrier, shipment.service].filter(Boolean).join(" ")}</span>}

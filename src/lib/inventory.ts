@@ -79,6 +79,8 @@ export function itemDefaults(partial: Partial<Item> & { sku: string; name: strin
     supplierId: partial.supplierId,
     supplierSku: partial.supplierSku,
     location: partial.location,
+    receiveLocationId: partial.receiveLocationId,
+    fulfillLocationId: partial.fulfillLocationId,
     barcode: partial.barcode,
     expectedWastePct: partial.expectedWastePct,
     bom: partial.bom ?? [],
@@ -573,6 +575,18 @@ export function qtyAt(item: Item, locationId: string, homeId: string): number {
 }
 
 /**
+ * The location a part's own routing names for receiving or fulfillment, when that
+ * location still exists and is active. Routing that points at a deactivated or
+ * deleted location is ignored, so stock never lands somewhere nobody can see.
+ */
+export function routedLocation(kind: "receive" | "fulfill", item: Pick<Item, "receiveLocationId" | "fulfillLocationId">, locations: Location[]): Location | undefined {
+  const id = kind === "receive" ? item.receiveLocationId : item.fulfillLocationId;
+  if (!id) return undefined;
+  const location = locations.find((l) => l.id === id);
+  return location?.active ? location : undefined;
+}
+
+/**
  * Build the write ops for a set of movements. Does not commit — callers
  * compose these with their own document ops and commit once.
  */
@@ -787,6 +801,11 @@ export interface ReceiveInput {
   purchaseOrderIds?: string[];
   /** Standard costing only: update the item's standard cost to the received cost. Default true. */
   updateStandardCost?: boolean;
+  /**
+   * Put every line where the line (or the workspace default) says, even when the
+   * part's own routing names a different receive location.
+   */
+  ignoreRouting?: boolean;
 }
 
 /** Factor 7: receiving, with back-dating that keeps today's totals correct. */
@@ -820,10 +839,12 @@ function isoDate(value: string | undefined): string | undefined {
 
 export async function receiveStock(store: Store, actor: Actor, input: ReceiveInput): Promise<Receipt> {
   if (input.lines.length === 0) throw new InventoryError("A receipt needs at least one line");
-  const [items, lots, settings] = await Promise.all([store.list("items"), store.list("lots"), loadSettings(store)]);
+  const [items, lots, settings, locations] = await Promise.all([store.list("items"), store.list("lots"), loadSettings(store), store.list("locations")]);
   const method = costingMethod(settings);
   const byId = new Map(items.map((i) => [i.id, { ...i }]));
   const lotsByItem = new Map<string, Lot[]>();
+  // Where each line lands: the part's own receive location wins unless the caller says otherwise.
+  const lineLocationIds: Array<string | undefined> = [];
   for (const l of lots) if (l.qtyRemaining > 0) (lotsByItem.get(l.itemId) ?? lotsByItem.set(l.itemId, []).get(l.itemId)!).push(l);
   const { numbers, ops: counterOps } = await nextNumbers(store, { receipt: 1, lot: input.lines.length });
   const receivedAt = input.receivedAt ?? nowIso();
@@ -851,6 +872,9 @@ export async function receiveStock(store: Store, actor: Actor, input: ReceiveInp
     const unitCost = line.unitCost ?? item.unitCost;
     const supplierLot = line.supplierLot?.trim() || undefined;
     const expiresAt = isoDate(line.expiresAt);
+    const routed = input.ignoreRouting ? undefined : routedLocation("receive", item, locations);
+    const locationId = routed?.id ?? line.locationId;
+    lineLocationIds[i] = locationId;
     const lot: Lot = {
       id: newId("lot"),
       number: numbers.lot[i],
@@ -868,8 +892,8 @@ export async function receiveStock(store: Store, actor: Actor, input: ReceiveInp
     };
     ops.push({ op: "put", collection: "lots", doc: lot });
     (lotsByItem.get(item.id) ?? lotsByItem.set(item.id, []).get(item.id)!).push(lot);
-    receipt.lines.push({ itemId: item.id, qty: line.qty, unitCost, lotId: lot.id, ...(supplierLot ? { supplierLot } : {}), ...(expiresAt ? { expiresAt } : {}), ...(line.purchaseOrderId ? { purchaseOrderId: line.purchaseOrderId } : {}) });
-    movementInputs.push({ itemId: item.id, type: "receipt", qty: line.qty, unitCost, lotId: lot.id, refType: "receipt", refId: receipt.id, occurredAt: receivedAt, locationId: line.locationId });
+    receipt.lines.push({ itemId: item.id, qty: line.qty, unitCost, lotId: lot.id, ...(supplierLot ? { supplierLot } : {}), ...(expiresAt ? { expiresAt } : {}), ...(line.purchaseOrderId ? { purchaseOrderId: line.purchaseOrderId } : {}), ...(routed ? { locationId: routed.id } : {}) });
+    movementInputs.push({ itemId: item.id, type: "receipt", qty: line.qty, unitCost, lotId: lot.id, refType: "receipt", refId: receipt.id, occurredAt: receivedAt, locationId });
     const patch: Partial<Item> = itemCostPatches.get(item.id) ?? {};
     // Costing: standard cost follows the receipt when asked; average and FIFO follow their own rules.
     const next = costAfterReceipt(method, item, lotsByItem.get(item.id) ?? [], line.qty, unitCost, input.updateStandardCost !== false);
@@ -888,13 +912,13 @@ export async function receiveStock(store: Store, actor: Actor, input: ReceiveInp
   });
   for (const [id, patch] of itemCostPatches) ops.push({ op: "patch", collection: "items", id, patch });
   const mv = await movementOps(store, actor, movementInputs);
-  // Put-away: remember the bin each line landed in.
-  for (const line of input.lines) {
-    if (!line.bin?.trim()) continue;
+  // Put-away: remember the bin each line landed in, at the location it actually went to.
+  input.lines.forEach((line, i) => {
+    if (!line.bin?.trim()) return;
     const patch = mv.itemPatches.get(line.itemId);
-    const locationId = line.locationId ?? mv.homeId;
+    const locationId = lineLocationIds[i] ?? mv.homeId;
     if (patch?.stock?.[locationId]) patch.stock[locationId] = { ...patch.stock[locationId]!, bin: line.bin.trim() };
-  }
+  });
   ops.push(...mv.ops);
   ops.push({ op: "put", collection: "receipts", doc: receipt });
   // Factor 34: backordered lines that this delivery covers.
@@ -1056,8 +1080,10 @@ export interface ShipInput {
   orderId: string;
   /** Lines and quantities to ship now. Defaults to everything still open. */
   lines?: Array<{ itemId: string; qty: number }>;
-  /** Ship from this location; defaults to the workspace default. */
+  /** Ship from this location; defaults to the workspace default. A part's own fulfillment location wins over it unless ignoreRouting is set. */
   locationId?: string;
+  /** Relieve every line from locationId (or the workspace default), even when the part's own routing names a different fulfillment location. */
+  ignoreRouting?: boolean;
   carrier?: string;
   service?: string;
   trackingNumber?: string;
@@ -1082,8 +1108,11 @@ export async function shipOrder(store: Store, actor: Actor, input: ShipInput): P
   if (!isOrderOpen(order)) throw new InventoryError(`${order.number} is already ${order.status}`);
   const settings = await loadSettings(store);
   const items = await store.list("items");
-  const homeId = defaultLocation(await store.list("locations")).location.id;
-  const locationId = input.locationId ?? homeId;
+  const locations = await store.list("locations");
+  const homeId = defaultLocation(locations).location.id;
+  const documentLocationId = input.locationId ?? homeId;
+  // Each line comes from the part's own fulfillment location when it has one, else from where the shipment says.
+  const locationFor = (it: Item) => (input.ignoreRouting ? undefined : routedLocation("fulfill", it, locations)?.id) ?? documentLocationId;
   const byId = new Map(items.map((i) => [i.id, i]));
   const shippedAt = input.shippedAt ?? nowIso();
   const lines = order.lines.map((l) => ({ ...l }));
@@ -1098,6 +1127,7 @@ export async function shipOrder(store: Store, actor: Actor, input: ShipInput): P
     if (!line || !item) throw new InventoryError(`${order.number} has no open line for ${item?.sku ?? req.itemId}`);
     const open = openQty(line);
     if (req.qty > open + 1e-9) throw new InventoryError(`Only ${open} of ${item.sku} is still open on ${order.number}`);
+    const locationId = locationFor(item);
     const available = qtyAt(item, locationId, homeId);
     if (settings.relievePolicy === "on_fulfill" && item.type === "assembly" && item.bom.length > 0 && available < req.qty) {
       // Relieve components for the portion not on the shelf.
@@ -1106,7 +1136,7 @@ export async function shipOrder(store: Store, actor: Actor, input: ShipInput): P
       const reqs = explodeBom(items, item, req.qty - fromStock, { explodeShortfallOnly: true });
       const short = reqs.filter((r) => r.shortage > 0);
       if (short.length) throw new InventoryError(`Cannot ship ${order.number}: short on ${short.map((r) => r.item.sku).join(", ")}`, { shortages: short });
-      for (const r of reqs) movementInputs.push({ itemId: r.item.id, type: "sale", qty: -r.required, refType: "order", refId: order.id, occurredAt: shippedAt, note: `Component of ${item.sku}`, locationId });
+      for (const r of reqs) movementInputs.push({ itemId: r.item.id, type: "sale", qty: -r.required, refType: "order", refId: order.id, occurredAt: shippedAt, note: `Component of ${item.sku}`, locationId: locationFor(r.item) });
     } else {
       if (available < req.qty) {
         throw new InventoryError(`Cannot ship ${order.number}: ${item.sku} has ${available} available, need ${req.qty}${item.type === "assembly" ? ". Build more first." : ""}`, { itemId: item.id });
@@ -1114,7 +1144,7 @@ export async function shipOrder(store: Store, actor: Actor, input: ShipInput): P
       movementInputs.push({ itemId: item.id, type: "sale", qty: -req.qty, unitCost: item.unitCost, refType: "order", refId: order.id, occurredAt: shippedAt, locationId });
     }
     line.shipped = round((line.shipped ?? 0) + req.qty, 3);
-    shipLines.push({ itemId: item.id, qty: req.qty });
+    shipLines.push({ itemId: item.id, qty: req.qty, ...(locationId !== documentLocationId ? { locationId } : {}) });
   }
 
   const complete = lines.every((l) => openQty(l) <= 0);
@@ -1124,7 +1154,7 @@ export async function shipOrder(store: Store, actor: Actor, input: ShipInput): P
     number,
     orderId: order.id,
     lines: shipLines,
-    locationId,
+    locationId: documentLocationId,
     carrier: input.carrier,
     service: input.service,
     trackingNumber: input.trackingNumber,

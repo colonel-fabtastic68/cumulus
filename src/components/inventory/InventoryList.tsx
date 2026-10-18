@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, ArrowLeftRight, BellRing, Boxes, Download, FileDown, FilterX, Hammer, MoreHorizontal, Pencil, Plus, SlidersHorizontal, Sparkles, Trash2, Upload } from "lucide-react";
+import { Archive, ArrowLeftRight, BellRing, Boxes, Download, FileDown, FilterX, Hammer, MapPin, MoreHorizontal, Pencil, Plus, SlidersHorizontal, Sparkles, Trash2, Upload } from "lucide-react";
 import type { Item } from "@/lib/types";
 import { deactivateItems, deleteItems, inventoryValue, isLowStock, qtyAt } from "@/lib/inventory";
 import { useDefaultLocation, useLocations } from "@/lib/locations";
@@ -18,11 +18,12 @@ import { BuildModal } from "./BuildModal";
 import { ItemFormModal } from "./ItemFormModal";
 import { StockAlertsModal } from "./StockAlertsModal";
 import { BulkEditModal } from "./BulkEditModal";
+import { RoutingByGroupModal } from "./RoutingByGroupModal";
 import { useInventoryColumns } from "./InventoryColumns";
 import { INVENTORY_VIEWS, describeFilters, matchesSearch, matchesView, type InventoryView } from "./inventoryFilters";
 import { downloadCsv, itemsToCsv } from "./exportItemsCsv";
 
-type Dialog = "new" | "adjust" | "build" | "bulk" | "deactivate" | "delete" | null;
+type Dialog = "new" | "adjust" | "build" | "bulk" | "routing" | "deactivate" | "delete" | null;
 
 const MAX_SKUS_IN_PROMPT = 40;
 
@@ -168,6 +169,7 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
         { label: "Export CSV", icon: <FileDown />, onSelect: exportCsv, disabled: rows.length === 0 },
         { label: "Ask Strato about this view", icon: <Sparkles />, onSelect: askAboutView },
         { label: "Stock alert rule…", icon: <BellRing />, onSelect: () => setAlertsOpen(true) },
+        ...(writable ? [{ label: "Stock routing by category or brand…", icon: <MapPin />, onSelect: () => setDialog("routing") }] : []),
       ]}
     />
   );
@@ -305,6 +307,7 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
       <AdjustStockModal open={dialog === "adjust"} onClose={closeDialog} />
       <BuildModal open={dialog === "build"} onClose={closeDialog} />
       <BulkEditModal open={dialog === "bulk"} onClose={closeDialog} items={selectedItems} onDone={() => setSelected(new Set())} />
+      <RoutingByGroupModal open={dialog === "routing"} onClose={closeDialog} />
       <TransferDrawer open={transferOpen} onClose={() => setTransferOpen(false)} initialItems={selectedItems} onCreated={() => setSelected(new Set())} />
       <ConfirmDialog
         open={dialog === "deactivate"}

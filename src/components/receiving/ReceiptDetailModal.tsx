@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { Receipt } from "@/lib/types";
 import { useCollection, useSettings } from "@/lib/store/provider";
+import { useLocationName } from "@/lib/locations";
 import { formatDate, formatDateTime, formatMoney, formatNumber, formatQty, formatRelative, pluralize } from "@/lib/format";
 import { sum } from "@/lib/utils";
 import { Badge, Button, ConfirmDialog, DescriptionList, Modal, SimpleTable, StatusBadge, useToast } from "@/components/ui";
@@ -55,6 +56,7 @@ function ReceiptDetail({ receipt, lookups, onClose }: { receipt: Receipt; lookup
   const recordedBy = lookups.membersById.get(receipt.createdBy);
   const total = receiptTotal(receipt);
   const units = sum(receipt.lines.map((l) => l.qty));
+  const locationName = useLocationName();
   const backDated = isBackDated(receipt);
   const orderIds = receipt.purchaseOrderIds ?? [];
   const showOrders = orderIds.length > 1 || receipt.lines.some((l) => l.purchaseOrderId);
@@ -162,6 +164,7 @@ function ReceiptDetail({ receipt, lookups, onClose }: { receipt: Receipt; lookup
                     ) : (
                       <span className="font-mono text-[12px] text-text-tertiary">{line.itemId}</span>
                     )}
+                    {line.locationId && <div className="text-[11px] text-text-tertiary">into {locationName(line.locationId)}</div>}
                   </td>
                   <td className="max-w-[260px] truncate">{item?.name ?? <span className="text-text-tertiary">Unknown item</span>}</td>
                   {showOrders && <td className="whitespace-nowrap font-mono text-[12px] text-text-secondary">{line.purchaseOrderId ? (poById.get(line.purchaseOrderId)?.number ?? "—") : "—"}</td>}

@@ -4,10 +4,11 @@ import { useState } from "react";
 import { ClipboardCheck } from "lucide-react";
 import type { PurchaseOrder, Receipt } from "@/lib/types";
 import { poLineOpenQty, poOpenLines, receivePurchaseOrders } from "@/lib/purchaseOrders";
-import { costingMethod } from "@/lib/inventory";
+import { costingMethod, routedLocation } from "@/lib/inventory";
 import { COSTING_LABELS } from "@/lib/valuation";
 import { printReceivingChecklist } from "@/lib/receivingChecklist";
 import { useDefaultLocation, useLocations } from "@/lib/locations";
+import { RoutingNotice } from "@/components/inventory";
 import { useItemsById, useSettings, useStore } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
 import { formatDate, formatMoney, fromDateInput, pluralize, toDateInput } from "@/lib/format";
@@ -52,6 +53,7 @@ function ReceiveForm({ pos, onClose, onReceived }: Props & { pos: PurchaseOrder[
   const locations = useLocations();
   const home = useDefaultLocation();
   const [locationId, setLocationId] = useState(home.id);
+  const [ignoreRouting, setIgnoreRouting] = useState(false);
   const [date, setDate] = useState(() => toDateInput());
   const [note, setNote] = useState("");
   const [updateCost, setUpdateCost] = useState(true);
@@ -65,6 +67,13 @@ function ReceiveForm({ pos, onClose, onReceived }: Props & { pos: PurchaseOrder[
   const receiving = rows.filter((r) => Number(r.qty) > 0);
   const total = round(sum(receiving.map((r) => Number(r.qty) * Number(r.unitCost || 0))));
   const everything = rows.every((r) => Number(r.qty) === r.open);
+  // Lines whose part routes its deliveries somewhere other than the location chosen above.
+  const routedLines = receiving.flatMap((r) => {
+    const item = itemsById.get(r.itemId);
+    const to = item ? routedLocation("receive", item, locations) : undefined;
+    return item && to && to.id !== locationId ? [{ sku: item.sku, location: to.name }] : [];
+  });
+  const locationName = locations.find((l) => l.id === locationId)?.name ?? home.name;
   const patch = (key: string, p: Partial<Row>) => setRows((prev) => prev.map((x) => (x.key === key ? { ...x, ...p } : x)));
 
   const printChecklist = () => {
@@ -92,6 +101,7 @@ function ReceiveForm({ pos, onClose, onReceived }: Props & { pos: PurchaseOrder[
           receivedAt: fromDateInput(date),
           note: note.trim() || undefined,
           updateStandardCost: method === "standard" ? updateCost : undefined,
+          ignoreRouting: ignoreRouting || undefined,
         },
       );
       const complete = result.purchaseOrders.filter((p) => p.status === "received").map((p) => p.number);
@@ -133,6 +143,7 @@ function ReceiveForm({ pos, onClose, onReceived }: Props & { pos: PurchaseOrder[
           <TextField label="Received on" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           <Select label="Location" value={locationId} onChange={(e) => setLocationId(e.target.value)} options={locations.map((l) => ({ value: l.id, label: l.name }))} />
         </FormGrid>
+        <RoutingNotice kind="receive" lines={routedLines} documentLocation={locationName} ignore={ignoreRouting} onIgnoreChange={setIgnoreRouting} />
         <div className="rounded-[var(--radius)] border border-border">
           <div className={`hidden gap-2 border-b border-border bg-surface-subdued px-3 py-1.5 text-[12px] font-medium text-text-secondary sm:grid ${grid}`}>
             <span>Item</span>
