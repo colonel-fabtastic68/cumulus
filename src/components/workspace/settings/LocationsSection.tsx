@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Check, MapPin, Plus } from "lucide-react";
+import { Check, MapPin, Plus, Route } from "lucide-react";
 import type { Location } from "@/lib/types";
 import { Badge, Button, IconButton, Select, TextField, useToast } from "@/components/ui";
+import { RoutingByGroupModal } from "@/components/inventory/RoutingByGroupModal";
 import { DEFAULT_LOCATION_ID } from "@/lib/inventory";
 import { LOCATION_KINDS, locationKindLabel, useAllLocations } from "@/lib/locations";
 import { useStore } from "@/lib/store/provider";
@@ -18,6 +19,8 @@ export function LocationsSection({ readOnly }: { readOnly: boolean }) {
   const [code, setCode] = useState("");
   const [kind, setKind] = useState<Location["kind"]>("warehouse");
   const [busy, setBusy] = useState<string | null>(null);
+  const [routingOpen, setRoutingOpen] = useState(false);
+  const activeCount = locations.filter((l) => l.active).length;
 
   const add = async () => {
     const trimmed = name.trim();
@@ -92,6 +95,19 @@ export function LocationsSection({ readOnly }: { readOnly: boolean }) {
           ))}
         </ul>
       )}
+      {activeCount > 1 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius)] border border-border px-4 py-3">
+          <p className="min-w-0 flex-1 text-[12.5px] text-text-secondary">
+            <span className="font-medium text-text">Stock routing.</span> A part can sit in several locations. Its Locations tab says where purchase orders receive it and where sales orders relieve it; set that for a whole category, brand, supplier or custom field value at once.
+          </p>
+          {!readOnly && (
+            <Button size="sm" icon={<Route />} onClick={() => setRoutingOpen(true)}>
+              Set routing by group
+            </Button>
+          )}
+        </div>
+      )}
+      <RoutingByGroupModal open={routingOpen} onClose={() => setRoutingOpen(false)} />
       {!readOnly && (
         <form
           className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_120px_170px_auto] sm:items-end"

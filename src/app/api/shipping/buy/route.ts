@@ -1,7 +1,7 @@
 import type { Address } from "@/lib/types";
 import { CARRIERS, isCarrier } from "@/lib/integrations/carriers";
 import { HttpError, authenticate, jsonError, loadConnected, readJson } from "@/lib/integrations/server";
-import { defaultLocation, isOrderOpen, openQty, qtyAt, shipOrder } from "@/lib/inventory";
+import { defaultLocation, isOrderOpen, openQty, qtyAt, routedLocation, shipOrder } from "@/lib/inventory";
 import { nowIso } from "@/lib/utils";
 
 export const maxDuration = 60;
@@ -12,6 +12,8 @@ interface BuyBody {
   rateId: string;
   lines: Array<{ itemId: string; qty: number }>;
   locationId?: string;
+  /** Relieve every line from locationId instead of each part's own fulfillment location. */
+  ignoreRouting?: boolean;
   shipTo?: Address;
 }
 
@@ -37,7 +39,9 @@ export async function POST(req: Request) {
       const line = order.lines.find((x) => x.itemId === l.itemId);
       if (!item || !line) throw new HttpError(400, "A line does not belong to this order.");
       if (l.qty > openQty(line)) throw new HttpError(409, `${item.sku}: only ${openQty(line)} is open.`);
-      if (item.type !== "assembly" && qtyAt(item, locationId, homeId) < l.qty) throw new HttpError(409, `${item.sku}: not enough stock at the ship-from location.`);
+      // The same resolution the ledger makes: the part's own fulfillment location, else the chosen ship-from location.
+      const from = (body.ignoreRouting ? undefined : routedLocation("fulfill", item, locations)?.id) ?? locationId;
+      if (item.type !== "assembly" && qtyAt(item, from, homeId) < l.qty) throw new HttpError(409, `${item.sku}: not enough stock at ${from === locationId ? "the ship-from location" : "its fulfillment location"}.`);
     }
 
     const { secrets } = await loadConnected(ctx, body.provider);
@@ -50,6 +54,7 @@ export async function POST(req: Request) {
         orderId: order.id,
         lines,
         locationId,
+        ignoreRouting: body.ignoreRouting,
         carrier: label.carrier,
         service: label.service,
         trackingNumber: label.trackingNumber,

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { Item, ItemStatus } from "@/lib/types";
 import { bulkPatchItems, type ItemPatch } from "@/lib/inventory";
 import { useCollection, useItems, useStore } from "@/lib/store/provider";
+import { useLocations } from "@/lib/locations";
 import { useCurrentUser } from "@/lib/auth";
 import { formatPercent, pluralize } from "@/lib/format";
 import { round } from "@/lib/utils";
@@ -21,9 +22,15 @@ export interface BulkEditValues {
   removeTags: string;
   pricePct: string;
   costPct: string;
+  /** A location id, ROUTING_CLEAR to unset, or "" to leave as is. */
+  receiveLocationId: string;
+  fulfillLocationId: string;
 }
 
-const EMPTY: BulkEditValues = {
+/** Select value that clears a routing field so the part follows the receipt or shipment again. */
+export const ROUTING_CLEAR = "__clear__";
+
+export const EMPTY_BULK_EDIT: BulkEditValues = {
   category: "",
   status: "",
   supplierId: "",
@@ -35,6 +42,8 @@ const EMPTY: BulkEditValues = {
   removeTags: "",
   pricePct: "",
   costPct: "",
+  receiveLocationId: "",
+  fulfillLocationId: "",
 };
 
 const num = (s: string): number | undefined => (s.trim() === "" ? undefined : Number(s));
@@ -49,10 +58,24 @@ export interface BulkEditPlan {
 }
 
 /** Turn the form values into per-item patches. Only filled-in fields are applied. */
-export function planBulkEdit(items: Item[], v: BulkEditValues, supplierName?: (id: string) => string | undefined): BulkEditPlan {
+export function planBulkEdit(items: Item[], v: BulkEditValues, supplierName?: (id: string) => string | undefined, locationName?: (id: string) => string | undefined): BulkEditPlan {
   const shared: ItemPatch = {};
   const changes: string[] = [];
   const errors: string[] = [];
+
+  // Stock routing: where purchase orders put these parts and where sales orders take them from.
+  const routing = (field: "receiveLocationId" | "fulfillLocationId", value: string, label: string) => {
+    if (!value) return;
+    if (value === ROUTING_CLEAR) {
+      shared[field] = undefined;
+      changes.push(`${label} → cleared, follows the receipt or shipment`);
+    } else {
+      shared[field] = value;
+      changes.push(`${label} → ${locationName?.(value) ?? value}`);
+    }
+  };
+  routing("receiveLocationId", v.receiveLocationId, "Purchase orders receive into");
+  routing("fulfillLocationId", v.fulfillLocationId, "Sales orders relieve from");
 
   if (v.category.trim()) {
     shared.category = v.category.trim();
@@ -118,6 +141,10 @@ export function planBulkEdit(items: Item[], v: BulkEditValues, supplierName?: (i
   const removeSet = new Set(removeTags.map((t) => t.toLowerCase()));
   for (const item of items) {
     const patch: ItemPatch = { ...shared };
+    // Routing that already matches is not a change, so the preview counts only the items that move.
+    for (const field of ["receiveLocationId", "fulfillLocationId"] as const) {
+      if (field in patch && patch[field] === item[field]) delete patch[field];
+    }
     if (addTags.length || removeTags.length) {
       const kept = item.tags.filter((t) => !removeSet.has(t.toLowerCase()));
       const existing = new Set(kept.map((t) => t.toLowerCase()));
@@ -151,14 +178,17 @@ function BulkEditForm({ open, onClose, items, onDone }: BulkEditModalProps) {
   const toast = useToast();
   const allItems = useItems();
   const suppliers = useCollection("suppliers");
-  const [v, setV] = useState<BulkEditValues>(EMPTY);
+  const locations = useLocations();
+  const [v, setV] = useState<BulkEditValues>(EMPTY_BULK_EDIT);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const categories = useMemo(() => Array.from(new Set(allItems.map((i) => i.category).filter((c): c is string => !!c))).sort(), [allItems]);
   const supplierById = useMemo(() => new Map(suppliers.map((s) => [s.id, s.name])), [suppliers]);
-  const plan = useMemo(() => planBulkEdit(items, v, (id) => supplierById.get(id)), [items, v, supplierById]);
+  const locationById = useMemo(() => new Map(locations.map((l) => [l.id, l.name])), [locations]);
+  const plan = useMemo(() => planBulkEdit(items, v, (id) => supplierById.get(id), (id) => locationById.get(id)), [items, v, supplierById, locationById]);
+  const routingOptions = useMemo(() => [{ value: ROUTING_CLEAR, label: "Clear: follow the receipt or shipment" }, ...locations.map((l) => ({ value: l.id, label: l.name }))], [locations]);
   const set = (k: keyof BulkEditValues) => (e: { target: { value: string } }) => setV((p) => ({ ...p, [k]: e.target.value }));
 
   const submit = async () => {
@@ -227,6 +257,12 @@ function BulkEditForm({ open, onClose, items, onDone }: BulkEditModalProps) {
           <TextField label="Max qty" type="number" step="any" min={0} value={v.maxQty} onChange={set("maxQty")} placeholder="—" />
           <TextField label="Lead time" suffix="days" type="number" min={0} value={v.leadTimeDays} onChange={set("leadTimeDays")} placeholder="—" />
         </FormGrid>
+        {locations.length > 1 && (
+          <FormGrid cols={2}>
+            <Select label="Purchase orders receive into" value={v.receiveLocationId} onChange={set("receiveLocationId")} placeholder="Leave unchanged" options={routingOptions} help="Where deliveries of these parts land unless the receipt says otherwise." />
+            <Select label="Sales orders relieve from" value={v.fulfillLocationId} onChange={set("fulfillLocationId")} placeholder="Leave unchanged" options={routingOptions} help="Where shipments of these parts take stock from unless the shipment says otherwise." />
+          </FormGrid>
+        )}
         <FormGrid cols={2}>
           <TextField label="Add tags" hint="comma separated" value={v.addTags} onChange={set("addTags")} placeholder="bestseller, shopify" />
           <TextField label="Remove tags" hint="comma separated" value={v.removeTags} onChange={set("removeTags")} placeholder="clearance" />

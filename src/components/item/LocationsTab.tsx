@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { ArrowLeftRight, Check, MapPin } from "lucide-react";
-import type { Item } from "@/lib/types";
-import { setBin } from "@/lib/inventory";
-import { itemBinAt, itemQtyAt, locationKindLabel, useDefaultLocation, useLocations } from "@/lib/locations";
+import type { Item, Location } from "@/lib/types";
+import { setBin, updateItem, type ItemPatch } from "@/lib/inventory";
+import { itemBinAt, itemQtyAt, locationKindLabel, useAllLocations, useDefaultLocation, useLocations } from "@/lib/locations";
 import { useStore } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
 import { formatQty } from "@/lib/format";
-import { Badge, Button, EmptyState, IconButton, SimpleTable, TextField, useToast } from "@/components/ui";
+import { Badge, Button, EmptyState, IconButton, Select, SimpleTable, TextField, Toggle, useToast } from "@/components/ui";
 
 /** Factor 29: where this item sits, location by location, with its bin at each. */
 export function LocationsTab({ item, canEdit }: { item: Item; canEdit: boolean }) {
@@ -120,6 +120,7 @@ export function LocationsTab({ item, canEdit }: { item: Item; canEdit: boolean }
           )}
         </tbody>
       </SimpleTable>
+      <RoutingCard item={item} canEdit={canEdit} locations={locations} home={home} />
       <div className="flex items-center justify-between gap-3">
         <p className="text-[12px] text-text-tertiary">Total on hand {formatQty(item.onHand, item.unit)}{item.inTransit ? ` plus ${formatQty(item.inTransit, item.unit)} in transit` : ""}. Bins are free text: aisle, rack, shelf, whatever the floor uses.</p>
         {canEdit && (
@@ -127,6 +128,67 @@ export function LocationsTab({ item, canEdit }: { item: Item; canEdit: boolean }
             Transfer
           </Button>
         )}
+      </div>
+    </div>
+  );
+}
+
+type RoutingField = "receiveLocationId" | "fulfillLocationId";
+
+/**
+ * Where purchase orders put this part and where sales orders take it from. Each
+ * side is a switch: off means the receipt or shipment decides; on names a location
+ * that wins unless the person receiving or shipping turns routing off for that document.
+ */
+function RoutingCard({ item, canEdit, locations, home }: { item: Item; canEdit: boolean; locations: Location[]; home: Location }) {
+  const store = useStore();
+  const user = useCurrentUser();
+  const toast = useToast();
+  const all = useAllLocations();
+  const [busy, setBusy] = useState<RoutingField | null>(null);
+
+  const save = async (field: RoutingField, locationId: string | undefined) => {
+    setBusy(field);
+    try {
+      const name = locationId ? (all.find((l) => l.id === locationId)?.name ?? locationId) : undefined;
+      const patch: ItemPatch = field === "receiveLocationId" ? { receiveLocationId: locationId } : { fulfillLocationId: locationId };
+      const reason = field === "receiveLocationId" ? (name ? `Purchase orders receive into ${name}` : "Purchase orders receive where the receipt says") : name ? `Sales orders relieve from ${name}` : "Sales orders relieve where the shipment says";
+      await updateItem(store, user, item.id, patch, reason);
+      toast(reason, "success");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not save the routing", "critical");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const row = (field: RoutingField, label: string, help: string) => {
+    const value = item[field];
+    const current = value ? all.find((l) => l.id === value) : undefined;
+    const stale = !!value && !current?.active;
+    const options = [...locations.map((l) => ({ value: l.id, label: l.name })), ...(value && !locations.some((l) => l.id === value) ? [{ value, label: `${current?.name ?? value} (inactive)` }] : [])];
+    return (
+      <div className="flex flex-col gap-2">
+        <Toggle label={label} help={help} checked={!!value} disabled={!canEdit || busy === field} onChange={(on) => void save(field, on ? home.id : undefined)} />
+        {value && (
+          <div className="flex flex-wrap items-center gap-2 pl-0 sm:pl-11">
+            <Select aria-label={label} value={value} disabled={!canEdit || busy === field} onChange={(e) => void save(field, e.target.value)} options={options} containerClassName="min-w-[12rem]" />
+            {stale && <Badge tone="warning">Location inactive: the receipt or shipment decides until this is changed</Badge>}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-3 rounded-[var(--radius)] border border-border p-3">
+      <div>
+        <div className="text-[13px] font-medium text-text">Stock routing</div>
+        <p className="text-[12px] text-text-secondary">This part can sit in several locations. Choose where it goes in when bought and where it comes out when sold; each receipt or shipment can still override it. Set this for a whole category or brand from the inventory list&apos;s More menu.</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {row("receiveLocationId", "Purchase orders receive into", "Deliveries and receipts of this part land here.")}
+        {row("fulfillLocationId", "Sales orders relieve from", "Shipments of this part take stock from here.")}
       </div>
     </div>
   );
