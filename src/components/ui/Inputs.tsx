@@ -47,7 +47,14 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
       )}
       <div className="relative">
         {prefix && <span className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-[13px] text-text-tertiary">{prefix}</span>}
-        <input ref={ref} id={fid} className={cn(fieldBase, "h-8", prefix && "pl-7", suffix && "pr-8", error && "border-critical focus:border-critical focus:ring-critical/20", className)} {...rest} />
+        <input
+          ref={ref}
+          id={fid}
+          className={cn(fieldBase, "h-8", prefix && "pl-7", suffix && "pr-8", error && "border-critical focus:border-critical focus:ring-critical/20", className)}
+          {...rest}
+          // A text suffix ("% above low", "days") needs room so the typed value never runs underneath it.
+          style={typeof suffix === "string" && suffix.length > 2 ? { ...rest.style, paddingRight: `${Math.round(suffix.length * 6.6) + 18}px` } : rest.style}
+        />
         {suffix && <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-[12.5px] text-text-tertiary [&_a]:pointer-events-auto [&_button]:pointer-events-auto">{suffix}</span>}
       </div>
       <HelpText error={!!error}>{error ?? help}</HelpText>

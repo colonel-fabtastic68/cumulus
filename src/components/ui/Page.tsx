@@ -16,6 +16,8 @@ export interface PageProps {
   className?: string;
   /** Constrain the content column (forms, settings). The header stays put. */
   narrow?: boolean;
+  /** A middle width (1040px) for settings-style pages with a label gutter beside each card. */
+  medium?: boolean;
   /** Let the content run to 1600px instead of 1280px: for index tables with many columns. */
   fullWidth?: boolean;
 }
@@ -25,7 +27,7 @@ export interface PageProps {
  * same horizontal padding, title at the same offset, and a 16px gap between
  * the blocks below it.
  */
-export function Page({ title, subtitle, titleMeta, backHref, backLabel, primaryAction, secondaryActions, children, className, narrow, fullWidth }: PageProps) {
+export function Page({ title, subtitle, titleMeta, backHref, backLabel, primaryAction, secondaryActions, children, className, narrow, medium, fullWidth }: PageProps) {
   return (
     <div className={cn("animate-in mx-auto w-full px-6 py-6 md:px-8", fullWidth ? "max-w-[1600px]" : "max-w-[1280px]", className)}>
       <header className="mb-6 flex min-h-[44px] flex-wrap items-start justify-between gap-3">
@@ -48,7 +50,7 @@ export function Page({ title, subtitle, titleMeta, backHref, backLabel, primaryA
           </div>
         )}
       </header>
-      <div className={cn("flex flex-col gap-4", narrow && "max-w-3xl")}>{children}</div>
+      <div className={cn("flex flex-col gap-4", narrow && "max-w-3xl", medium && "max-w-[1040px]")}>{children}</div>
     </div>
   );
 }

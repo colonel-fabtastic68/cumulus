@@ -181,9 +181,16 @@ body {
   }
 }
 
+/* Number fields: no native spinner (it sat on top of unit suffixes like "days" and "% above low"); arrow keys still step the value. */
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button {
-  opacity: 0.4;
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
 }
 
 /* Live preview of proposed changes: off-orange row tint with an accent edge */
