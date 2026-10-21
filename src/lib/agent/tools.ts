@@ -325,12 +325,37 @@ export const agentTools = {
     description: "Permanently delete items and their history. Prefer deactivateItems. Only use when the user explicitly asks to delete.",
     inputSchema: z.object({ skus: skuList, reason: z.string() }),
   }),
+  listLabelTemplates: tool({
+    description: "The label stock a label sheet can be printed on (Avery sheets, thermal rolls, custom) and the code types available (QR, Data Matrix, Code 128, Code 39, EAN-13, UPC-A). Read-only; use createLabelSheet to make one.",
+    inputSchema: z.object({}),
+  }),
+  createLabelSheet: tool({
+    description:
+      "Make a print-ready PDF of QR codes or barcodes and file it under Documents › Label sheets. kind picks what gets a label: item (SKU, or the item's UPC for ean13/upca), assembly, location, supplier, or lot (batches on the shelf). Choose records with skus / filter / all (items, assemblies, lots by item), names (locations by name or code, suppliers by name), or lotNumbers. template is a stock id or name from listLabelTemplates (default avery5160: 30 per sheet; roll-2x1 for thermal printers). encode link (default for QR) makes a phone camera open the record in cumulusOS; code carries only the SKU / location code / lot number. Returns the document and a link to the Labels page to fine-tune.",
+    inputSchema: z.object({
+      kind: z.enum(["item", "assembly", "location", "supplier", "lot"]),
+      skus: skuList.optional(),
+      filter: itemFilter.optional(),
+      all: z.boolean().optional().describe("Every record of that kind"),
+      names: z.array(z.string()).optional().describe("Locations by name or code; suppliers by name"),
+      lotNumbers: z.array(z.string()).optional().describe("Lot numbers (LOT-1001) or supplier batch codes"),
+      template: z.string().optional().describe("Stock id or name, e.g. avery5160, avery5163, roll-2x1, roll-4x6, custom"),
+      symbology: z.enum(["qrcode", "datamatrix", "code128", "code39", "ean13", "upca"]).optional().describe("Default qrcode"),
+      encode: z.enum(["link", "code"]).optional(),
+      fields: z.object({ name: z.boolean().optional(), code: z.boolean().optional(), price: z.boolean().optional(), detail: z.boolean().optional() }).optional().describe("Text printed beside the code; defaults: name, code and detail on, price off"),
+      copies: z.number().optional().describe("Labels per record (default 1)"),
+      startAt: z.number().optional().describe("Positions already used on the first sheet"),
+      border: z.boolean().optional().describe("Outline each label (plain paper)"),
+      title: z.string().optional().describe("Document name; a sensible one is made otherwise"),
+      folder: z.string().optional().describe("Documents folder (default Label sheets)"),
+    }),
+  }),
 };
 
 export type AgentTools = typeof agentTools;
 export type AgentToolName = keyof AgentTools;
 
-export const READ_TOOLS: AgentToolName[] = ["getWorkspaceSummary", "getConnections", "listStoreProductsWithoutSku", "searchItems", "getItem", "explodeBom", "whereUsed", "getReport", "getReplenishment", "traceLot", "previewBulkUpdate", "listPurchaseOrders", "suggestPurchaseOrders", "proposeCycleCount", "getCycleCount"];
+export const READ_TOOLS: AgentToolName[] = ["listLabelTemplates", "getWorkspaceSummary", "getConnections", "listStoreProductsWithoutSku", "searchItems", "getItem", "explodeBom", "whereUsed", "getReport", "getReplenishment", "traceLot", "previewBulkUpdate", "listPurchaseOrders", "suggestPurchaseOrders", "proposeCycleCount", "getCycleCount"];
 export const WRITE_TOOLS: AgentToolName[] = [
   "replenish",
   "snoozeReplenishment",
@@ -356,6 +381,7 @@ export const WRITE_TOOLS: AgentToolName[] = [
   "deleteItems",
   "syncChannel",
   "assignStoreSkus",
+  "createLabelSheet",
 ];
 
 export function isWriteTool(name: string): name is AgentToolName {
@@ -403,4 +429,6 @@ export const TOOL_LABELS: Record<AgentToolName, string> = {
   recordCycleCounts: "Record counts",
   completeCycleCount: "Complete cycle count",
   deleteItems: "Delete items",
+  listLabelTemplates: "Label templates",
+  createLabelSheet: "Create label sheet",
 };

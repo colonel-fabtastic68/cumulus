@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Beef, Boxes, CalendarDays, ClipboardList, ClipboardCheck, FolderOpen, ListChecks, Contact, Download, FileBarChart2, FileText, Hammer, Home, MessageSquare, PackageCheck, Package, Plug, Receipt, RefreshCw, Repeat, RotateCcw, Settings, ShoppingCart, Sparkles, Tags, TrendingUp, Truck, Upload, UserRound, Users, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, Beef, Boxes, QrCode, CalendarDays, ClipboardList, ClipboardCheck, FolderOpen, ListChecks, Contact, Download, FileBarChart2, FileText, Hammer, Home, MessageSquare, PackageCheck, Package, Plug, Receipt, RefreshCw, Repeat, RotateCcw, Settings, ShoppingCart, Sparkles, Tags, TrendingUp, Truck, Upload, UserRound, Users, type LucideIcon } from "lucide-react";
 
 export interface NavItem {
   href: string;
@@ -50,7 +50,15 @@ export const NAV_SECONDARY: NavItem[] = [
     ],
   },
   { href: "/import", label: "Import", icon: Download },
-  { href: "/exports", label: "Exports", icon: Upload },
+  {
+    href: "/exports",
+    label: "Exports",
+    icon: Upload,
+    children: [
+      { href: "/exports", label: "Data", icon: Upload },
+      { href: "/exports/labels", label: "Labels & barcodes", icon: QrCode },
+    ],
+  },
   { href: "/documents", label: "Documents", icon: FolderOpen },
   { href: "/integrations", label: "Integrations", icon: Plug },
   {

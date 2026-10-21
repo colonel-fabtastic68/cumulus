@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, ArrowLeftRight, BellRing, Boxes, Download, FileDown, FilterX, Hammer, MapPin, MoreHorizontal, Pencil, Plus, SlidersHorizontal, Sparkles, Trash2, Upload } from "lucide-react";
+import { Archive, ArrowLeftRight, BellRing, Boxes, Download, FileDown, FilterX, Hammer, MapPin, MoreHorizontal, Pencil, Plus, QrCode, SlidersHorizontal, Sparkles, Trash2, Upload } from "lucide-react";
 import type { Item } from "@/lib/types";
 import { deactivateItems, deleteItems, inventoryValue, isLowStock, qtyAt } from "@/lib/inventory";
 import { useDefaultLocation, useLocations } from "@/lib/locations";
@@ -223,6 +223,9 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
           </Button>
         </>
       )}
+      <Button size="sm" icon={<QrCode />} onClick={() => router.push(`/exports/labels?kind=item&skus=${encodeURIComponent(selectedSkus.join(","))}`)} disabled={sel.size === 0}>
+        Labels
+      </Button>
       <Button size="sm" icon={<Upload />} onClick={() => router.push(`/exports?dataset=items&skus=${encodeURIComponent(selectedSkus.join(","))}`)} disabled={sel.size === 0}>
         Export
       </Button>

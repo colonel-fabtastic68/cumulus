@@ -32,7 +32,7 @@ const REFINE_PROMPT = `I just imported my catalog from my website. Help me fill 
  * and categories. Quantities and costs are never on a public site, so the
  * import leaves them blank and hands the rest to Strato.
  */
-export function WebsiteImport({ onboarding, onImported }: { onboarding?: boolean; onImported?: (result: { created: number; updated: number }) => void }) {
+export function WebsiteImport({ onboarding, embedded, onImported }: { onboarding?: boolean; /** Inside another card: no frame or heading of its own. */ embedded?: boolean; onImported?: (result: { created: number; updated: number }) => void }) {
   const store = useStore();
   const user = useCurrentUser();
   const session = useSession();
@@ -79,8 +79,8 @@ export function WebsiteImport({ onboarding, onImported }: { onboarding?: boolean
   };
 
   return (
-    <section className="card p-5">
-      <div className="flex items-start gap-3">
+    <section className={embedded ? "" : "card p-5"}>
+      <div className={embedded ? "hidden" : "flex items-start gap-3"}>
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-accent-soft text-accent">
           <Globe className="h-4 w-4" />
         </span>
@@ -96,8 +96,8 @@ export function WebsiteImport({ onboarding, onImported }: { onboarding?: boolean
       </div>
 
       {!hosted ? (
-        <Banner tone="info" className="mt-4">
-          Reading a website needs the hosted version. Upload a spreadsheet (Excel or CSV) below in the meantime.
+        <Banner tone="info" className={embedded ? "" : "mt-4"}>
+          Reading a website needs the hosted version. Upload a spreadsheet (Excel or CSV) in the meantime.
         </Banner>
       ) : (
         <form
@@ -105,7 +105,7 @@ export function WebsiteImport({ onboarding, onImported }: { onboarding?: boolean
             e.preventDefault();
             if (url.trim() && busy === null) void scan();
           }}
-          className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end"
+          className={embedded ? "flex flex-col gap-2" : "mt-4 flex flex-col gap-2 sm:flex-row sm:items-end"}
         >
           <TextField label="Website" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="shop.example.com" inputMode="url" autoComplete="off" containerClassName="flex-1" disabled={!writable || busy !== null} autoFocus={onboarding} />
           <Button type="submit" variant="primary" loading={busy === "scan"} disabled={!writable || !url.trim() || busy !== null}>

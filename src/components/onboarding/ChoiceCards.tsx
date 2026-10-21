@@ -31,7 +31,7 @@ export function ChoiceCards({ options, selected, onToggle, single, exclusive = [
   return (
     <div className="flex flex-col gap-3">
       <div role={single ? "radiogroup" : "group"} className={cn("grid gap-2.5", cols)}>
-        {options.map((o) => {
+        {options.map((o, i) => {
           const on = selected.includes(o.id);
           return (
             <button
@@ -40,8 +40,9 @@ export function ChoiceCards({ options, selected, onToggle, single, exclusive = [
               role={single ? "radio" : "checkbox"}
               aria-checked={on}
               onClick={() => onToggle(o.id)}
+              style={{ animationDelay: `${i * 55}ms` }}
               className={cn(
-                "group flex min-h-[64px] items-center gap-3 rounded-[var(--radius)] border bg-surface px-4 py-3 text-left transition-[border-color,box-shadow,background-color] duration-150",
+                "float-in group flex min-h-[64px] items-center gap-3 rounded-[var(--radius)] border bg-surface px-4 py-3 text-left transition-[border-color,box-shadow,background-color] duration-150",
                 on ? "border-primary shadow-[inset_0_0_0_1px_var(--primary)]" : "border-border hover:border-border-strong hover:bg-surface-hover",
                 exclusive.includes(o.id) && "sm:col-span-full",
               )}

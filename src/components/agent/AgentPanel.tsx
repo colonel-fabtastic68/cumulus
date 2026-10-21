@@ -9,6 +9,7 @@ import { agentTools, isWriteTool, TOOL_LABELS, type AgentToolName } from "@/lib/
 import { describeProposal, executeTool, previewPatches, PREVIEWABLE_TOOLS } from "@/lib/agent/execute";
 import { buildAgentContext } from "@/lib/agent/context";
 import { useApi } from "@/lib/api-client";
+import { useDocuments } from "@/lib/documents";
 import { useCollection, usePreview, useSettings, useStore } from "@/lib/store/provider";
 import { useCurrentUser, canWrite } from "@/lib/auth";
 import type { AgentSession, Item } from "@/lib/types";
@@ -120,7 +121,8 @@ export function AgentChat({ onClose, pending, consumePending, pendingSession, co
     latestBody.autoApprove = autoApprove;
   }, [context, user.name, autoApprove]);
   const api = useApi();
-  const execCtx = useMemo(() => ({ store, actor: { id: user.id, name: user.name }, api }), [store, user.id, user.name, api]);
+  const docs = useDocuments();
+  const execCtx = useMemo(() => ({ store, actor: { id: user.id, name: user.name }, api, uploadDocument: docs.upload, origin: typeof window !== "undefined" ? window.location.origin : "" }), [store, user.id, user.name, api, docs.upload]);
 
   const transport = useMemo(
     () =>

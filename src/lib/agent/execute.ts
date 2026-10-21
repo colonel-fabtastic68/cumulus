@@ -2,7 +2,11 @@
  * Client-side tool execution. Maps agent tool calls onto inventory services.
  * Everything here runs in the browser against the active store.
  */
-import type { Item, Rma, StockAlertRule, StockMovement, Supplier } from "@/lib/types";
+import type { Item, Rma, StockAlertRule, StockMovement, Supplier, WorkspaceDocument } from "@/lib/types";
+import type { UploadDocumentInput } from "@/lib/documents";
+import { entriesFor, type LabelEntry } from "@/lib/labels/entries";
+import { buildLabelPdf } from "@/lib/labels/pdf";
+import { DEFAULT_SPEC, LABEL_KINDS, SYMBOLOGIES, TEMPLATES, findTemplate as findLabelTemplate, resolveTemplate, type LabelKind, type LabelSpec } from "@/lib/labels/spec";
 import type { Store } from "@/lib/store/types";
 import {
   adjustStock,
@@ -86,6 +90,72 @@ export interface ExecContext {
   actor: Actor;
   /** Calls the app's own API as the signed-in user (hosted mode only); syncs need it. */
   api?: <T = unknown>(path: string, body?: unknown) => Promise<T>;
+  /** Files a generated PDF under Documents (label sheets). */
+  uploadDocument?: (input: UploadDocumentInput) => Promise<WorkspaceDocument>;
+  /** The app's origin, for QR codes that link back into cumulusOS. */
+  origin?: string;
+}
+
+interface LabelToolInput extends TargetInput {
+  kind: LabelKind;
+  names?: string[];
+  lotNumbers?: string[];
+  template?: string;
+  symbology?: LabelSpec["symbology"];
+  encode?: LabelSpec["encode"];
+  fields?: Partial<LabelSpec["fields"]>;
+  copies?: number;
+  startAt?: number;
+  border?: boolean;
+  title?: string;
+  folder?: string;
+}
+
+/** The records a label tool call names, as label entries. */
+async function labelEntriesFor(ctx: ExecContext, input: LabelToolInput): Promise<LabelEntry[]> {
+  const [items, locations, suppliers, lots] = await Promise.all([ctx.store.list("items"), ctx.store.list("locations"), ctx.store.list("suppliers"), ctx.store.list("lots")]);
+  const data = { items, locations, suppliers, lots };
+  const named = (input.names ?? []).map((n) => n.trim().toLowerCase()).filter(Boolean);
+  switch (input.kind) {
+    case "item":
+    case "assembly": {
+      const nothing = !input.skus?.length && !input.filter && !input.all;
+      const targets = await resolveTargets(ctx, { skus: input.skus, filter: input.kind === "assembly" ? { ...(input.filter ?? {}), type: "assembly" } : input.filter, all: nothing ? true : input.all });
+      return entriesFor(input.kind, data, new Set(targets.map((t) => t.id)));
+    }
+    case "location":
+      return entriesFor("location", data, named.length ? new Set(locations.filter((l) => named.includes(l.name.toLowerCase()) || (l.code && named.includes(l.code.toLowerCase())) || named.includes(l.id)).map((l) => l.id)) : undefined);
+    case "supplier":
+      return entriesFor("supplier", data, named.length ? new Set(suppliers.filter((x) => named.includes(x.name.toLowerCase()) || named.includes(x.id)).map((x) => x.id)) : undefined);
+    case "lot": {
+      const numbers = (input.lotNumbers ?? []).map((n) => n.trim().toLowerCase()).filter(Boolean);
+      let ids: Set<string> | undefined;
+      if (numbers.length) ids = new Set(lots.filter((l) => numbers.includes((l.number ?? "").toLowerCase()) || numbers.includes((l.supplierLot ?? "").toLowerCase()) || numbers.includes(l.id)).map((l) => l.id));
+      else if (input.skus?.length || input.filter) {
+        const targets = await resolveTargets(ctx, { skus: input.skus, filter: input.filter });
+        const itemIds = new Set(targets.map((t) => t.id));
+        ids = new Set(lots.filter((l) => itemIds.has(l.itemId)).map((l) => l.id));
+      }
+      return entriesFor("lot", data, ids);
+    }
+  }
+}
+
+function labelSpecFor(input: LabelToolInput): { spec: LabelSpec; templateName: string } {
+  const template = findLabelTemplate(input.template) ?? TEMPLATES[0]!;
+  const symbology = input.symbology ?? DEFAULT_SPEC.symbology;
+  const spec: LabelSpec = {
+    ...DEFAULT_SPEC,
+    kind: input.kind,
+    templateId: template.id,
+    symbology,
+    encode: input.encode ?? (symbology === "qrcode" || symbology === "datamatrix" ? "link" : "code"),
+    fields: { ...DEFAULT_SPEC.fields, ...(input.fields ?? {}) },
+    copies: Math.max(1, Math.min(200, Math.floor(input.copies ?? 1))),
+    startAt: Math.max(0, Math.floor(input.startAt ?? 0)),
+    border: input.border ?? false,
+  };
+  return { spec, templateName: template.name };
 }
 
 const CHANNEL_NAMES: Record<string, string> = { shopify: "Shopify", woocommerce: "WooCommerce", shippo: "Shippo", easypost: "EasyPost", quickbooks: "QuickBooks", square: "Square", clover: "Clover" };
@@ -956,6 +1026,41 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
       return { ok: true, deleted: targets.map((t) => t.sku), summary: `Deleted ${targets.length} item${targets.length === 1 ? "" : "s"}` };
     }
 
+    case "listLabelTemplates":
+      return {
+        templates: TEMPLATES.map((t) => ({ id: t.id, name: t.name, description: t.description, labelWidthIn: t.labelW, labelHeightIn: t.labelH, perSheet: t.cols * t.rows, roll: !!t.roll })),
+        symbologies: SYMBOLOGIES.map((x) => ({ id: x.id, label: x.label, hint: x.hint })),
+        kinds: LABEL_KINDS.map((k) => ({ id: k.id, label: k.plural, hint: k.hint })),
+        page: "/exports/labels",
+      };
+    case "createLabelSheet": {
+      const in_ = input as unknown as LabelToolInput;
+      if (!ctx.uploadDocument) throw new InventoryError("Documents are not available in this session, so the sheet cannot be filed. Use the Labels & barcodes page under Exports to print it.");
+      const entries = await labelEntriesFor(ctx, in_);
+      if (entries.length === 0) throw new InventoryError(`No ${LABEL_KINDS.find((k) => k.id === in_.kind)?.plural.toLowerCase() ?? "records"} matched.`);
+      const { spec, templateName } = labelSpecFor(in_);
+      const template = resolveTemplate(spec);
+      const settings = await ctx.store.get("settings", "default");
+      const kindLabel = LABEL_KINDS.find((k) => k.id === spec.kind)?.plural ?? "Labels";
+      const title = (in_.title?.trim() || `${kindLabel} labels · ${templateName.replace(/\s*·.*$/, "")} · ${new Date().toISOString().slice(0, 10)}`).replace(/\.pdf$/i, "");
+      const out = await buildLabelPdf(spec, entries, { origin: ctx.origin ?? "", currency: settings?.currency ?? "USD", title });
+      const sym = SYMBOLOGIES.find((x) => x.id === spec.symbology)?.label ?? spec.symbology;
+      const file = new File([out.bytes as BlobPart], `${title}.pdf`, { type: "application/pdf" });
+      const doc = await ctx.uploadDocument({ file, name: `${title}.pdf`, folder: in_.folder?.trim() || "Label sheets", kind: "document", description: `${out.labels} label${out.labels === 1 ? "" : "s"} · ${sym} · ${templateName} · ${out.pages} page${out.pages === 1 ? "" : "s"}` });
+      const ids = entries.slice(0, 200).map((e) => e.id).join(",");
+      return {
+        ok: true,
+        document: { id: doc.id, name: doc.name, folder: doc.folder, page: "/documents" },
+        labels: out.labels,
+        pages: out.pages,
+        template: templateName,
+        symbology: sym,
+        encode: spec.encode,
+        labelsPage: `/exports/labels?kind=${spec.kind}&template=${template.id}&symbology=${spec.symbology}&encode=${spec.encode}&ids=${encodeURIComponent(ids)}`,
+        summary: `${out.labels} ${sym} label${out.labels === 1 ? "" : "s"} for ${entries.length} ${kindLabel.toLowerCase()} on ${out.pages} page${out.pages === 1 ? "" : "s"} of ${templateName}, saved as “${doc.name}” under Documents › ${doc.folder ?? "Label sheets"}.`,
+      };
+    }
+
     default:
       throw new InventoryError(`Unknown tool ${name as string}`);
   }
@@ -1156,6 +1261,17 @@ export async function describeProposal(name: AgentToolName, rawInput: unknown, c
         return { title: `Save supplier ${input.name}`, lines: Object.entries(input).filter(([k, v]) => k !== "name" && v !== undefined).map(([k, v]) => `${k}: ${v}`) };
       case "deleteItems":
         return { title: `Delete ${(input.skus as string[])?.length ?? 0} item(s) permanently`, lines: (input.skus as string[]) ?? [] };
+      case "createLabelSheet": {
+        const in_ = input as unknown as LabelToolInput;
+        const entries = await labelEntriesFor(ctx, in_);
+        const { spec, templateName } = labelSpecFor(in_);
+        const sym = SYMBOLOGIES.find((x) => x.id === spec.symbology)?.label ?? spec.symbology;
+        const kindLabel = LABEL_KINDS.find((k) => k.id === spec.kind)?.plural.toLowerCase() ?? "records";
+        return {
+          title: `Label sheet: ${entries.length * spec.copies} ${sym} label${entries.length * spec.copies === 1 ? "" : "s"} for ${entries.length} ${kindLabel}`,
+          lines: [`Stock: ${templateName}`, spec.encode === "link" && (spec.symbology === "qrcode" || spec.symbology === "datamatrix") ? "Each code opens the record in cumulusOS" : "Each code carries the plain SKU / code", `Saved as a PDF under Documents › ${in_.folder?.trim() || "Label sheets"}`, ...entries.slice(0, 20).map((e) => `${e.code} · ${e.title}`), ...(entries.length > 20 ? [`…and ${entries.length - 20} more`] : [])],
+        };
+      }
       default:
         return { title: name, lines: [] };
     }

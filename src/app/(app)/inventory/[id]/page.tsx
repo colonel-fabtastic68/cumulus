@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Copy, Hammer, MoreHorizontal, Pencil, Power, Replace, SlidersHorizontal, Sparkles, Trash2 } from "lucide-react";
+import { Copy, Hammer, MoreHorizontal, Pencil, Power, QrCode, Replace, SlidersHorizontal, Sparkles, Trash2 } from "lucide-react";
 import { deleteItems, isLowStock, updateItem } from "@/lib/inventory";
 import { useCollection, useItems, useSettings, useStore } from "@/lib/store/provider";
 import { canWrite, useCurrentUser } from "@/lib/auth";
@@ -160,6 +160,7 @@ export default function ItemDetailPage() {
             trigger={<IconButton aria-label="More actions" icon={<MoreHorizontal />} />}
             items={[
               { label: "Ask Strato about this item", icon: <Sparkles />, onSelect: () => openAgent(`Tell me about ${item.sku} (${item.name}): stock position, recent usage, days of cover, where it is used, and anything I should act on.`, { send: true }) },
+              { label: "Print label", icon: <QrCode />, onSelect: () => router.push(`/exports/labels?kind=${item.type === "assembly" ? "assembly" : "item"}&skus=${encodeURIComponent(item.sku)}`) },
               ...(writable
                 ? [
                     "divider" as const,
