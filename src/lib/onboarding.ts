@@ -100,10 +100,10 @@ export const SOURCE_OPTIONS: SourceOption[] = [
   { id: "memory", label: "Nothing written down", hint: "It lives in people's heads", export: { steps: ["Start from a blank workspace and add items as you count them", "Or dictate a list into a note on your phone and paste it below; Strato turns a plain list into rows", "Quantities can be set later with a cycle count"], formats: "pasted text" } },
 ];
 
-export const USAGE_OPTIONS: Array<{ id: NonNullable<OnboardingAnswers["usage"]>; label: string; hint: string }> = [
-  { id: "light", label: "Light use", hint: "Know what is on the shelf, get a nudge when something runs low." },
-  { id: "partial", label: "Replace or connect some tools", hint: "Keep the store or accounting app, let cumulusOS run stock, purchasing and counts alongside it." },
-  { id: "full", label: "Run everything here", hint: "Inventory, BOMs, orders, suppliers, receiving and reports, with no other inventory app." },
+export const USAGE_OPTIONS: Array<{ id: NonNullable<OnboardingAnswers["usage"]>; label: string; hint: string; points: string[] }> = [
+  { id: "light", label: "Keep it light", hint: "Know what is on the shelf and hear about it before something runs out.", points: ["Items, counts and bins", "Low-stock nudges", "Scan with your phone"] },
+  { id: "partial", label: "Replace or connect some tools", hint: "Keep the store or accounting app; cumulusOS runs stock, purchasing and counts beside it.", points: ["Shopify, WooCommerce, Square, QuickBooks stay", "Stock, purchasing and cycle counts here", "Live sync where it exists"] },
+  { id: "full", label: "Run everything here", hint: "The whole operation in one place, with no other inventory app.", points: ["Inventory, BOMs, orders, suppliers", "Receiving, transfers, counts, returns", "Reports and Strato across all of it"] },
 ];
 
 export const ITEM_KIND_OPTIONS: Array<{ id: string; label: string; hint: string }> = [

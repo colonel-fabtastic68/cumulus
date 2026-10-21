@@ -119,6 +119,8 @@ export interface StepFrameProps {
   wide?: boolean;
   /** Keep the children mounted across steps (the import wizard carries state from map to review to done); only the heading swaps. */
   stable?: boolean;
+  /** Identity for the fade and the typed heading; defaults to the step. A sub-screen inside a step passes its own. */
+  swapKey?: string | number;
 }
 
 /** The lead line types, then the title; the rest of the step floats in once the title has landed. */
@@ -143,7 +145,7 @@ function StepBody({ lead, title, subtitle, children, footer }: { lead?: string; 
 }
 
 /** The guided setup's chrome: header, a centered column, the typed heading, the step itself, its controls and the progress pill at the bottom. */
-export function StepFrame({ step, total, lead, title, subtitle, stepName, companyName, children, onBack, onContinue, continueLabel = "Continue", continueDisabled, continueBusy, secondary, onSkip, help, wide, stable }: StepFrameProps) {
+export function StepFrame({ step, total, lead, title, subtitle, stepName, companyName, children, onBack, onContinue, continueLabel = "Continue", continueDisabled, continueBusy, secondary, onSkip, help, wide, stable, swapKey }: StepFrameProps) {
   const progress = Math.max(0, Math.min(1, step / total));
   const hasFooter = !!onContinue || !!onBack || !!secondary;
   const footer = hasFooter ? (
@@ -179,7 +181,7 @@ export function StepFrame({ step, total, lead, title, subtitle, stepName, compan
         )}
       </header>
       <main className={cn("mx-auto w-full flex-1 px-4 pb-36 pt-4 sm:px-6 sm:pt-8", wide ? "max-w-[1080px]" : "max-w-[760px]")}>
-        <FadeSwap id={step} stable={stable ? <div className="mt-6">{children}</div> : undefined}>
+        <FadeSwap id={swapKey ?? step} stable={stable ? <div className="mt-6">{children}</div> : undefined}>
           <StepBody lead={lead} title={title} subtitle={subtitle} footer={footer}>
             {!stable && children}
           </StepBody>

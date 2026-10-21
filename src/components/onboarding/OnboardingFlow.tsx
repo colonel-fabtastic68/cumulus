@@ -17,7 +17,7 @@ import type { OnboardingAnswers } from "@/lib/types";
 import { nowIso } from "@/lib/utils";
 import { ChoiceCards, type Choice } from "./ChoiceCards";
 import { HelpButton } from "./HelpButton";
-import { ImportHub, type ImportVia } from "./ImportHub";
+import { ImportHub, ImportRoutePicker, importRouteTitle, type ImportRoute, type ImportVia } from "./ImportHub";
 import { StepFrame } from "./StepFrame";
 
 /** 1 tools · 2 goals · 3 items · 4 bring data in · 5 map · 6 review · 7 done */
@@ -89,6 +89,9 @@ export function OnboardingFlow() {
   const [source, setSource] = useState<{ parsed: ParsedSource; via: ImportVia; nonce: number } | null>(null);
   const [scratch, setScratch] = useState(false);
   const [websiteImported, setWebsiteImported] = useState(false);
+  /** Step 4: the way in that was picked, and files handed from one route to another (a photo dropped on the files screen). */
+  const [route, setRoute] = useState<ImportRoute | null>(null);
+  const [handoff, setHandoff] = useState<File[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const startedAt = useRef(settings.onboarding?.startedAt ?? nowIso());
@@ -127,7 +130,7 @@ export function OnboardingFlow() {
 
   const companyName = settings.companyName;
   const sourceChoices = useMemo<Choice[]>(() => SOURCE_OPTIONS.map((s) => ({ id: s.id, label: s.label, hint: s.hint, icon: SOURCE_ICONS[s.id] })), []);
-  const usageChoices = useMemo<Choice[]>(() => USAGE_OPTIONS.map((u) => ({ id: u.id, label: u.label, hint: u.hint, icon: USAGE_ICONS[u.id] })), []);
+  const usageChoices = useMemo<Choice[]>(() => USAGE_OPTIONS.map((u) => ({ id: u.id, label: u.label, hint: u.hint, icon: USAGE_ICONS[u.id], points: u.points })), []);
   const kindChoices = useMemo<Choice[]>(() => ITEM_KIND_OPTIONS.map((k) => ({ id: k.id, label: k.label, hint: k.hint, icon: KIND_ICONS[k.id] })), []);
 
   const help = <HelpButton where={STEP_NAMES[flow]} />;
@@ -191,8 +194,8 @@ export function OnboardingFlow() {
 
   if (flow === 2)
     return (
-      <StepFrame {...frame} step={2} title="What should cumulusOS do for you?" subtitle="This sets what the workspace shows first. Everything stays available; nothing is locked away." onBack={() => setFlow(1)} onContinue={() => void persist({}).then(() => setFlow(3))} continueBusy={saving}>
-        <ChoiceCards options={usageChoices} selected={answers.usage ? [answers.usage] : []} single columns={1} onToggle={(id) => setAnswers((a) => ({ ...a, usage: a.usage === id ? undefined : (id as OnboardingAnswers["usage"]) }))} />
+      <StepFrame {...frame} step={2} wide title="What should cumulusOS do for you?" subtitle="This sets what the workspace shows first. Everything stays available; nothing is locked away." onBack={() => setFlow(1)} onContinue={() => void persist({}).then(() => setFlow(3))} continueBusy={saving}>
+        <ChoiceCards options={usageChoices} selected={answers.usage ? [answers.usage] : []} single big onToggle={(id) => setAnswers((a) => ({ ...a, usage: a.usage === id ? undefined : (id as OnboardingAnswers["usage"]) }))} />
         {saveError && <Banner tone="critical" className="mt-4">{saveError}</Banner>}
       </StepFrame>
     );
@@ -205,16 +208,45 @@ export function OnboardingFlow() {
       </StepFrame>
     );
 
-  if (flow === 4 && !source && !scratch)
+  if (flow === 4 && !source && !scratch && !route)
     return (
       <StepFrame
         {...frame}
         step={4}
-       
-        title="Bring your inventory in"
-        subtitle="Follow the steps for the tools you named, or use any of the other ways in. Everything is checked on a review screen before it is saved."
+        swapKey="4-pick"
+        title="How should your inventory come in?"
+        subtitle="Pick one. Each way ends on the same review screen, and you can come back for another."
         wide
         onBack={() => setFlow(3)}
+        secondary={
+          <Button variant="plain" icon={<FilePlus />} onClick={() => setScratch(true)}>
+            Start from scratch instead
+          </Button>
+        }
+      >
+        {websiteImported && (
+          <Banner tone="success" className="mb-4" title="Your website's catalog is in" action={<Button variant="primary" onClick={() => void finish("website")}>Open the workspace</Button>}>
+            Counts and costs are blank until you add them; Strato can ask for them in batches.
+          </Banner>
+        )}
+        <ImportRoutePicker answers={answers} onPick={setRoute} />
+      </StepFrame>
+    );
+
+  if (flow === 4 && !source && !scratch && route)
+    return (
+      <StepFrame
+        {...frame}
+        step={4}
+        swapKey={`4-${route}`}
+        lead={route === "paper" ? "Strato will do the reading." : route === "files" ? "Here is how to get it out." : "Straight from the clipboard, or the web."}
+        title={importRouteTitle(route, answers)}
+        subtitle={route === "files" ? "Follow the steps, then drop the file. Columns are matched for you on the next screen." : route === "paper" ? "Photograph every page of the same list, then let Strato read it. You check the table before anything imports." : "Pasted cells go straight to mapping; a plain list is read by Strato first."}
+        wide
+        onBack={() => {
+          setRoute(null);
+          setHandoff(null);
+        }}
         secondary={
           <Button variant="plain" icon={<FilePlus />} onClick={() => setScratch(true)}>
             Start from scratch instead
@@ -231,7 +263,17 @@ export function OnboardingFlow() {
             Counts and costs are blank until you add them; Strato can ask for them in batches.
           </Banner>
         )}
-        <ImportHub answers={answers} onSource={(parsed, via) => setSource({ parsed, via, nonce: Date.now() })} onWebsiteImported={() => setWebsiteImported(true)} />
+        <ImportHub
+          answers={answers}
+          route={route}
+          incoming={handoff}
+          onSource={(parsed, via) => setSource({ parsed, via, nonce: Date.now() })}
+          onWebsiteImported={() => setWebsiteImported(true)}
+          onRedirectDocuments={(files) => {
+            setHandoff(files);
+            setRoute("paper");
+          }}
+        />
       </StepFrame>
     );
 
