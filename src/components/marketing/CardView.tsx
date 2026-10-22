@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Download, Globe, Link2, Mail, Phone } from "lucide-react";
+import { ArrowUpRight, Download, Globe, Link2, Mail, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface CardPanel {
@@ -18,11 +18,14 @@ export interface CardPanel {
   phone?: string;
   /** tel: target, already normalised. */
   tel?: string;
-  website?: string;
+  websites: string[];
   linkedin?: string;
+  buttons: Array<{ label: string; href: string }>;
   /** The QR code as inline SVG, drawn on the server. */
   svg: string;
 }
+
+const hostOf = (url: string) => url.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "");
 
 /**
  * The card itself, with a tab per hat the person wears. Everything is
@@ -35,7 +38,7 @@ export function CardView({ panels }: { panels: CardPanel[] }) {
   const rows = [
     card.phone && card.tel ? { icon: <Phone />, label: card.phone, href: `tel:${card.tel}` } : null,
     card.email ? { icon: <Mail />, label: card.email, href: `mailto:${card.email}` } : null,
-    card.website ? { icon: <Globe />, label: card.website.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, ""), href: card.website } : null,
+    ...card.websites.map((url) => ({ icon: <Globe />, label: hostOf(url), href: url })),
     card.linkedin ? { icon: <Link2 />, label: "LinkedIn", href: card.linkedin } : null,
   ].filter((r): r is NonNullable<typeof r> => !!r);
 
@@ -68,6 +71,12 @@ export function CardView({ panels }: { panels: CardPanel[] }) {
           <Download className="h-4 w-4" />
           Save contact
         </a>
+        {card.buttons.map((b) => (
+          <a key={b.href} href={b.href} target="_blank" rel="noreferrer" className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-[10px] border border-border bg-surface text-[15px] font-semibold text-text transition-colors hover:bg-surface-hover">
+            {b.label}
+            <ArrowUpRight className="h-4 w-4 text-text-secondary" />
+          </a>
+        ))}
 
         {rows.length > 0 && (
           <ul className="mt-5 divide-y divide-border rounded-[12px] border border-border">

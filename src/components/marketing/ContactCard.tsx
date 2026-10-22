@@ -28,8 +28,9 @@ export async function ContactCard({ card }: { card: Card }) {
       email: c.email,
       phone: c.phone,
       tel: c.phone ? telUri(c.phone) : undefined,
-      website: c.website,
+      websites: c.websites ?? [],
       linkedin: c.linkedin,
+      buttons: c.buttons ?? [],
       svg: await qrSvg(vcard(c)),
     })),
   );

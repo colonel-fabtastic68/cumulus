@@ -11,10 +11,13 @@ export interface ContactCard {
   org: string;
   email?: string;
   phone?: string;
-  website?: string;
+  /** Sites to list; every one goes in the vCard too. */
+  websites?: string[];
   linkedin?: string;
   /** One line under the name on the page. */
   blurb?: string;
+  /** Extra buttons under Save contact, e.g. another venture's site. */
+  buttons?: Array<{ label: string; href: string }>;
   /** Other hats the same person wears: each becomes a tab with its own role, company, QR code and vCard. */
   personas?: Persona[];
 }
@@ -35,19 +38,10 @@ export const CARDS: Record<string, ContactCard> = {
     org: "cumulusOS",
     email: "bakerjcobb@gmail.com",
     phone: "(704) 441-4765",
-    website: "https://www.cumulusos.com",
+    websites: ["https://www.cumulusos.com", "https://www.buildwithorion.com"],
     linkedin: "https://www.linkedin.com/in/bakercobb/",
     blurb: "Inventory that keeps up with your team.",
-    personas: [
-      {
-        id: "orion",
-        label: "Orion",
-        org: "Orion",
-        title: "Marketing",
-        blurb: "Marketing and brand work.",
-        website: "",
-      },
-    ],
+    buttons: [{ label: "Build with Orion", href: "https://www.buildwithorion.com" }],
   },
   mitch: {
     slug: "mitch",
@@ -57,7 +51,7 @@ export const CARDS: Record<string, ContactCard> = {
     org: "cumulusOS",
     email: "mitchgruchalla@gmail.com",
     phone: "(509) 237-1478",
-    website: "https://www.cumulusos.com",
+    websites: ["https://www.cumulusos.com"],
     linkedin: "https://www.linkedin.com/in/mitchell-gruchalla-b7244a1ba/",
     blurb: "Inventory that keeps up with your team.",
   },
@@ -95,7 +89,7 @@ export function vcard(c: ContactCard): string {
   const lines = ["BEGIN:VCARD", "VERSION:3.0", `N:${esc(c.last)};${esc(c.first)};;;`, `FN:${esc(fullName(c))}`, `ORG:${esc(c.org)}`, `TITLE:${esc(c.title)}`];
   if (c.phone) lines.push(`TEL;TYPE=CELL,VOICE:${telUri(c.phone)}`);
   if (c.email) lines.push(`EMAIL;TYPE=INTERNET,WORK:${c.email}`);
-  if (c.website) lines.push(`URL:${c.website}`);
+  for (const url of c.websites ?? []) lines.push(`URL:${url}`);
   if (c.linkedin) lines.push(`X-SOCIALPROFILE;TYPE=linkedin:${c.linkedin}`);
   lines.push("END:VCARD");
   return lines.join("\r\n") + "\r\n";
