@@ -1,6 +1,6 @@
 import Image from "next/image";
 import { Download, Globe, Link2, Mail, Phone } from "lucide-react";
-import { fullName, vcard, type ContactCard as Card } from "@/lib/cards";
+import { fullName, telUri, vcard, type ContactCard as Card } from "@/lib/cards";
 
 /** The QR code as inline SVG, drawn on the server so the page needs no JavaScript to show it. */
 async function qrSvg(text: string): Promise<string> {
@@ -18,7 +18,7 @@ export async function ContactCard({ card }: { card: Card }) {
   const name = fullName(card);
   const svg = await qrSvg(vcard(card));
   const rows = [
-    card.phone ? { icon: <Phone />, label: card.phone, href: `tel:${card.phone.replace(/[^\d+]/g, "")}` } : null,
+    card.phone ? { icon: <Phone />, label: card.phone, href: `tel:${telUri(card.phone)}` } : null,
     card.email ? { icon: <Mail />, label: card.email, href: `mailto:${card.email}` } : null,
     card.website ? { icon: <Globe />, label: card.website.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, ""), href: card.website } : null,
     card.linkedin ? { icon: <Link2 />, label: "LinkedIn", href: card.linkedin } : null,

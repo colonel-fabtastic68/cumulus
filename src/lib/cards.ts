@@ -24,8 +24,8 @@ export const CARDS: Record<string, ContactCard> = {
     last: "Cobb",
     title: "Founder",
     org: "cumulusOS",
-    email: "baker@cumulusos.com",
-    phone: "",
+    email: "bakerjcobb@gmail.com",
+    phone: "(704) 441-4765",
     website: "https://www.cumulusos.com",
     linkedin: "",
     blurb: "Inventory that keeps up with your team.",
@@ -33,11 +33,11 @@ export const CARDS: Record<string, ContactCard> = {
   mitch: {
     slug: "mitch",
     first: "Mitch",
-    last: "",
+    last: "Gruchalla",
     title: "Co-founder",
     org: "cumulusOS",
-    email: "mitch@cumulusos.com",
-    phone: "",
+    email: "mitchgruchalla@gmail.com",
+    phone: "(509) 237-1478",
     website: "https://www.cumulusos.com",
     linkedin: "",
     blurb: "Inventory that keeps up with your team.",
@@ -52,11 +52,19 @@ export function fullName(c: ContactCard): string {
   return [c.first, c.last].filter(Boolean).join(" ");
 }
 
+/** A North-American number as +1XXXXXXXXXX; anything else keeps its digits and leading +. */
+export function telUri(phone: string): string {
+  const digits = phone.replace(/[^\d+]/g, "");
+  if (/^\d{10}$/.test(digits)) return `+1${digits}`;
+  if (/^1\d{10}$/.test(digits)) return `+${digits}`;
+  return digits;
+}
+
 /** vCard 3.0 text: what the QR code carries and what the .vcf download serves. */
 export function vcard(c: ContactCard): string {
   const esc = (s: string) => s.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
   const lines = ["BEGIN:VCARD", "VERSION:3.0", `N:${esc(c.last)};${esc(c.first)};;;`, `FN:${esc(fullName(c))}`, `ORG:${esc(c.org)}`, `TITLE:${esc(c.title)}`];
-  if (c.phone) lines.push(`TEL;TYPE=CELL,VOICE:${c.phone.replace(/[^\d+]/g, "")}`);
+  if (c.phone) lines.push(`TEL;TYPE=CELL,VOICE:${telUri(c.phone)}`);
   if (c.email) lines.push(`EMAIL;TYPE=INTERNET,WORK:${c.email}`);
   if (c.website) lines.push(`URL:${c.website}`);
   if (c.linkedin) lines.push(`X-SOCIALPROFILE;TYPE=linkedin:${c.linkedin}`);
