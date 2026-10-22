@@ -132,6 +132,8 @@ export function hasFeature(inst: Pick<InstanceDef, "features"> | null | undefine
  * their state in the shared database).
  */
 export const SHARED_ONLY_PREFIXES = [
+  "/baker",
+  "/mitch",
   "/book",
   "/demo",
   "/dpa",
