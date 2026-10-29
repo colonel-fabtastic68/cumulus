@@ -1,42 +1,25 @@
 "use client";
 
 import { BookOpen, Sparkles } from "lucide-react";
-import { Badge, Button, DescriptionList } from "@/components/ui";
-import { useAuth } from "@/lib/auth";
+import { Button } from "@/components/ui";
 import { useAgent } from "@/components/agent/AgentProvider";
 
-export const APP_VERSION = "0.1 MVP";
+export const APP_VERSION = "0.0.3";
+/** When this version went out. */
+export const APP_RELEASED = "2026-10-28";
 
 export function AboutSection() {
-  const { mode } = useAuth();
   const { open } = useAgent();
+  const released = new Date(`${APP_RELEASED}T12:00:00Z`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
   return (
     <div className="card flex flex-col gap-4 p-4">
-      <DescriptionList
-        rows={[
-          {
-            label: "Version",
-            value: (
-              <span className="inline-flex items-center gap-2">
-                cumulusOS {APP_VERSION}
-                <Badge tone="accent">Pilot</Badge>
-              </span>
-            ),
-          },
-          { label: "Stack", value: "Next.js 16, React 19, Tailwind 4, Vercel AI SDK 7, Gemini" },
-          { label: "Data", value: mode === "firestore" ? "Google Cloud Firestore" : "Local browser storage" },
-          {
-            label: "Docs",
-            value: (
-              <span>
-                <code className="rounded bg-surface-hover px-1 font-mono text-[12px]">README.md</code> in the project root covers modes, Strato and every factor from the brief;{" "}
-                <code className="rounded bg-surface-hover px-1 font-mono text-[12px]">docs/PILOT-GUIDE.md</code> is the walkthrough for pilot users.
-              </span>
-            ),
-          },
-        ]}
-        className="[&_dd]:whitespace-normal"
-      />
+      <div>
+        <div className="text-[14px] font-semibold text-text">cumulusOS™ · Version {APP_VERSION}</div>
+        <div className="mt-1 text-[13px] text-text-secondary">Proudly North Carolinian.</div>
+        <div className="mt-2 text-[12px] text-text-tertiary">
+          Released {released} · © {APP_RELEASED.slice(0, 4)} cumulusOS. cumulusOS and Strato are trademarks of cumulusOS. All rights reserved.
+        </div>
+      </div>
       <div className="flex flex-wrap gap-2 border-t border-border pt-4">
         <Button icon={<BookOpen />} href="/agents">
           Agents and automations
