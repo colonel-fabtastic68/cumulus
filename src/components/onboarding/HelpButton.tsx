@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { CalendarClock, LifeBuoy, MessageCircle, Send, Sparkles, X } from "lucide-react";
+import { CalendarClock, LifeBuoy, Mail, MessageCircle, Send, Sparkles, X } from "lucide-react";
 import { Banner, Button, Modal, useToast } from "@/components/ui";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { accountFetch } from "@/lib/account-fetch";
+import { CONTACT_EMAIL } from "@/lib/contact";
 import { useSession } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
@@ -87,6 +88,7 @@ export function HelpButton({ where }: { where: string }) {
               <HelpItem icon={<MessageCircle />} title="Message the team" hint="Available on hosted accounts" disabled />
             )}
             <HelpItem icon={<CalendarClock />} title="Book a setup call" hint="Twenty minutes with a founder, free" href="/book" onClick={() => setOpen(false)} />
+            <HelpItem icon={<Mail />} title={`Email ${CONTACT_EMAIL}`} hint="From your own mail app" href={`mailto:${CONTACT_EMAIL}`} onClick={() => setOpen(false)} />
           </div>
         )}
         <button

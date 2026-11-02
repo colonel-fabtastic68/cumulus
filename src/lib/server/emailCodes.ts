@@ -3,6 +3,7 @@ import type { Firestore } from "firebase-admin/firestore";
 import { adminApp, type ServiceAccount } from "@/lib/mcp/adminStore";
 import { HttpError } from "@/lib/integrations/server";
 import { CODE_TTL_MS, decideSend, decideVerify, generateCode, hashCode, type EmailCodeState } from "./emailCodeRules";
+import { CONTACT_EMAIL, DEFAULT_EMAIL_FROM } from "@/lib/contact";
 
 /**
  * One-time codes for new sign-ups. Codes are stored hashed in `emailCodes/{uid}`
@@ -10,7 +11,7 @@ import { CODE_TTL_MS, decideSend, decideVerify, generateCode, hashCode, type Ema
  * code marks the Firebase account's email as verified.
  */
 export function emailCodesConfigured(): boolean {
-  return !!(process.env.RESEND_API_KEY?.trim() && process.env.EMAIL_FROM?.trim());
+  return !!process.env.RESEND_API_KEY?.trim();
 }
 
 /** Derived from the service account key, so a leaked hash cannot be brute-forced without server secrets. */
@@ -62,14 +63,14 @@ export async function clearCode(db: Firestore, uid: string): Promise<void> {
 
 async function sendCodeEmail(to: string, code: string): Promise<void> {
   const key = process.env.RESEND_API_KEY?.trim();
-  const from = process.env.EMAIL_FROM?.trim();
-  if (!key || !from) throw new HttpError(503, "Email codes are not set up on this installation.");
+  const from = process.env.EMAIL_FROM?.trim() || DEFAULT_EMAIL_FROM;
+  if (!key) throw new HttpError(503, "Email codes are not set up on this installation.");
   const text = `Your cumulusOS verification code is ${code}.\n\nIt expires in 10 minutes. If you didn't create a cumulusOS account, you can ignore this email.`;
   const html = `<div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#303030;line-height:1.5"><p>Your cumulusOS verification code is</p><p style="font-size:28px;font-weight:600;letter-spacing:6px;margin:12px 0">${code}</p><p style="color:#616161">It expires in 10 minutes. If you didn't create a cumulusOS account, you can ignore this email.</p></div>`;
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from, to: [to], subject: `${code} is your cumulusOS code`, text, html }),
+    body: JSON.stringify({ from, to: [to], reply_to: CONTACT_EMAIL, subject: `${code} is your cumulusOS code`, text, html }),
   });
   if (!res.ok) {
     console.error("[email-code] Resend refused the message", res.status, (await res.text().catch(() => "")).slice(0, 300));
