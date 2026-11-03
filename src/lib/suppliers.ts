@@ -1,6 +1,6 @@
 import type { Item, ItemSupplier } from "@/lib/types";
 import type { Store, WriteOp } from "@/lib/store/types";
-import { updateItem, type Actor, type ItemPatch } from "@/lib/inventory";
+import { updateItem, upsertSupplier, type Actor, type ItemPatch } from "@/lib/inventory";
 
 /**
  * A part can be bought from several suppliers. The primary one lives on
@@ -81,3 +81,70 @@ export function patchesUnlinkingSupplier(items: Item[], supplierId: string): Arr
 }
 
 export type { WriteOp };
+
+// ---- Import ---------------------------------------------------------------
+
+export const SUPPLIER_FIELDS = ["name", "email", "phone", "website", "contactName", "leadTimeDays", "terms", "notes"] as const;
+export type SupplierField = (typeof SUPPLIER_FIELDS)[number];
+
+const SUPPLIER_HINTS: Record<SupplierField, RegExp> = {
+  name: /^(supplier|vendor|company|business|manufacturer|distributor)?\s*(name)?$|^supplier$|^vendor$|^company$/i,
+  email: /e-?mail/i,
+  phone: /phone|tel|mobile|cell/i,
+  website: /web|url|site/i,
+  contactName: /contact|rep\b|representative|account manager/i,
+  leadTimeDays: /lead/i,
+  terms: /terms|net\s*\d+/i,
+  notes: /notes?|comments?|remarks?/i,
+};
+
+/** Best-guess column mapping from spreadsheet headers. */
+export function guessSupplierMapping(headers: string[]): Partial<Record<SupplierField, string>> {
+  const out: Partial<Record<SupplierField, string>> = {};
+  for (const field of SUPPLIER_FIELDS) {
+    const h = headers.find((x) => x.trim() && SUPPLIER_HINTS[field].test(x.trim()) && !Object.values(out).includes(x));
+    if (h) out[field] = h;
+  }
+  if (!out.name) out.name = headers.find((h) => /name/i.test(h) && !Object.values(out).includes(h));
+  return out;
+}
+
+export interface SupplierInput {
+  name: string;
+  email?: string;
+  phone?: string;
+  website?: string;
+  leadTimeDays?: number;
+  terms?: string;
+  notes?: string;
+}
+
+export function rowToSupplier(row: Record<string, string>, mapping: Partial<Record<SupplierField, string>>): SupplierInput | null {
+  const get = (f: SupplierField) => (mapping[f] ? (row[mapping[f]!] ?? "").trim() : "");
+  const name = get("name");
+  if (!name) return null;
+  const lead = Number(get("leadTimeDays").replace(/[^\d.]/g, ""));
+  const contact = get("contactName");
+  const notes = [get("notes"), contact ? `Contact: ${contact}` : ""].filter(Boolean).join("\n");
+  return { name, email: get("email") || undefined, phone: get("phone") || undefined, website: get("website") || undefined, leadTimeDays: Number.isFinite(lead) && lead > 0 ? lead : undefined, terms: get("terms") || undefined, notes: notes || undefined };
+}
+
+/** Upserts by name (case-insensitive). Returns what happened. */
+export async function importSuppliers(store: Store, actor: Actor, inputs: SupplierInput[]): Promise<{ created: number; updated: number; skipped: number }> {
+  const existing = await store.list("suppliers");
+  const byName = new Map(existing.map((s) => [s.name.trim().toLowerCase(), s]));
+  const result = { created: 0, updated: 0, skipped: 0 };
+  for (const input of inputs) {
+    const key = input.name.trim().toLowerCase();
+    if (!key) {
+      result.skipped++;
+      continue;
+    }
+    const found = byName.get(key);
+    const saved = await upsertSupplier(store, actor, { ...(found ?? {}), ...Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined)), name: found?.name ?? input.name });
+    byName.set(key, saved);
+    if (found) result.updated++;
+    else result.created++;
+  }
+  return result;
+}

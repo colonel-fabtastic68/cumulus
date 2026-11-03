@@ -12,7 +12,9 @@ const MAX_FILES = 12;
 const MAX_TEXT_CHARS = 200_000;
 
 const IMAGE_TYPES = /^image\/(jpeg|png|webp|heic|heif|gif)$/;
-const TEXT_TYPES = /^(text\/.*|application\/(xml|json|rtf))$/;
+const TEXT_TYPES = /^(text\/.*|application\/(xml|json|rtf|vnd\.ms-outlook))$/;
+
+export type ExtractTarget = "items" | "customers" | "suppliers";
 
 interface IncomingFile {
   name?: unknown;
@@ -23,13 +25,13 @@ interface IncomingFile {
 }
 
 const schema = z.object({
-  /** What the documents are, in a few words ("handwritten count sheet", "supplier price list PDF"). */
+  /** What the documents are, in a few words ("handwritten count sheet", "exported contact list"). */
   documentType: z.string(),
-  /** Column names for the table, in the order the rows use. Prefer cumulusOS field names when a column clearly means one: sku, name, description, category, unit, qty, unitCost, price, minQty, maxQty, location, barcode, supplierName, brand, tags. */
+  /** Column names for the table, in the order the rows use. */
   headers: z.array(z.string()),
-  /** One array per item, aligned with headers. Empty string when a cell is unknown. */
+  /** One array per record, aligned with headers. Empty string when a cell is unknown. */
   rows: z.array(z.array(z.string())),
-  /** Anything the person should check: unreadable cells, guessed digits, pages that were not a list. */
+  /** Anything the person should check: unreadable cells, guessed digits, pages that held nothing usable. */
   warnings: z.array(z.string()),
   /** 0–1: how legible the source was. */
   confidence: z.number().min(0).max(1),
@@ -37,35 +39,60 @@ const schema = z.object({
 
 export type ExtractResult = z.infer<typeof schema>;
 
-const SYSTEM = `You are Strato, the inventory assistant in cumulusOS. People send you photos of paper documents, PDFs, plain text and XML that list inventory items, and you turn them into one clean table ready to import.
+/** What the table is for decides which column names to prefer and what counts as a record. */
+const TARGETS: Record<ExtractTarget, { noun: string; record: string; fields: string }> = {
+  items: {
+    noun: "inventory table",
+    record: "Every physical line item becomes one row.",
+    fields: "sku (part number / item code), name, description, category, unit (ea, kg, m, box…), qty (count on hand), unitCost (what is paid), price (what it sells for), minQty (reorder point / par), maxQty, location (bin, shelf, room), barcode (UPC/EAN), supplierName, brand, tags",
+  },
+  customers: {
+    noun: "customer list",
+    record: "Every person or company becomes one row; a directory, an address book, a mailing list or a stack of business cards all count.",
+    fields: "name (the person's full name), company, email, phone, street1, street2, city, state, zip, country, tags, notes",
+  },
+  suppliers: {
+    noun: "supplier list",
+    record: "Every vendor, manufacturer or distributor becomes one row.",
+    fields: "name (the supplier's business name), email, phone, website, contactName, leadTimeDays, terms, notes",
+  },
+};
+
+function systemFor(target: ExtractTarget): string {
+  const t = TARGETS[target];
+  return `You are Strato, the assistant in cumulusOS. People send you photos of paper, PDFs, plain text, XML or other exports, and you turn them into one clean ${t.noun} ready to import.
 
 Rules:
-- Every physical line item becomes one row. Keep the order of the source.
+- ${t.record} Keep the order of the source.
 - Read handwriting and printed text carefully; when a digit or letter is ambiguous, pick the most likely reading and mention it in warnings with the row number.
-- Headers: use these cumulusOS field names whenever a column clearly means one: sku (part number / item code), name, description, category, unit (ea, kg, m, box…), qty (count on hand), unitCost (what is paid), price (what it sells for), minQty (reorder point / par), maxQty, location (bin, shelf, room), barcode (UPC/EAN), supplierName, brand, tags. Keep any other column under its own short label.
-- Never invent values. Leave a cell empty when the source does not show it. Do not make up SKUs; the import can fill those in later.
-- Numbers: plain digits with a decimal point, no currency symbols or units in numeric cells (put the unit in the unit column).
-- Several pages of the same list are one table; a page that is not an item list (a cover, a receipt total, a photo of a shelf without text) is skipped and noted in warnings.
-- Structured text (XML, JSON, delimited text): map each record to a row with the same header rules.`;
+- Headers: use these cumulusOS field names whenever a column clearly means one: ${t.fields}. Keep any other column under its own short label.
+- Never invent values. Leave a cell empty when the source does not show it.
+- Numbers and phone numbers as plain digits; emails lower-case.
+- Several pages or files of the same list are one table; a page that holds nothing usable (a cover, a photo without text) is skipped and noted in warnings.
+- Structured text (XML, JSON, vCard, delimited text, key: value blocks): map each record to a row with the same header rules.
+- Always return rows when the source holds any ${target}; never refuse a document because it looks like a different kind of list.`;
+}
 
 function decodeBase64(data: string): Buffer {
   const comma = data.indexOf(",");
   return Buffer.from(comma >= 0 && data.startsWith("data:") ? data.slice(comma + 1) : data, "base64");
 }
 
-/** Reads photos, PDFs, text and XML into a table of item rows. Nothing is written; the browser hands the table to the import wizard. */
+/** Reads photos, PDFs, text and XML into a table of rows for items, customers or suppliers. Nothing is written; the browser hands the table on. */
 export async function POST(req: Request) {
   try {
     await authenticateForStrato(req);
     if (!geminiConfigured()) throw new GeminiUnavailable("Strato needs a Gemini key (GOOGLE_GENERATIVE_AI_API_KEY) to read documents.");
-    const body = await readJson<{ files?: unknown; hint?: unknown }>(req);
+    const body = await readJson<{ files?: unknown; hint?: unknown; target?: unknown }>(req);
     const files = Array.isArray(body.files) ? (body.files as IncomingFile[]) : [];
     if (files.length === 0) throw new HttpError(400, "Attach a photo, PDF or text file.");
     if (files.length > MAX_FILES) throw new HttpError(400, `Up to ${MAX_FILES} files at a time.`);
     const hint = typeof body.hint === "string" ? body.hint.slice(0, 600) : "";
+    const target: ExtractTarget = body.target === "customers" || body.target === "suppliers" ? body.target : "items";
 
     const content: Array<TextPart | FilePart> = [];
     let total = 0;
+    let textOnly = true;
     const names: string[] = [];
     for (const f of files) {
       const name = typeof f.name === "string" ? f.name.slice(0, 120) : "file";
@@ -84,6 +111,7 @@ export async function POST(req: Request) {
       if (TEXT_TYPES.test(mediaType)) {
         content.push({ type: "text", text: `--- ${name} (${mediaType}) ---\n${bytes.toString("utf8").slice(0, MAX_TEXT_CHARS)}\n--- end of ${name} ---` });
       } else {
+        textOnly = false;
         content.push({ type: "file", data: bytes, mediaType, filename: name });
       }
     }
@@ -91,16 +119,18 @@ export async function POST(req: Request) {
 
     content.unshift({
       type: "text",
-      text: `Turn ${files.length === 1 ? "this document" : `these ${files.length} documents`} into one inventory table.${hint ? ` About this business: ${hint}.` : ""} Files: ${names.join(", ")}.`,
+      text: `Turn ${files.length === 1 ? "this document" : `these ${files.length} documents`} into one ${TARGETS[target].noun}.${hint ? ` About this business: ${hint}.` : ""} Files: ${names.join(", ")}.`,
     });
     const messages: ModelMessage[] = [{ role: "user", content }];
-    const out = await structured<ExtractResult>({ schema, system: SYSTEM, messages });
+    const started = Date.now();
+    // Plain text needs no vision: the light model answers in a fraction of the time.
+    const out = await structured<ExtractResult>({ schema, system: systemFor(target), messages, fast: textOnly });
 
-    // Keep rows rectangular so the wizard's parser never sees a ragged table.
+    // Keep rows rectangular so the parser never sees a ragged table.
     const width = out.headers.length;
     const rows = out.rows.map((r) => Array.from({ length: width }, (_, i) => String(r[i] ?? "").trim())).filter((r) => r.some(Boolean));
-    console.log("[import-extract]", files.length, "files", rows.length, "rows", out.documentType);
-    return Response.json({ ...out, headers: out.headers.map((h) => h.trim()), rows });
+    console.log("[import-extract]", target, files.length, "files", rows.length, "rows", out.documentType, `${Date.now() - started}ms`, textOnly ? "fast" : "vision");
+    return Response.json({ ...out, target, headers: out.headers.map((h) => h.trim()), rows });
   } catch (e) {
     if (e instanceof GeminiUnavailable) return Response.json({ error: e.message }, { status: 503 });
     return jsonError(e);

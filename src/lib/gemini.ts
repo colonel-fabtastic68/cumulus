@@ -31,13 +31,17 @@ export function geminiConfigured(): boolean {
   return Boolean(process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY);
 }
 
-/** A structured call from a prompt string, or from messages when the input carries files (photos, PDFs). */
-export async function structured<T>(opts: { schema: z.ZodType<T>; system: string; prompt?: string; messages?: ModelMessage[]; abortSignal?: AbortSignal }): Promise<T> {
+/** The small, quick model for plain-text jobs (reading a pasted list, mapping columns); the main chain follows if it fails. */
+const FAST_MODEL = process.env.GEMINI_FAST_MODEL ?? "gemini-3.5-flash-lite";
+
+/** A structured call from a prompt string, or from messages when the input carries files (photos, PDFs). `fast` tries the light model first. */
+export async function structured<T>(opts: { schema: z.ZodType<T>; system: string; prompt?: string; messages?: ModelMessage[]; abortSignal?: AbortSignal; fast?: boolean }): Promise<T> {
   const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY;
   if (!apiKey) throw new GeminiUnavailable();
   const google = createGoogle({ apiKey });
   let last: unknown;
-  for (const id of [MODEL, ...FALLBACK_MODELS]) {
+  const chain = opts.fast ? [FAST_MODEL, ...[MODEL, ...FALLBACK_MODELS].filter((m) => m !== FAST_MODEL)] : [MODEL, ...FALLBACK_MODELS];
+  for (const id of chain) {
     try {
       const input = opts.messages ? { messages: opts.messages } : { prompt: opts.prompt ?? "" };
       const { output } = await generateText({ model: google(id), output: Output.object({ schema: opts.schema }), system: opts.system, ...input, abortSignal: opts.abortSignal });
