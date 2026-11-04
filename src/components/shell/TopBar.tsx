@@ -53,35 +53,47 @@ export function TopBar({ onMenu }: { onMenu?: () => void }) {
   }, [toggleAgent]);
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-nav-bg px-4">
-      <button type="button" onClick={onMenu} className="mr-1 rounded p-1.5 text-text-secondary hover:bg-surface-hover md:hidden" aria-label="Menu">
-        <MenuIcon className="h-4 w-4" />
+    // On a phone the bar is five controls wide: the search field shrinks to its icon and a word, keyboard hints go, and Strato is an icon.
+    <header className="flex h-14 shrink-0 items-center gap-1 border-b border-border bg-nav-bg px-3 md:gap-2 md:px-4">
+      <button type="button" onClick={onMenu} className="rounded p-2 text-text-secondary hover:bg-surface-hover md:hidden" aria-label="Menu">
+        <MenuIcon className="h-5 w-5" />
       </button>
       <button
         type="button"
         onClick={openSearch}
-        className="flex h-8 w-full max-w-md items-center gap-2 rounded-[var(--radius-sm)] border border-border bg-surface px-3 text-[13px] text-text-tertiary shadow-[var(--shadow-100)] hover:border-border-strong"
+        className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-sm)] border border-border bg-surface px-3 text-[13px] text-text-tertiary shadow-[var(--shadow-100)] hover:border-border-strong md:h-8 md:max-w-md md:flex-none md:basis-[28rem]"
       >
-        <Search className="h-3.5 w-3.5" />
-        <span className="flex-1 text-left">{currentInstance() ? "Search…" : "Search cumulusOS…"}</span>
-        <Kbd>{mod}K</Kbd>
+        <Search className="h-4 w-4 shrink-0 md:h-3.5 md:w-3.5" />
+        <span className="min-w-0 flex-1 truncate text-left">
+          <span className="md:hidden">Search</span>
+          <span className="hidden md:inline">{currentInstance() ? "Search…" : "Search cumulusOS…"}</span>
+        </span>
+        <span className="hidden md:inline-flex">
+          <Kbd>{mod}K</Kbd>
+        </span>
       </button>
-      <div className="flex-1" />
+      <div className="hidden flex-1 md:block" />
       {online.length > 0 && (
-        <div className="hidden items-center gap-2 text-[12px] text-text-secondary sm:flex" title={`Online: ${online.map((m) => m.name).join(", ")}`}>
+        <div className="hidden items-center gap-2 text-[12px] text-text-secondary lg:flex" title={`Online: ${online.map((m) => m.name).join(", ")}`}>
           <AvatarStack members={online} />
           <span>{online.length} online</span>
         </div>
       )}
-      <Button variant={isOpen ? "primary" : "secondary"} size="md" icon={<Sparkles />} onClick={() => (isOpen ? toggleAgent() : openAgent())} className="hidden sm:inline-flex">Strato <Kbd>{mod}J</Kbd>
-      </Button>
+      <span className="hidden md:inline-flex">
+        <Button variant={isOpen ? "primary" : "secondary"} size="md" icon={<Sparkles />} onClick={() => (isOpen ? toggleAgent() : openAgent())}>
+          Strato <Kbd>{mod}J</Kbd>
+        </Button>
+      </span>
+      <span className="md:hidden">
+        <IconButton variant={isOpen ? "primary" : "plain"} size="md" className={isOpen ? undefined : "text-text-secondary"} aria-label="Strato" onClick={() => (isOpen ? toggleAgent() : openAgent())} icon={<Sparkles />} />
+      </span>
       <IconButton variant="plain" size="md" className="text-text-secondary" aria-label={`Scan a barcode (${mod}/)`} title={`Scan (${mod}/)`} onClick={() => setScan({ open: true })} icon={<ScanBarcode />} />
-      <IconButton variant="plain" size="md" className="text-text-secondary" aria-label="Activity" href="/activity" icon={<Bell />} />
+      <IconButton variant="plain" size="md" className="hidden text-text-secondary sm:inline-flex" aria-label="Activity" href="/activity" icon={<Bell />} />
       <Menu
         trigger={
-          <button type="button" className="flex items-center gap-1.5 rounded-[var(--radius-sm)] px-1.5 py-1 hover:bg-surface-hover">
+          <button type="button" className="flex items-center gap-1 rounded-[var(--radius-sm)] px-1 py-1 hover:bg-surface-hover md:gap-1.5 md:px-1.5">
             <Avatar member={user} size={26} />
-            <ChevronDown className="h-3.5 w-3.5 text-text-tertiary" />
+            <ChevronDown className="hidden h-3.5 w-3.5 text-text-tertiary md:block" />
           </button>
         }
         items={[

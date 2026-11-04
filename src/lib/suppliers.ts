@@ -1,6 +1,7 @@
-import type { Item, ItemSupplier } from "@/lib/types";
+import type { Item, ItemSupplier, Supplier } from "@/lib/types";
 import type { Store, WriteOp } from "@/lib/store/types";
-import { updateItem, upsertSupplier, type Actor, type ItemPatch } from "@/lib/inventory";
+import { updateItem, type Actor, type ItemPatch } from "@/lib/inventory";
+import { newId, nowIso } from "@/lib/utils";
 
 /**
  * A part can be bought from several suppliers. The primary one lives on
@@ -129,11 +130,13 @@ export function rowToSupplier(row: Record<string, string>, mapping: Partial<Reco
   return { name, email: get("email") || undefined, phone: get("phone") || undefined, website: get("website") || undefined, leadTimeDays: Number.isFinite(lead) && lead > 0 ? lead : undefined, terms: get("terms") || undefined, notes: notes || undefined };
 }
 
-/** Upserts by name (case-insensitive). Returns what happened. */
-export async function importSuppliers(store: Store, actor: Actor, inputs: SupplierInput[]): Promise<{ created: number; updated: number; skipped: number }> {
+/** Upserts by name (case-insensitive), in batches of writes. `onProgress` reports rows saved so far. */
+export async function importSuppliers(store: Store, actor: Actor, inputs: SupplierInput[], onProgress?: (saved: number, total: number) => void): Promise<{ created: number; updated: number; skipped: number }> {
+  void actor;
   const existing = await store.list("suppliers");
   const byName = new Map(existing.map((s) => [s.name.trim().toLowerCase(), s]));
   const result = { created: 0, updated: 0, skipped: 0 };
+  const docs: Supplier[] = [];
   for (const input of inputs) {
     const key = input.name.trim().toLowerCase();
     if (!key) {
@@ -141,10 +144,16 @@ export async function importSuppliers(store: Store, actor: Actor, inputs: Suppli
       continue;
     }
     const found = byName.get(key);
-    const saved = await upsertSupplier(store, actor, { ...(found ?? {}), ...Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined)), name: found?.name ?? input.name });
-    byName.set(key, saved);
+    const doc: Supplier = { ...(found ?? { id: newId("sup"), createdAt: nowIso() }), ...Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined)), name: found?.name ?? input.name.trim() } as Supplier;
+    byName.set(key, doc);
+    docs.push(doc);
     if (found) result.updated++;
     else result.created++;
+  }
+  const BATCH = 200;
+  for (let i = 0; i < docs.length; i += BATCH) {
+    await store.batch(docs.slice(i, i + BATCH).map((doc) => ({ op: "put" as const, collection: "suppliers" as const, doc })));
+    onProgress?.(Math.min(i + BATCH, docs.length), docs.length);
   }
   return result;
 }

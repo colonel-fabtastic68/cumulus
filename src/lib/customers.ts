@@ -189,24 +189,60 @@ export function rowToCustomer(row: Record<string, string>, mapping: Partial<Reco
   };
 }
 
-/** Upserts by email, then by name. Returns what happened. */
-export async function importCustomers(store: Store, actor: Actor, inputs: CustomerInput[]): Promise<{ created: number; updated: number; skipped: number }> {
+/** The record an import row becomes, merged over an existing customer when there is one. Pure, so thousands can be built before a single write. */
+function customerFromInput(actor: Actor, input: CustomerInput, existing: Customer | undefined): Customer {
+  const now = nowIso();
+  const customer: Customer = {
+    ...(existing ?? {}),
+    id: existing?.id ?? newId("cus"),
+    name: input.name.trim(),
+    email: input.email?.trim().toLowerCase() || existing?.email || undefined,
+    phone: input.phone?.trim() || existing?.phone || undefined,
+    company: input.company?.trim() || existing?.company || undefined,
+    address: input.address?.street1?.trim() ? input.address : existing?.address,
+    tags: input.tags?.length ? input.tags.map((t) => t.trim()).filter(Boolean) : existing?.tags,
+    notes: input.notes?.trim() || existing?.notes || undefined,
+    source: existing?.source ?? input.source ?? "import",
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+    createdBy: existing?.createdBy ?? actor.id,
+  };
+  for (const k of Object.keys(customer) as Array<keyof Customer>) if (customer[k] === undefined) delete customer[k];
+  if (customer.tags && !customer.tags.length) delete customer.tags;
+  return customer;
+}
+
+/** Writes per batch: well under Firestore's 500-op limit, and small enough that progress moves. */
+const IMPORT_BATCH = 200;
+
+/**
+ * Upserts by email, then by name, in batches: 1,700 rows is a handful of
+ * writes, not 1,700 round trips. `onProgress` reports rows saved so far.
+ */
+export async function importCustomers(store: Store, actor: Actor, inputs: CustomerInput[], onProgress?: (saved: number, total: number) => void): Promise<{ created: number; updated: number; skipped: number }> {
   const existing = await store.list("customers");
+  const byEmail = new Map(existing.filter((c) => c.email).map((c) => [norm(c.email), c]));
+  const byName = new Map(existing.map((c) => [norm(c.name), c]));
   const result = { created: 0, updated: 0, skipped: 0 };
+  const docs: Customer[] = [];
   for (const input of inputs) {
     if (!input.name.trim()) {
       result.skipped++;
       continue;
     }
-    const found = findCustomer(existing, { email: input.email, name: input.name });
-    const saved = await saveCustomer(store, actor, { ...input, ...(found ? { source: found.source } : {}) }, found?.id);
-    if (found) {
-      result.updated++;
-      Object.assign(found, saved);
-    } else {
-      result.created++;
-      existing.push(saved);
-    }
+    const email = norm(input.email);
+    const found = (email && byEmail.get(email)) || byName.get(norm(input.name));
+    const doc = customerFromInput(actor, input, found);
+    if (found) result.updated++;
+    else result.created++;
+    // The same person twice in one file updates the first copy instead of creating two.
+    if (doc.email) byEmail.set(norm(doc.email), doc);
+    byName.set(norm(doc.name), doc);
+    docs.push(doc);
+  }
+  for (let i = 0; i < docs.length; i += IMPORT_BATCH) {
+    await store.batch(docs.slice(i, i + IMPORT_BATCH).map((doc) => ({ op: "put" as const, collection: "customers" as const, doc })));
+    onProgress?.(Math.min(i + IMPORT_BATCH, docs.length), docs.length);
   }
   return result;
 }

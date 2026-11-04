@@ -192,9 +192,9 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
   );
 
   const toolbar = (
-    <div className="flex flex-1 flex-wrap items-center gap-2">
+    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
       <SearchField value={q} onChange={setQ} placeholder="Search SKU, name, tag, barcode, cross-reference" className="w-full sm:w-72" />
-      <div className="max-w-full overflow-x-auto">
+      <div className="min-w-0 max-w-full overflow-x-auto">
         <Segmented value={view} onChange={setView} options={INVENTORY_VIEWS.map((v) => ({ value: v.value, label: v.label, count: counts[v.value] }))} />
       </div>
       <Select value={category} onChange={(e) => setCategory(e.target.value)} placeholder="All categories" options={categories.map((c) => ({ value: c, label: c }))} containerClassName="w-full sm:w-44" aria-label="Category" />

@@ -48,6 +48,7 @@ export function RecordImport({ kind, source, onStage, onBack, onRestart }: Recor
   const [stage, setStage] = useState<RecordStage>("map");
   const [mapping, setMapping] = useState<Record<string, string | undefined>>(() => (kind === "customers" ? guessCustomerMapping(source.headers) : guessSupplierMapping(source.headers)));
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{ saved: number; total: number } | null>(null);
   const [result, setResult] = useState<{ created: number; updated: number; skipped: number } | null>(null);
   const notify = useRef(onStage);
   useEffect(() => {
@@ -86,7 +87,8 @@ export function RecordImport({ kind, source, onStage, onBack, onRestart }: Recor
     if (!writable || rows.length === 0) return;
     setBusy(true);
     try {
-      const r = kind === "customers" ? await importCustomers(store, user, rows.map((x) => x.input as Parameters<typeof importCustomers>[2][number])) : await importSuppliers(store, user, rows.map((x) => x.input as Parameters<typeof importSuppliers>[2][number]));
+      const onProgress = (saved: number, total: number) => setProgress({ saved, total });
+      const r = kind === "customers" ? await importCustomers(store, user, rows.map((x) => x.input as Parameters<typeof importCustomers>[2][number]), onProgress) : await importSuppliers(store, user, rows.map((x) => x.input as Parameters<typeof importSuppliers>[2][number]), onProgress);
       setResult(r);
       setStage("done");
       toast(`Imported ${pluralize(r.created + r.updated, kind === "customers" ? "customer" : "supplier")}`, "success");
@@ -94,6 +96,7 @@ export function RecordImport({ kind, source, onStage, onBack, onRestart }: Recor
       toast(e instanceof Error ? e.message : String(e), "critical");
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   };
 
@@ -162,9 +165,16 @@ export function RecordImport({ kind, source, onStage, onBack, onRestart }: Recor
           <Button icon={<ArrowLeft />} onClick={() => setStage("map")} disabled={busy}>
             Back
           </Button>
-          <Button variant="primary" icon={<Download />} onClick={() => void run()} loading={busy} disabled={!writable || rows.length === 0}>
-            Import {pluralize(rows.length, kind === "customers" ? "customer" : "supplier")}
-          </Button>
+          <div className="flex items-center gap-3">
+            {progress && (
+              <span className="text-[12.5px] tabular text-text-secondary">
+                Saved {progress.saved} of {progress.total}
+              </span>
+            )}
+            <Button variant="primary" icon={<Download />} onClick={() => void run()} loading={busy} disabled={!writable || rows.length === 0}>
+              Import {pluralize(rows.length, kind === "customers" ? "customer" : "supplier")}
+            </Button>
+          </div>
         </div>
       </div>
     );

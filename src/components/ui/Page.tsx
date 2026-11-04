@@ -29,8 +29,8 @@ export interface PageProps {
  */
 export function Page({ title, subtitle, titleMeta, backHref, backLabel, primaryAction, secondaryActions, children, className, narrow, medium, fullWidth }: PageProps) {
   return (
-    <div className={cn("animate-in mx-auto w-full px-6 py-6 md:px-8", fullWidth ? "max-w-[1600px]" : "max-w-[1280px]", className)}>
-      <header className="mb-6 flex min-h-[44px] flex-wrap items-start justify-between gap-3">
+    <div className={cn("animate-in mx-auto w-full px-4 py-4 sm:px-6 sm:py-6 md:px-8", fullWidth ? "max-w-[1600px]" : "max-w-[1280px]", className)}>
+      <header className="mb-4 flex min-h-[44px] flex-wrap items-start justify-between gap-3 sm:mb-6">
         <div className="min-w-0">
           {backHref && (
             <Link href={backHref} className="mb-1.5 inline-flex items-center gap-0.5 text-[12.5px] text-text-secondary hover:text-text">
@@ -44,7 +44,7 @@ export function Page({ title, subtitle, titleMeta, backHref, backLabel, primaryA
           {subtitle && <p className="mt-0.5 text-[13px] text-text-secondary">{subtitle}</p>}
         </div>
         {(primaryAction || secondaryActions) && (
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
             {secondaryActions}
             {primaryAction}
           </div>

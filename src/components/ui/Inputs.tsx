@@ -244,14 +244,14 @@ export function FormGrid({ children, cols = 2, className }: { children: ReactNod
 /** Segmented filter control, e.g. status tabs above a table. */
 export function Segmented<T extends string>({ value, onChange, options, className }: { value: T; onChange: (v: T) => void; options: Array<{ value: T; label: ReactNode; count?: number }>; className?: string }) {
   return (
-    <div className={cn("inline-flex items-center gap-0.5 rounded-[var(--radius-sm)] bg-fill-tertiary/70 p-0.5", className)}>
+    <div className={cn("inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-[var(--radius-sm)] bg-fill-tertiary/70 p-0.5", className)}>
       {options.map((o) => (
         <button
           key={o.value}
           type="button"
           onClick={() => onChange(o.value)}
           className={cn(
-            "inline-flex h-7 items-center gap-1.5 rounded-[6px] px-2.5 text-[12px] font-[550] transition-colors",
+            "inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[6px] px-2.5 text-[12px] font-[550] transition-colors",
             o.value === value ? "bg-surface text-text shadow-[var(--shadow-100),0_0_0_1px_rgba(26,26,26,0.07)]" : "text-text-secondary hover:bg-[rgba(0,0,0,0.04)] hover:text-text",
           )}
         >
