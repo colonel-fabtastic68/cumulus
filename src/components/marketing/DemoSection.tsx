@@ -3,7 +3,7 @@ import { CONTACT_EMAIL } from "@/lib/contact";
 import { InquiryForm } from "./InquiryForm";
 import { LazyCalendly } from "./LazyCalendly";
 import { Reveal } from "./Reveal";
-import { CheckList, Rule, container } from "./shared";
+import { CheckList, container } from "./shared";
 
 /** The booking section: Calendly inline when a link is set, the request form when it is not. */
 export function DemoSection({ calendlyUrl }: { calendlyUrl?: string }) {
@@ -12,8 +12,7 @@ export function DemoSection({ calendlyUrl }: { calendlyUrl?: string }) {
       <span aria-hidden className="pat-checker block h-4" />
       <div className={`${container} grid gap-12 py-20 md:py-28 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16`}>
         <Reveal>
-          <Rule />
-          <h2 className="display mt-5">Thirty minutes on your own parts.</h2>
+          <h2 className="display">Thirty minutes on your own parts.</h2>
           <p className="lede mt-4">Bring a spreadsheet or a few part numbers. We walk through receiving, builds, orders and Strato on your data, with the people who build cumulusOS.</p>
           <CheckList className="mt-8" items={["No slides. The demo runs in a real workspace with your numbers.", "Leave with a plan for what to import first and what to connect.", "If it is not a fit, we will say so and point you somewhere better."]} />
           <dl className="mt-8 grid gap-4 text-[13.5px] text-text-secondary sm:grid-cols-3">

@@ -3,7 +3,7 @@ import { Barcode, Boxes, CalendarRange, ClipboardList, FileSpreadsheet, FileText
 import { ProductPreview } from "@/components/marketing/ProductPreview";
 import { Reveal } from "@/components/marketing/Reveal";
 import { StratoPreview } from "@/components/marketing/StratoPreview";
-import { CtaBand, FeatureGrid, PageHero, Rule, SectionTitle, container } from "@/components/marketing/shared";
+import { CtaBand, FeatureGrid, PageHero, SectionTitle, container } from "@/components/marketing/shared";
 
 export const metadata: Metadata = {
   title: "Product · cumulusOS",
@@ -55,8 +55,7 @@ export default function ProductPage() {
       <section id="strato" className="scroll-mt-16 border-t border-border bg-surface">
         <div className={`${container} grid items-center gap-12 py-20 md:py-28 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-16`}>
           <Reveal>
-            <Rule />
-            <h2 className="display mt-5">Ask for the change. Approve it once.</h2>
+            <h2 className="display">Ask for the change. Approve it once.</h2>
             <p className="lede mt-4">Strato reads your items, BOMs and movements, drafts the change, and shows it in the table before anything is written.</p>
             <ul className="mt-8 flex flex-col gap-5">
               {STRATO_POINTS.map((p) => (

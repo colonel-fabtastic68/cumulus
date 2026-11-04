@@ -513,13 +513,6 @@ input[type="number"]::-webkit-outer-spin-button {
   color: var(--text-secondary);
   max-width: 34em;
 }
-/* The 24×3 red rule that opens a section in place of a label. */
-.rule {
-  display: block;
-  width: 24px;
-  height: 3px;
-  background: var(--brand-red);
-}
 
 /* Race patterns: one per section, never behind body text, always aria-hidden. */
 .pat-checker {

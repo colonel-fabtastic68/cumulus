@@ -3,7 +3,7 @@ import { ArrowDownToLine, ArrowUpFromLine, FileSpreadsheet, KeyRound, Plug, Refr
 import { BrandMark, type BrandId } from "@/components/marketing/IntegrationLogos";
 import { Reveal } from "@/components/marketing/Reveal";
 import { SavingsCalculator } from "@/components/marketing/SavingsCalculator";
-import { CheckList, CtaBand, FeatureGrid, PageHero, Rule, SectionTitle, container } from "@/components/marketing/shared";
+import { CheckList, CtaBand, FeatureGrid, PageHero, SectionTitle, container } from "@/components/marketing/shared";
 
 export const metadata: Metadata = {
   title: "Integrations · cumulusOS",
@@ -86,8 +86,7 @@ export default function ConnectPage() {
       <section className="border-t border-border">
         <div className={`${container} grid gap-12 py-20 md:py-28 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16`}>
           <Reveal>
-            <Rule />
-            <h2 className="display mt-5">The re-keying is the expensive part.</h2>
+            <h2 className="display">The re-keying is the expensive part.</h2>
             <p className="lede mt-4">Shops we work with spent six to ten hours a week per person typing orders from the store into the sheet, counts from the sheet into accounting, and corrections everywhere after every sale. Connecting the systems gives that time back on the first day, and the oversold orders stop with it.</p>
             <CheckList className="mt-8" items={["Orders arrive already matched to SKUs; nothing is typed twice.", "Stock levels correct themselves after every sale, on every channel.", "Month-end reconciliation becomes reading a log instead of rebuilding a sheet.", "Labels buy in one click from the order, at the rates your account already has."]} />
           </Reveal>

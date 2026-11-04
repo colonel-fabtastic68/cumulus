@@ -7,16 +7,10 @@ import { Reveal } from "./Reveal";
 /** Shared width for every marketing section. */
 export const container = "mx-auto w-full max-w-[1120px] px-6";
 
-/** The 24×3 red rule that opens a section. Decorative only. */
-export function Rule({ className, tone = "red" }: { className?: string; tone?: "red" | "band" }) {
-  return <span aria-hidden className={cn("rule", tone === "band" && "bg-band-text", className)} />;
-}
-
 export function SectionTitle({ title, body, className, align = "left" }: { title: ReactNode; body?: ReactNode; className?: string; align?: "left" | "center" }) {
   return (
     <Reveal className={cn("max-w-[720px]", align === "center" && "mx-auto flex flex-col items-center text-center", className)}>
-      <Rule />
-      <h2 className={cn("display mt-5", align === "center" && "mx-auto")}>{title}</h2>
+      <h2 className={cn("display", align === "center" && "mx-auto")}>{title}</h2>
       {body && <p className={cn("lede mt-4", align === "center" && "mx-auto")}>{body}</p>}
     </Reveal>
   );
@@ -28,8 +22,7 @@ export function PageHero({ title, body, primary = { href: "/#demo", label: "Book
     <section className="landing-wash border-b border-border">
       <div className={`${container} pt-14 pb-12 md:pt-20 md:pb-16`}>
         <div className="max-w-[800px]">
-          <Rule className="hero-in" />
-          <h1 className="hero hero-in mt-5" style={{ animationDelay: "60ms" }}>
+          <h1 className="hero hero-in" style={{ animationDelay: "60ms" }}>
             {title}
           </h1>
           <p className="lede hero-in mt-5" style={{ animationDelay: "120ms" }}>

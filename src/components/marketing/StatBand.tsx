@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Reveal } from "./Reveal";
-import { Rule, container } from "./shared";
+import { container } from "./shared";
 
 /** Three true figures about the product. Pilot results go here once teams agree to share them. */
 const FIGURES: Array<{ value: ReactNode; caption: string }> = [
@@ -16,8 +16,7 @@ export function StatBand() {
       <span aria-hidden className="absolute inset-y-0 right-0 w-1.5 bg-brand-red" />
       <div className={`${container} py-16 md:py-20`}>
         <Reveal>
-          <Rule tone="band" />
-          <h2 id="proof-title" className="display mt-5 text-band-text">
+          <h2 id="proof-title" className="display text-band-text">
             No implementation project. Just your parts, live.
           </h2>
         </Reveal>

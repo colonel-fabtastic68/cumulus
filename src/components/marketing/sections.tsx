@@ -4,7 +4,7 @@ import type { RuntimeConfig } from "@/lib/firebase-config";
 import { InquiryForm } from "./InquiryForm";
 import { Reveal } from "./Reveal";
 import { SessionCta } from "./SessionCta";
-import { CheckList, FeatureGrid, Rule, SectionTitle, container } from "./shared";
+import { CheckList, FeatureGrid, SectionTitle, container } from "./shared";
 
 /** The hero: copy on the left, a brand-black panel with a race number and two kit stats as the product shot. */
 export function Hero({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
@@ -12,8 +12,7 @@ export function Hero({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
     <section className="landing-wash">
       <div className={`${container} grid items-center gap-12 pt-14 pb-14 md:pt-20 md:pb-20 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)] lg:gap-14`}>
         <div>
-          <Rule className="hero-in" />
-          <h1 className="hero hero-in mt-5" style={{ animationDelay: "60ms" }}>
+          <h1 className="hero hero-in" style={{ animationDelay: "60ms" }}>
             Built for the people who build the cars.
           </h1>
           <p className="lede hero-in mt-5" style={{ animationDelay: "120ms" }}>
@@ -94,8 +93,7 @@ export function OtherIndustries() {
     <section id="contact" className="scroll-mt-16 border-t border-border bg-surface">
       <div className={`${container} grid gap-12 py-20 md:py-24 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16`}>
         <Reveal>
-          <Rule />
-          <h2 className="display mt-5">Not in vehicles? Let us have a look.</h2>
+          <h2 className="display">Not in vehicles? Let us have a look.</h2>
           <p className="lede mt-4">cumulusOS already runs a ranch store, an audio builder and a few shops that have nothing to do with cars. Tell us what you stock and what breaks, and we will tell you honestly whether it fits.</p>
           <CheckList className="mt-8" items={["Any product business with parts, assemblies, lots or multiple sales channels.", "A reply from a founder, usually the same business day.", "If it is a fit, a call to see it on your own data."]} />
         </Reveal>
