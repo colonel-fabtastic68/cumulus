@@ -1,221 +1,99 @@
-import { CalendarRange, Check, FileSpreadsheet, GitFork, Layers, PackageCheck, Plug, RotateCcw, Scale, Timer, Users } from "lucide-react";
+import { ArrowRight, CalendarRange, Flag, Gauge, Hammer, Layers, PackageCheck, Plug, QrCode, RotateCcw, Store, Truck, Users, Wrench } from "lucide-react";
+import { Button } from "@/components/ui";
 import type { RuntimeConfig } from "@/lib/firebase-config";
-import { StratoPreview } from "./StratoPreview";
-import { ProductPreview } from "./ProductPreview";
+import { BuildSheet } from "./BuildSheet";
+import { InquiryForm } from "./InquiryForm";
 import { Reveal } from "./Reveal";
-import { BrandMark, type BrandId } from "./IntegrationLogos";
 import { SessionCta } from "./SessionCta";
-import { WaitlistForm } from "./WaitlistForm";
-
-const container = "mx-auto w-full max-w-[1120px] px-6";
+import { CheckList, Eyebrow, FeatureGrid, SectionTitle, container } from "./shared";
 
 export function Hero({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
   return (
-    <section id="product" className={`${container} pt-16 pb-12 md:pt-24 md:pb-16`}>
-      <div className="max-w-[760px]">
-        <h1 className="hero-in text-[38px] font-semibold leading-[1.05] tracking-[-0.025em] text-text sm:text-[52px] md:text-[64px]">Inventory that keeps up with your team.</h1>
-        <p className="hero-in mt-6 max-w-[600px] text-[17px] leading-7 text-text-secondary md:text-[19px] md:leading-8" style={{ animationDelay: "80ms" }}>
-          cumulusOS tracks parts, BOMs, receiving and returns in one live workspace, and Strato makes the bulk changes you approve.
-        </p>
-        <div className="hero-in mt-8" style={{ animationDelay: "160ms" }}>
-          <SessionCta runtimeConfig={runtimeConfig} placement="hero" />
-        </div>
-        <p className="hero-in mt-5 text-[13.5px] text-text-tertiary" style={{ animationDelay: "240ms" }}>
-          Onboarding a few teams at a time, each with a workspace built around their own stock.
-        </p>
-      </div>
-      <Reveal className="mt-14 md:mt-20">
-        <ProductPreview className="shadow-[var(--shadow-bevel),var(--shadow-400)]" />
-      </Reveal>
-    </section>
-  );
-}
-
-const FEATURES = [
-  { icon: Scale, title: "Ledger-true stock", body: "Every change is a movement with the balance after it. Nothing edits on-hand directly, so the count on screen is the count on the shelf." },
-  { icon: Layers, title: "BOMs within BOMs", body: "Assemblies pull sub-assemblies from stock or explode down to base parts, with expected waste built into the requirement." },
-  { icon: PackageCheck, title: "Receiving and back-dating", body: "Book deliveries against suppliers with the date they really arrived. Lots keep their cost, so valuation stays honest." },
-  { icon: Timer, title: "Shelf life and FIFO lots", body: "Batches carry their expiry, the oldest leave first, and the shelf-life report shows what to move before it goes to waste." },
-  { icon: RotateCcw, title: "Returns and write-offs", body: "RMAs, inspections and write-offs land in the same ledger as sales and builds, with the reason on each line." },
-  { icon: CalendarRange, title: "Min, max and seasonality", body: "Reorder points, days of cover and monthly demand curves tell you what to order next and when." },
-  { icon: FileSpreadsheet, title: "Imports that explain themselves", body: "Map any export, create custom fields on the fly, and review exactly which fields change before a row lands." },
-  { icon: Users, title: "Live for the whole team", body: "Owners, admins, members and viewers work on the same data in the browser, with presence and an activity log." },
-];
-
-export function Features() {
-  return (
-    <section id="features" className="scroll-mt-16 border-t border-border bg-surface">
-      <div className={`${container} py-20 md:py-28`}>
-        <Reveal className="max-w-[640px]">
-          <h2 className="text-[30px] font-semibold leading-[1.1] tracking-[-0.02em] text-text md:text-[40px]">Built for the way stock actually moves.</h2>
-          <p className="mt-4 text-[16px] leading-7 text-text-secondary md:text-[17px]">Every number comes from a ledger, so what you see is what is on the shelf.</p>
-        </Reveal>
-        <ul className="mt-14 grid gap-x-12 gap-y-10 md:grid-cols-2">
-          {FEATURES.map(({ icon: Icon, title, body }, i) => (
-            <Reveal key={title} delay={(i % 2) * 60}>
-              <li className="flex gap-4">
-                <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-surface-subdued text-icon shadow-[var(--shadow-bevel)]">
-                  <Icon className="h-4 w-4" />
-                </span>
-                <div>
-                  <h3 className="text-[15.5px] font-semibold text-text">{title}</h3>
-                  <p className="mt-1 text-[14px] leading-6 text-text-secondary">{body}</p>
-                </div>
-              </li>
-            </Reveal>
-          ))}
-        </ul>
-      </div>
-    </section>
-  );
-}
-
-const STRATO_POINTS = [
-  { title: "Plain language in, one proposal out", body: "A dozen price changes is one approval, not twelve. Per-item values, percentages and filters all fit in a single call." },
-  { title: "Preview in the table", body: "Proposed rows turn orange in your inventory. Flip between current and proposed values, then apply from either side." },
-  { title: "Reads run, writes wait", body: "Strato looks things up on its own. Anything that changes data waits for you, or for a teammate whose role allows it." },
-];
-
-export function StratoSection() {
-  return (
-    <section id="strato" className="scroll-mt-16 border-t border-border">
-      <div className={`${container} grid items-center gap-12 py-20 md:py-28 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-16`}>
-        <Reveal>
-          <div className="text-[12px] font-[550] uppercase tracking-[0.08em] text-text-tertiary">Strato</div>
-          <h2 className="mt-3 text-[30px] font-semibold leading-[1.1] tracking-[-0.02em] text-text md:text-[40px]">Ask for the change. Approve it once.</h2>
-          <p className="mt-4 text-[16px] leading-7 text-text-secondary md:text-[17px]">Strato reads your items, BOMs and movements, drafts the change, and shows it in the table before anything is written.</p>
-          <ul className="mt-8 flex flex-col gap-5">
-            {STRATO_POINTS.map((p) => (
-              <li key={p.title} className="border-l-2 border-border pl-4">
-                <h3 className="text-[15px] font-semibold text-text">{p.title}</h3>
-                <p className="mt-1 text-[14px] leading-6 text-text-secondary">{p.body}</p>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-8 text-[13px] text-text-tertiary">Runs on Gemini Flash with your own API key. Other agents can use the same tools over MCP.</p>
-        </Reveal>
-        <Reveal delay={100}>
-          <StratoPreview />
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
-const CONNECTIONS: Array<{ id: BrandId; name: string; body: string }> = [
-  { id: "shopify", name: "Shopify", body: "Products and orders come in, stock levels and edits go out, and webhooks keep both sides live." },
-  { id: "woocommerce", name: "WooCommerce", body: "The same two-way sync for WordPress stores: categories, prices and status pushed, orders pulled." },
-  { id: "square", name: "Square", body: "The item library comes in by SKU, with in-store counts as opening quantities when you want them." },
-  { id: "clover", name: "Clover", body: "Inventory, prices and product codes from the register, matched by SKU, synced nightly." },
-  { id: "quickbooks", name: "QuickBooks Online", body: "Products and services in by SKU with sales price, purchase cost and reorder point." },
-  { id: "shippo", name: "Shippo", body: "Rates, labels and tracking for every carrier on your Shippo account when you ship an order." },
-  { id: "easypost", name: "EasyPost", body: "Rate-shop the carriers on your account, buy the label and follow the parcel to the door." },
-];
-
-export function Integrations() {
-  return (
-    <section id="integrations" className="scroll-mt-16 border-t border-border bg-surface">
-      <div className={`${container} py-20 md:py-24`}>
-        <Reveal className="max-w-[640px]">
-          <h2 className="text-[30px] font-semibold leading-[1.1] tracking-[-0.02em] text-text md:text-[40px]">Connects to what you already run.</h2>
-          <p className="mt-4 text-[16px] leading-7 text-text-secondary md:text-[17px]">Stores, registers, accounting and carriers plug in under Integrations. Credentials are checked with the platform and kept on the server, never in the browser.</p>
-        </Reveal>
-        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {CONNECTIONS.map((c, i) => (
-            <Reveal key={c.id} delay={(i % 4) * 50}>
-              <div className="flex h-full flex-col rounded-[var(--radius)] bg-bg p-5 shadow-[var(--shadow-bevel)]">
-                <div className="flex items-center gap-3">
-                  <BrandMark id={c.id} size={28} />
-                  <h3 className="text-[15px] font-semibold text-text">{c.name}</h3>
-                </div>
-                <p className="mt-3 text-[13.5px] leading-6 text-text-secondary">{c.body}</p>
-              </div>
-            </Reveal>
-          ))}
-          <Reveal delay={150}>
-            <div className="flex h-full flex-col justify-center gap-3 rounded-[var(--radius)] border border-dashed border-border p-5">
-              <p className="flex items-start gap-3 text-[13.5px] leading-6 text-text-secondary">
-                <FileSpreadsheet className="mt-1 h-4 w-4 shrink-0 text-icon" />
-                Any spreadsheet imports: columns map themselves and unknown ones become custom fields.
-              </p>
-              <p className="flex items-start gap-3 text-[13.5px] leading-6 text-text-secondary">
-                <Plug className="mt-1 h-4 w-4 shrink-0 text-icon" />
-                Other agents reach every Strato tool over MCP, behind a token you set.
-              </p>
-            </div>
-          </Reveal>
-        </div>
-        <p className="mt-6 text-[12.5px] text-text-tertiary">Brand names and marks belong to their owners and appear only to show that the connection exists.</p>
-      </div>
-    </section>
-  );
-}
-
-const STEPS = [
-  { icon: FileSpreadsheet, title: "Import the sheet you already have", body: "Paste or upload. Columns map themselves, custom fields are one click, and the review shows what changes before it lands." },
-  { icon: Users, title: "Invite the team", body: "Send each teammate an email invite. They sign in with a password or an emailed link, and everyone sees the same numbers live." },
-  { icon: GitFork, title: "Hand the bulk work to Strato", body: "Price updates, cycle counts, receiving, BOM edits. One request, one approval, and the ledger records who did what." },
-];
-
-export function PilotSteps() {
-  return (
-    <section id="pilot" className="scroll-mt-16 border-t border-border">
-      <div className={`${container} grid gap-10 py-20 md:py-28 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16`}>
-        <Reveal>
-          <h2 className="text-[30px] font-semibold leading-[1.1] tracking-[-0.02em] text-text md:text-[40px]">From spreadsheet to live workspace in an afternoon.</h2>
-          <p className="mt-4 text-[16px] leading-7 text-text-secondary md:text-[17px]">Onboarding starts with your own data, not a tutorial.</p>
-        </Reveal>
-        <ol className="flex flex-col">
-          {STEPS.map(({ icon: Icon, title, body }, i) => (
-            <Reveal key={title} delay={i * 70}>
-              <li className="flex gap-5 border-t border-border py-7 first:border-t-0 first:pt-0">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-surface text-icon shadow-[var(--shadow-bevel)]">
-                  <Icon className="h-4.5 w-4.5" />
-                </span>
-                <div>
-                  <h3 className="text-[17px] font-semibold text-text">{title}</h3>
-                  <p className="mt-1.5 text-[14.5px] leading-6 text-text-secondary">{body}</p>
-                </div>
-              </li>
-            </Reveal>
-          ))}
-        </ol>
-      </div>
-    </section>
-  );
-}
-
-const WAITLIST_POINTS = [
-  "Tell us what you make, sell and ship, and what you track it in today.",
-  "We set up a workspace around it, import your data with you, and connect the stores, registers and carriers you use.",
-  "You get a system that fits your business, and a direct line to the people building it.",
-];
-
-export function Waitlist() {
-  return (
-    <section id="waitlist" className="scroll-mt-16 border-t border-border bg-surface">
-      <div className={`${container} grid gap-12 py-20 md:py-28 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16`}>
-        <Reveal>
-          <div className="text-[12px] font-[550] uppercase tracking-[0.08em] text-text-tertiary">Waitlist</div>
-          <h2 className="mt-3 text-[30px] font-semibold leading-[1.1] tracking-[-0.02em] text-text md:text-[40px]">Built around your stock, not a template.</h2>
-          <p className="mt-4 text-[16px] leading-7 text-text-secondary md:text-[17px]">
-            We are onboarding a few teams at a time and shaping each workspace to the business behind it: your part numbers and BOMs, the stores and registers you sell through, the carriers you ship with, and the reports you actually read.
+    <section className="landing-wash">
+      <div className={`${container} grid items-center gap-12 pt-14 pb-14 md:pt-20 md:pb-20 lg:grid-cols-[minmax(0,7fr)_minmax(0,6fr)] lg:gap-14`}>
+        <div className="max-w-[640px]">
+          <Eyebrow className="hero-in">Inventory for motorsport and aftermarket manufacturers</Eyebrow>
+          <h1 className="hero-in mt-4 text-[38px] font-semibold leading-[1.04] tracking-[-0.025em] text-text sm:text-[50px] md:text-[60px]" style={{ animationDelay: "60ms" }}>
+            Built for the people who build the cars.
+          </h1>
+          <p className="hero-in mt-6 max-w-[560px] text-[17px] leading-7 text-text-secondary md:text-[19px] md:leading-8" style={{ animationDelay: "120ms" }}>
+            cumulusOS runs parts, BOMs, builds, receiving and orders for chassis shops, race teams and aftermarket brands, with Strato drafting the bulk work for your approval.
           </p>
-          <ul className="mt-8 flex flex-col gap-3 text-[14px] leading-6 text-text-secondary">
-            {WAITLIST_POINTS.map((p) => (
-              <li key={p} className="flex gap-3">
-                <Check className="mt-1 h-4 w-4 shrink-0 text-success" />
-                {p}
-              </li>
-            ))}
-          </ul>
+          <CheckList className="hero-in mt-7" size="lg" items={[<><strong className="font-semibold text-text">Every part traced</strong> to its lot, heat number and build.</>, <><strong className="font-semibold text-text">Store, counter and accounting in sync</strong>, so stock is never oversold.</>, <><strong className="font-semibold text-text">Live for the whole shop in an afternoon</strong>, from the spreadsheet you have.</>]} />
+          <div className="hero-in mt-8" style={{ animationDelay: "200ms" }}>
+            <SessionCta runtimeConfig={runtimeConfig} placement="hero" />
+          </div>
+        </div>
+        <Reveal delay={150}>
+          <BuildSheet className="shadow-[var(--shadow-bevel),var(--shadow-400)]" />
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+const MOTORSPORT = [
+  { icon: Hammer, title: "Builds that eat the BOM", body: "A chassis or a race-ready car pulls tubes, brackets, fasteners and sub-assemblies from stock in one build, with scrap allowances built in." },
+  { icon: Flag, title: "Heat numbers and lot traceability", body: "Every tube and casting keeps its heat or lot number from receipt to the finished car, so a cert request or a recall takes minutes." },
+  { icon: Truck, title: "Shop to trailer and back", body: "Transfers move spares to the hauler for a race weekend and back again, with par levels per trailer and a count that matches the paddock." },
+  { icon: Wrench, title: "One-off and customer builds", body: "Quotes become builds, builds become shipments, and each customer's car carries its own list of what went into it." },
+];
+
+export function MotorsportSection() {
+  return (
+    <section id="motorsport" className="scroll-mt-16 border-t border-border bg-surface">
+      <div className={`${container} grid gap-12 py-20 md:py-28 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16`}>
+        <SectionTitle eyebrow="Motorsport" title="From the tube rack to the finish line, every part accounted for." body="Chassis builders, race teams and performance parts makers run on tight timelines and tighter traceability. cumulusOS keeps the count honest while the shop keeps moving." />
+        <div>
+          <FeatureGrid items={MOTORSPORT} />
+          <Button variant="plain" href="/motorsport" iconRight={<ArrowRight />} className="mt-8">
+            How motorsport shops use cumulusOS
+          </Button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+const AUTOMOTIVE = [
+  { icon: Layers, title: "Thousands of SKUs, by fitment and finish", body: "Wheels, suspension, exhaust and lighting in every size, offset and color, with custom fields for fitment and a barcode on each one." },
+  { icon: Store, title: "Online, counter and wholesale in one count", body: "Shopify or WooCommerce, the Square register and dealer orders all pull from the same stock, so no channel oversells another." },
+  { icon: PackageCheck, title: "Containers received the day they landed", body: "Back-dated receiving with landed cost per lot, FIFO or average, so margins hold up when freight changes." },
+  { icon: RotateCcw, title: "Fitment returns handled, not argued", body: "RMAs move through inspection to restock or write-off with the reason on each line, and the ledger shows the real return rate per SKU." },
+];
+
+export function AutomotiveSection() {
+  return (
+    <section id="automotive" className="scroll-mt-16 border-t border-border">
+      <div className={`${container} grid gap-12 py-20 md:py-28 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16`}>
+        <SectionTitle eyebrow="Aftermarket automotive" title="Manufacturers and dealers who sell through every channel at once." body="Aftermarket brands live or die on stock accuracy across the web store, the counter and the dealer network. cumulusOS is the one count all of them read." />
+        <div>
+          <FeatureGrid items={AUTOMOTIVE} />
+          <Button variant="plain" href="/automotive" iconRight={<ArrowRight />} className="mt-8">
+            How aftermarket brands use cumulusOS
+          </Button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function OtherIndustries() {
+  return (
+    <section id="contact" className="scroll-mt-16 border-t border-border bg-surface">
+      <div className={`${container} grid gap-12 py-20 md:py-24 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16`}>
+        <Reveal>
+          <Eyebrow>Not in the vehicle space?</Eyebrow>
+          <h2 className="mt-3 text-[30px] font-semibold leading-[1.1] tracking-[-0.02em] text-text md:text-[40px]">If you make, stock or ship things, let us have a look.</h2>
+          <p className="mt-4 text-[16px] leading-7 text-text-secondary md:text-[17px]">cumulusOS already runs a ranch store, an audio builder and a few shops that have nothing to do with cars. Tell us what you stock and what breaks, and we will tell you honestly whether it fits.</p>
+          <CheckList className="mt-8" items={["Any product business with parts, assemblies, lots or multiple sales channels.", "A reply from a founder, usually the same business day.", "If it is a fit, a call to see it on your own data."]} />
         </Reveal>
         <Reveal delay={100}>
           <div className="rounded-[var(--radius-lg)] bg-bg p-6 shadow-[var(--shadow-bevel),var(--shadow-card)] md:p-8">
-            <h3 className="text-[20px] font-semibold tracking-[-0.01em] text-text">Join the waitlist</h3>
-            <p className="mt-1.5 text-[14px] leading-6 text-text-secondary">A few lines about your business is plenty. We come back with questions, then build.</p>
+            <h3 className="text-[20px] font-semibold tracking-[-0.01em] text-text">Book a call about your inventory</h3>
+            <p className="mt-1.5 text-[14px] leading-6 text-text-secondary">A few lines is plenty. We come back with questions and a time.</p>
             <div className="mt-6">
-              <WaitlistForm />
+              <InquiryForm submitLabel="Send and book a call" />
             </div>
           </div>
         </Reveal>
@@ -223,3 +101,45 @@ export function Waitlist() {
     </section>
   );
 }
+
+const STEPS = [
+  { icon: CalendarRange, title: "Book thirty minutes", body: "Bring a spreadsheet, an export from your store or accounting, or a few part numbers. We show cumulusOS on them, not on a sample." },
+  { icon: Gauge, title: "Import the data you already have", body: "Columns map themselves, unknown ones become custom fields, and Strato reads paper count sheets and PDFs too. The review shows every change before it lands." },
+  { icon: Plug, title: "Connect the store, the register and the books", body: "Shopify, WooCommerce, Square, Clover and QuickBooks plug in under Integrations. Stock levels push out, orders come in, and webhooks keep both sides live." },
+  { icon: Users, title: "Invite the shop and hand Strato the bulk work", body: "Teammates sign in with an emailed link and see the same numbers live. Price updates, counts and reorders become one request and one approval." },
+];
+
+export function Steps() {
+  return (
+    <section id="steps" className="scroll-mt-16 border-t border-border">
+      <div className={`${container} py-20 md:py-28`}>
+        <SectionTitle eyebrow="Getting started" title="From spreadsheet to a live shop floor in an afternoon." body="Onboarding starts with your own data, not a tutorial, and we do the first import with you." align="center" />
+        <ol className="mt-14 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          {STEPS.map(({ icon: Icon, title, body }, i) => (
+            <Reveal key={title} delay={i * 70}>
+              <li className="relative flex h-full flex-col rounded-[var(--radius-lg)] bg-surface p-6 shadow-[var(--shadow-bevel)]">
+                <div className="flex items-center justify-between">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-bg text-accent shadow-[var(--shadow-bevel)]">
+                    <Icon className="h-4.5 w-4.5" />
+                  </span>
+                  <span className="text-[28px] font-semibold leading-none tracking-[-0.03em] text-accent/40">0{i + 1}</span>
+                </div>
+                <h3 className="mt-5 text-[16.5px] font-semibold leading-6 text-text">{title}</h3>
+                <p className="mt-2 text-[14px] leading-6 text-text-secondary">{body}</p>
+              </li>
+            </Reveal>
+          ))}
+        </ol>
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+          <Button variant="primary" size="lg" href="/#demo" iconRight={<ArrowRight />}>
+            Book a demo
+          </Button>
+          <Button size="lg" href="/product" icon={<QrCode />}>
+            See every feature
+          </Button>
+        </div>
+      </div>
+    </section>
+  );
+}
+

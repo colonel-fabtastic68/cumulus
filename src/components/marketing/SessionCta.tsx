@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui";
+import { CONTACT_EMAIL } from "@/lib/contact";
 import { setRuntimeConfig, type RuntimeConfig } from "@/lib/firebase-config";
 import { getFirebaseApp, getFirebaseAuth } from "@/lib/store/firestore";
 import { APP_HOME } from "@/lib/auth-routes";
@@ -12,7 +13,7 @@ type Session = "none" | "signed-out" | "signed-in";
 /**
  * Calls to action that know about the visitor: local installs have no accounts,
  * a signed-in visitor gets a shortcut into the workspace, everyone else is
- * pointed at the waitlist, with sign-in for teams that already have a workspace.
+ * pointed at the demo booking, with sign-in for teams that already have a workspace.
  */
 export function SessionCta({ runtimeConfig, placement }: { runtimeConfig: RuntimeConfig; placement: "nav" | "hero" }) {
   setRuntimeConfig(runtimeConfig);
@@ -46,12 +47,19 @@ export function SessionCta({ runtimeConfig, placement }: { runtimeConfig: Runtim
 
   if (placement === "nav") {
     return (
-      <div className="flex items-center gap-2">
-        <Button size="md" variant="tertiary" href="/sign-in">
-          Sign in
-        </Button>
-        <Button size="md" variant="primary" href="/#waitlist">
-          Join the waitlist
+      <div className="flex items-center gap-1.5">
+        <span className="hidden lg:inline-flex">
+          <Button size="md" variant="tertiary" href={`mailto:${CONTACT_EMAIL}`}>
+            Contact
+          </Button>
+        </span>
+        <span className="hidden md:inline-flex">
+          <Button size="md" variant="tertiary" href="/sign-in">
+            Sign in
+          </Button>
+        </span>
+        <Button size="md" variant="primary" href="/#demo">
+          Book a demo
         </Button>
       </div>
     );
@@ -59,11 +67,11 @@ export function SessionCta({ runtimeConfig, placement }: { runtimeConfig: Runtim
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <Button variant="primary" size="lg" href="/#waitlist" iconRight={<ArrowRight />}>
-        Join the waitlist
+      <Button variant="primary" size="lg" href="/#demo" iconRight={<ArrowRight />}>
+        Book a demo
       </Button>
-      <Button size="lg" href="/sign-in">
-        Sign in
+      <Button size="lg" href="/product">
+        See the product
       </Button>
     </div>
   );

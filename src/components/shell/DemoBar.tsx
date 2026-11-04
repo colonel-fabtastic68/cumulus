@@ -19,8 +19,8 @@ export function DemoBar() {
         <Button size="sm" variant="tertiary" onClick={() => leave()}>
           Leave demo
         </Button>
-        <Button size="sm" variant="primary" onClick={() => leave("/#waitlist")}>
-          Join the waitlist
+        <Button size="sm" variant="primary" onClick={() => leave("/#demo")}>
+          Book a demo
         </Button>
       </div>
     </div>

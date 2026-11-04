@@ -134,6 +134,10 @@ export function hasFeature(inst: Pick<InstanceDef, "features"> | null | undefine
 export const SHARED_ONLY_PREFIXES = [
   "/baker",
   "/mitch",
+  "/product",
+  "/motorsport",
+  "/automotive",
+  "/connect",
   "/book",
   "/demo",
   "/dpa",

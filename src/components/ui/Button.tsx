@@ -46,7 +46,7 @@ const styles: Record<Exclude<ButtonVariant, "critical" | "success">, Record<Butt
     success: "bg-transparent text-success hover:bg-success-soft disabled:text-text-disabled",
   },
   plain: {
-    auto: "bg-transparent text-accent hover:bg-[rgba(0,91,211,0.08)] hover:text-accent-hover active:bg-[rgba(0,91,211,0.14)] disabled:text-text-disabled",
+    auto: "bg-transparent text-accent hover:bg-[color-mix(in_srgb,var(--accent)_8%,transparent)] hover:text-accent-hover active:bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] disabled:text-text-disabled",
     critical: "bg-transparent text-critical hover:bg-critical-soft disabled:text-text-disabled",
     success: "bg-transparent text-success hover:bg-success-soft disabled:text-text-disabled",
   },

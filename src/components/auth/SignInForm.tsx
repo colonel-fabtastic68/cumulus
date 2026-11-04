@@ -149,10 +149,10 @@ export function SignInForm() {
       {!needsEmail && !instance && (
         <p className="mt-5 text-center text-[13px] leading-5 text-text-secondary">
           New to cumulusOS?{" "}
-          <Link href="/#waitlist" className="font-medium text-accent hover:underline">
-            Join the waitlist
+          <Link href="/#demo" className="font-medium text-accent hover:underline">
+            Book a demo
           </Link>{" "}
-          and we will set up your workspace.
+          and we will set up your workspace with you.
         </p>
       )}
     </AuthPage>

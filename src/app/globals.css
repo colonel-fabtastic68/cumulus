@@ -429,6 +429,23 @@ input[type="number"]::-webkit-outer-spin-button {
   border-radius: 4px;
 }
 
+/* Marketing site: the accent turns racing red; black primaries, white surfaces and the Polaris shadows stay. */
+.landing {
+  --accent: #c4161c;
+  --accent-hover: #9c1016;
+  --accent-soft: #fbe9e9;
+  --info: #8e1f0b;
+  --info-soft: #fbe9e9;
+}
+.landing-wash {
+  background:
+    radial-gradient(900px 420px at 12% -10%, rgba(196, 22, 28, 0.09), transparent 70%),
+    radial-gradient(700px 360px at 95% 10%, rgba(196, 22, 28, 0.05), transparent 70%);
+}
+.landing-rule {
+  background: linear-gradient(90deg, var(--accent), rgba(196, 22, 28, 0.15));
+}
+
 /* Landing page: blocks fade up once as they scroll into view; the hero enters on load. */
 .reveal {
   opacity: 0;

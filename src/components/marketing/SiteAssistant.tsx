@@ -79,7 +79,7 @@ export function SiteAssistant() {
             </button>
           </form>
           <p className="px-4 pb-2 text-[11px] text-text-tertiary">
-            Want to talk to a person? <Link href="/#waitlist" className="text-accent hover:underline">Join the waitlist</Link> and we will be in touch.
+            Want to talk to a person? <Link href="/#demo" className="text-accent hover:underline">Book a demo</Link> or write to hello@cumulusos.com.
           </p>
         </section>
       )}

@@ -25,10 +25,10 @@ export default function DemoPage() {
       ) : (
         <div className="mt-8 max-w-[640px] rounded-[var(--radius-lg)] bg-surface p-6 shadow-[var(--shadow-card)]">
           <h2 className="text-[16px] font-semibold text-text">Booking is being set up</h2>
-          <p className="mt-2 text-[14px] leading-6 text-text-secondary">The calendar is not connected yet. Join the waitlist in the meantime and we will be in touch to set up a time.</p>
+          <p className="mt-2 text-[14px] leading-6 text-text-secondary">The calendar is not connected yet. Send us a note in the meantime and we will come back with a few times.</p>
           <div className="mt-5 flex flex-wrap gap-3">
-            <Button variant="primary" size="lg" href="/#waitlist">
-              Join the waitlist
+            <Button variant="primary" size="lg" href="/#contact">
+              Send us a note
             </Button>
             <Button size="lg" href="/sign-in">
               Sign in

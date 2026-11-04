@@ -65,8 +65,8 @@ export default function DemoPage() {
             <Button size="lg" href="/book">
               Book a demo
             </Button>
-            <Link href="/#waitlist" className="inline-flex items-center text-[13px] font-medium text-text hover:underline">
-              Join the waitlist
+            <Link href="/#contact" className="inline-flex items-center text-[13px] font-medium text-text hover:underline">
+              Or send us a note
             </Link>
           </div>
         </div>
