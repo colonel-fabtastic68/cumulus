@@ -72,7 +72,7 @@ function ChannelCard() {
 export default function AutomotivePage() {
   return (
     <>
-      <PageHero eyebrow="Aftermarket automotive" title="Manufacturers and dealers who sell through every channel at once." body="Aftermarket brands live or die on stock accuracy across the web store, the counter and the dealer network. cumulusOS is the one count all of them read." secondary={{ href: "/connect", label: "See integrations" }}>
+      <PageHero title="Built for every channel at once." body="Aftermarket brands live or die on stock accuracy across the web store, the counter and the dealer network. cumulusOS is the one count all of them read." secondary={{ href: "/connect", label: "See integrations" }}>
         <Reveal className="mt-14 grid gap-8 md:mt-16 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:items-center">
           <CheckList size="lg" items={["Thousands of SKUs by fitment and finish, each with a barcode.", "Web store, register and dealer orders on one count that never oversells.", "Containers received at landed cost on the day they arrived.", "Returns inspected and restocked in the same ledger as the sale."]} />
           <ChannelCard />
@@ -81,7 +81,7 @@ export default function AutomotivePage() {
 
       <section className="border-b border-border">
         <div className={`${container} py-20 md:py-28`}>
-          <SectionTitle eyebrow="On the floor" title="Four problems every aftermarket brand has told us about." body="And what each one looks like once there is a single count." />
+          <SectionTitle title="Four problems every brand tells us about." body="And what each one looks like once there is a single count." />
           <div className="mt-12">
             <PainPoints items={PAINS} />
           </div>
@@ -90,7 +90,7 @@ export default function AutomotivePage() {
 
       <section className="bg-surface">
         <div className={`${container} py-20 md:py-28`}>
-          <SectionTitle eyebrow="Built in" title="The pieces aftermarket brands lean on most." />
+          <SectionTitle title="What aftermarket brands lean on." />
           <FeatureGrid items={FEATURES} columns={3} className="mt-14" />
         </div>
       </section>

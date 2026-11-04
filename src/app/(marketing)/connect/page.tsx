@@ -3,7 +3,7 @@ import { ArrowDownToLine, ArrowUpFromLine, FileSpreadsheet, KeyRound, Plug, Refr
 import { BrandMark, type BrandId } from "@/components/marketing/IntegrationLogos";
 import { Reveal } from "@/components/marketing/Reveal";
 import { SavingsCalculator } from "@/components/marketing/SavingsCalculator";
-import { CheckList, CtaBand, FeatureGrid, PageHero, SectionTitle, container } from "@/components/marketing/shared";
+import { CheckList, CtaBand, FeatureGrid, PageHero, Rule, SectionTitle, container } from "@/components/marketing/shared";
 
 export const metadata: Metadata = {
   title: "Integrations · cumulusOS",
@@ -32,7 +32,7 @@ const HOW = [
 export default function ConnectPage() {
   return (
     <>
-      <PageHero eyebrow="Integrations" title="Connects to what you already run, in an afternoon." body="Stores, registers, accounting and carriers plug in under Integrations. Stock levels push out, orders come in, and the hours spent re-keying between systems go back to the shop." secondary={{ href: "/product", label: "See the product" }}>
+      <PageHero title="Connects to what you already run." body="Stores, registers, accounting and carriers plug in under Integrations. Stock levels push out, orders come in, and the hours spent re-keying between systems go back to the shop." secondary={{ href: "/product", label: "See the product" }}>
         <Reveal className="mt-12 flex flex-wrap items-center gap-x-8 gap-y-4 md:mt-14">
           {CONNECTIONS.map((c) => (
             <span key={c.id} className="inline-flex items-center gap-2.5 text-[14px] font-medium text-text">
@@ -45,7 +45,7 @@ export default function ConnectPage() {
 
       <section>
         <div className={`${container} py-20 md:py-28`}>
-          <SectionTitle eyebrow="Connections" title="Each one does a specific job, and says so." body="No connector pretends to do everything. Each card below says what comes in, what goes out, and how often." />
+          <SectionTitle title="Each one does a specific job." body="No connector pretends to do everything. Each card below says what comes in, what goes out, and how often." />
           <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {CONNECTIONS.map((c, i) => (
               <Reveal key={c.id} delay={(i % 3) * 50}>
@@ -53,7 +53,7 @@ export default function ConnectPage() {
                   <div className="flex items-center gap-3">
                     <BrandMark id={c.id} size={28} />
                     <h3 className="text-[15px] font-semibold text-text">{c.name}</h3>
-                    <span className="ml-auto rounded-full bg-accent-soft px-2 py-0.5 text-[11.5px] font-medium text-accent">{c.direction}</span>
+                    <span className="ml-auto rounded-full bg-accent-soft px-2 py-0.5 text-[11.5px] font-medium text-brand-red-deep">{c.direction}</span>
                   </div>
                   <p className="mt-3 text-[13.5px] leading-6 text-text-secondary">{c.body}</p>
                 </div>
@@ -78,7 +78,7 @@ export default function ConnectPage() {
 
       <section className="border-t border-border bg-surface">
         <div className={`${container} py-20 md:py-28`}>
-          <SectionTitle eyebrow="How a sync works" title="Connect, import, stay live, push back." body="The same six steps for every platform, so the second connection takes less time than the first." />
+          <SectionTitle title="Connect, import, stay live, push back." body="The same six steps for every platform, so the second connection takes less time than the first." />
           <FeatureGrid items={HOW} columns={3} className="mt-14" />
         </div>
       </section>
@@ -86,9 +86,9 @@ export default function ConnectPage() {
       <section className="border-t border-border">
         <div className={`${container} grid gap-12 py-20 md:py-28 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16`}>
           <Reveal>
-            <div className="text-[12px] font-[600] uppercase tracking-[0.1em] text-accent">Time and money</div>
-            <h2 className="mt-3 text-[30px] font-semibold leading-[1.1] tracking-[-0.02em] text-text md:text-[40px]">The re-keying is the expensive part.</h2>
-            <p className="mt-4 text-[16px] leading-7 text-text-secondary md:text-[17px]">Shops we work with spent six to ten hours a week per person typing orders from the store into the sheet, counts from the sheet into accounting, and corrections everywhere after every sale. Connecting the systems gives that time back on the first day, and the oversold orders stop with it.</p>
+            <Rule />
+            <h2 className="display mt-5">The re-keying is the expensive part.</h2>
+            <p className="lede mt-4">Shops we work with spent six to ten hours a week per person typing orders from the store into the sheet, counts from the sheet into accounting, and corrections everywhere after every sale. Connecting the systems gives that time back on the first day, and the oversold orders stop with it.</p>
             <CheckList className="mt-8" items={["Orders arrive already matched to SKUs; nothing is typed twice.", "Stock levels correct themselves after every sale, on every channel.", "Month-end reconciliation becomes reading a log instead of rebuilding a sheet.", "Labels buy in one click from the order, at the rates your account already has."]} />
           </Reveal>
           <Reveal delay={100}>

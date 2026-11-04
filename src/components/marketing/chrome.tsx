@@ -84,7 +84,7 @@ export function MarketingFooter() {
 function FooterColumn({ title, links }: { title: string; links: Array<{ href: string; label: string }> }) {
   return (
     <nav aria-label={title}>
-      <div className="text-[12px] font-[600] uppercase tracking-[0.08em] text-text-tertiary">{title}</div>
+      <div className="text-[13px] font-semibold text-text">{title}</div>
       <ul className="mt-3 flex flex-col gap-2 text-[13.5px] text-text-secondary">
         {links.map((l) => (
           <li key={l.href + l.label}>

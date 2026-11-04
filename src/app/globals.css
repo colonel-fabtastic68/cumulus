@@ -103,6 +103,14 @@
   --color-critical-fill: var(--critical-fill);
   --color-magic: var(--magic);
   --color-magic-soft: var(--magic-soft);
+  --color-brand-red: var(--brand-red);
+  --color-brand-red-deep: var(--brand-red-deep);
+  --color-brand-black: var(--brand-black);
+  --color-band-text: var(--band-text);
+  --color-band-text-secondary: var(--band-text-secondary);
+  --color-band-border: var(--band-border);
+  --color-papaya: var(--papaya);
+  --color-on-papaya: var(--on-papaya);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
   --color-text: var(--text);
@@ -131,6 +139,7 @@
   --radius-lg: var(--radius-lg);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
+  --font-display: var(--font-display);
 }
 
 html {
@@ -442,8 +451,88 @@ input[type="number"]::-webkit-outer-spin-button {
     radial-gradient(900px 420px at 12% -10%, rgba(196, 22, 28, 0.09), transparent 70%),
     radial-gradient(700px 360px at 95% 10%, rgba(196, 22, 28, 0.05), transparent 70%);
 }
-.landing-rule {
-  background: linear-gradient(90deg, var(--accent), rgba(196, 22, 28, 0.15));
+
+/* Marketing identity: racing red and black, one papaya hit, the display face. These never appear in app screens. */
+:root {
+  --brand-red: #c4161c;
+  --brand-red-deep: #9c1016;
+  --brand-black: #0a0a0a;
+  --band-text: #ffffff;
+  --band-text-secondary: #a3a3a3;
+  --band-border: #262626;
+  --papaya: #ff8000;
+  --on-papaya: #0a0a0a;
+}
+/* The display face variable comes from next/font on the marketing wrapper, so the stack is resolved there. */
+.landing {
+  --font-display: var(--font-archivo), var(--font-sans);
+}
+
+/* Marketing type scale, Archivo Expanded. Headlines are sentence case; the face never sets body copy. */
+.hero,
+.display,
+.display-sm,
+.race-number {
+  font-family: var(--font-display);
+}
+.hero {
+  font-size: clamp(32px, 2.2vw + 20px, 56px);
+  line-height: 1.02;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  max-width: 14em;
+}
+.display {
+  font-size: clamp(28px, 1.3vw + 20px, 40px);
+  line-height: 1.08;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  max-width: 18em;
+}
+.display-sm {
+  font-size: clamp(22px, 0.5vw + 19px, 26px);
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.race-number {
+  font-size: clamp(56px, 3vw + 36px, 72px);
+  line-height: 0.9;
+  font-weight: 800;
+  font-style: italic;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.race-number em {
+  font-style: inherit;
+  color: var(--brand-red);
+}
+.lede {
+  font-size: 15px;
+  line-height: 24px;
+  color: var(--text-secondary);
+  max-width: 34em;
+}
+/* The 24×3 red rule that opens a section in place of a label. */
+.rule {
+  display: block;
+  width: 24px;
+  height: 3px;
+  background: var(--brand-red);
+}
+
+/* Race patterns: one per section, never behind body text, always aria-hidden. */
+.pat-checker {
+  background: repeating-conic-gradient(var(--brand-black) 0 25%, var(--surface) 0 50%) 0 0 / 16px 16px;
+}
+.pat-checker-band {
+  background: repeating-conic-gradient(var(--band-text) 0 25%, var(--brand-black) 0 50%) 0 0 / 16px 16px;
+}
+.pat-chevrons {
+  background: repeating-linear-gradient(-60deg, var(--brand-red) 0 12px, transparent 12px 28px);
+}
+.pat-stripe {
+  transform: skewX(-24deg);
 }
 
 /* Landing page: blocks fade up once as they scroll into view; the hero enters on load. */

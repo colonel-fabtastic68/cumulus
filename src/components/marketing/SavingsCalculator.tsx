@@ -16,7 +16,7 @@ export function SavingsCalculator() {
   const yearly = weekly * 50;
   return (
     <div className="rounded-[var(--radius-lg)] bg-bg p-6 shadow-[var(--shadow-bevel),var(--shadow-card)] md:p-8">
-      <h3 className="text-[18px] font-semibold tracking-[-0.01em] text-text">What does re-keying cost you?</h3>
+      <h3 className="display-sm">What does re-keying cost you?</h3>
       <p className="mt-1.5 text-[13.5px] leading-6 text-text-secondary">Orders typed from the store into the sheet, counts typed from the sheet into accounting, stock levels fixed by hand after every sale. Move the sliders to your shop.</p>
       <div className="mt-6 grid gap-5">
         <Slider label="Hours a week spent copying data between systems, per person" value={hours} min={1} max={25} step={1} onChange={setHours} format={(v) => `${v} h`} />

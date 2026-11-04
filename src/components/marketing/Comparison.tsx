@@ -47,13 +47,13 @@ export function Comparison() {
   return (
     <section id="compare" className="scroll-mt-16 border-t border-border">
       <div className={`${container} py-20 md:py-28`}>
-        <SectionTitle eyebrow="Why cumulusOS" title="Everything a manufacturing ERP does, without the implementation project." body="The usual choice is a heavy system that takes months to set up, or a spreadsheet that quietly drifts from the shelf. cumulusOS starts from the sheet you already have and is live the same afternoon, with an agent for the bulk work and the people who build it on the call." />
+        <SectionTitle title="Everything an ERP does, without the project." body="The usual choice is a heavy system that takes months to set up, or a spreadsheet that quietly drifts from the shelf. cumulusOS starts from the sheet you already have and is live the same afternoon, with an agent for the bulk work and the people who build it on the call." />
         <Reveal className="mt-12">
           <div className="overflow-x-auto rounded-[var(--radius-lg)] bg-surface shadow-[var(--shadow-bevel),var(--shadow-card)]">
             <table className="w-full min-w-[860px] border-collapse text-left">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="w-[30%] px-5 py-4 text-[12px] font-[600] uppercase tracking-[0.08em] text-text-tertiary">What matters</th>
+                  <th className="w-[30%] px-5 py-4 text-[13px] font-[550] text-text-secondary">What matters</th>
                   {COLUMNS.map((c, i) => (
                     <th key={c} className={cn("px-4 py-4 text-[13.5px] font-semibold", i === 0 ? "bg-accent-soft/60 text-accent" : "text-text")}>
                       {c}
@@ -86,7 +86,7 @@ export function Comparison() {
             { title: "Bulk work by request", body: "Strato drafts the price change, the cycle count or the reorder, shows it in the table, and waits for a human to approve." },
           ].map((p, i) => (
             <Reveal key={p.title} delay={i * 60}>
-              <li className="border-t-2 border-accent pt-4">
+              <li className="border-t-2 border-brand-red pt-4">
                 <h3 className="text-[16px] font-semibold text-text">{p.title}</h3>
                 <p className="mt-1.5 text-[14px] leading-6 text-text-secondary">{p.body}</p>
               </li>

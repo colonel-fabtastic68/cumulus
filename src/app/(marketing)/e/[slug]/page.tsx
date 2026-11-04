@@ -43,7 +43,7 @@ export default async function SharedEventPage({ params }: { params: Promise<{ sl
   const ics = `data:text/calendar;charset=utf-8,${encodeURIComponent(eventIcs(event, { url: `https://cumulusos.com/e/${slug}` }))}`;
   return (
     <main className="mx-auto w-full max-w-[560px] px-4 py-12 sm:py-16">
-      <p className="text-[12.5px] font-medium uppercase tracking-wide text-text-tertiary">{company} · team calendar</p>
+      <p className="text-[12.5px] font-medium text-text-tertiary">{company} · team calendar</p>
       <h1 className="mt-2 text-[26px] font-semibold leading-8 text-text">{event.title}</h1>
       <p className="mt-2 flex items-center gap-2 text-[15px] text-text-secondary">
         <CalendarDays className="h-4 w-4" /> {formatEventWhen(event)}

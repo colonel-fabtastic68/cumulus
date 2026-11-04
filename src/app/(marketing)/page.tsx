@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Comparison } from "@/components/marketing/Comparison";
 import { CustomerLogos } from "@/components/marketing/CustomerLogos";
 import { DemoSection } from "@/components/marketing/DemoSection";
+import { StatBand } from "@/components/marketing/StatBand";
 import { AutomotiveSection, Hero, MotorsportSection, OtherIndustries, Steps } from "@/components/marketing/sections";
 import { runtimeConfigFromEnv } from "@/lib/firebase-config";
 
@@ -18,6 +19,7 @@ export default function LandingPage() {
       <CustomerLogos />
       <MotorsportSection />
       <AutomotiveSection />
+      <StatBand />
       <Comparison />
       <Steps />
       <OtherIndustries />

@@ -28,7 +28,7 @@ const FEATURES = [
 export default function MotorsportPage() {
   return (
     <>
-      <PageHero eyebrow="Motorsport" title="From the tube rack to the finish line, every part accounted for." body="Chassis builders, race teams and performance parts makers run on tight timelines and tighter traceability. cumulusOS keeps the count honest while the shop keeps moving." secondary={{ href: "/product", label: "See the product" }}>
+      <PageHero title="From tube rack to finish line." body="Chassis builders, race teams and performance parts makers run on tight timelines and tighter traceability. cumulusOS keeps the count honest while the shop keeps moving." secondary={{ href: "/product", label: "See the product" }}>
         <Reveal className="mt-14 grid gap-8 md:mt-16 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:items-center">
           <CheckList size="lg" items={["Builds reserve stock and show what is short before the welder stops.", "Heat and lot numbers travel from the receiving dock to the delivered car.", "Race-weekend transfers to the trailer and back, with a count that matches the paddock.", "Strato drafts the PO, the cycle count and the price update; a human approves."]} />
           <BuildSheet className="shadow-[var(--shadow-bevel),var(--shadow-400)]" />
@@ -37,7 +37,7 @@ export default function MotorsportPage() {
 
       <section className="border-b border-border">
         <div className={`${container} py-20 md:py-28`}>
-          <SectionTitle eyebrow="In the shop" title="Four problems every motorsport shop has told us about." body="And what each one looks like once the ledger is in charge." />
+          <SectionTitle title="Four problems every shop tells us about." body="And what each one looks like once the ledger is in charge." />
           <div className="mt-12">
             <PainPoints items={PAINS} />
           </div>
@@ -46,7 +46,7 @@ export default function MotorsportPage() {
 
       <section className="bg-surface">
         <div className={`${container} py-20 md:py-28`}>
-          <SectionTitle eyebrow="Built in" title="The pieces motorsport shops lean on most." />
+          <SectionTitle title="What motorsport shops lean on." />
           <FeatureGrid items={FEATURES} columns={3} className="mt-14" />
         </div>
       </section>

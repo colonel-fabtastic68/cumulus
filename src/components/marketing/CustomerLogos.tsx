@@ -19,7 +19,7 @@ export function CustomerLogos() {
     <section aria-label="Customers" className="border-y border-border bg-surface">
       <div className={`${container} py-8 md:py-10`}>
         <Reveal>
-          <p className="text-center text-[12px] font-[600] uppercase tracking-[0.1em] text-text-tertiary">Built with the teams who build the cars</p>
+          <p className="text-center text-[13.5px] font-medium text-text-secondary">Built with the teams who build the cars</p>
           <ul className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             {CUSTOMERS.map((c) => (
               <li key={c.name} className={cn("flex h-16 flex-col items-center justify-center rounded-[var(--radius)] px-3 text-center", c.placeholder ? "border border-dashed border-border-strong" : "bg-bg shadow-[var(--shadow-bevel)]")}>

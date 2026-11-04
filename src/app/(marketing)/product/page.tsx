@@ -3,7 +3,7 @@ import { Barcode, Boxes, CalendarRange, ClipboardList, FileSpreadsheet, FileText
 import { ProductPreview } from "@/components/marketing/ProductPreview";
 import { Reveal } from "@/components/marketing/Reveal";
 import { StratoPreview } from "@/components/marketing/StratoPreview";
-import { CtaBand, FeatureGrid, PageHero, SectionTitle, container } from "@/components/marketing/shared";
+import { CtaBand, FeatureGrid, PageHero, Rule, SectionTitle, container } from "@/components/marketing/shared";
 
 export const metadata: Metadata = {
   title: "Product · cumulusOS",
@@ -39,7 +39,7 @@ const STRATO_POINTS = [
 export default function ProductPage() {
   return (
     <>
-      <PageHero eyebrow="Product" title="The whole shop, one ledger." body="Parts, BOMs, builds, receiving, orders, returns and replenishment in a browser, with Strato drafting the bulk changes and waiting for your approval. Click around the live preview below." secondary={{ href: "/connect", label: "See integrations" }}>
+      <PageHero title="The whole shop, one ledger." body="Parts, BOMs, builds, receiving, orders, returns and replenishment in a browser, with Strato drafting the bulk changes and waiting for your approval. Click around the live preview below." secondary={{ href: "/connect", label: "See integrations" }}>
         <Reveal className="mt-14 md:mt-16">
           <ProductPreview className="shadow-[var(--shadow-bevel),var(--shadow-400)]" />
         </Reveal>
@@ -47,7 +47,7 @@ export default function ProductPage() {
 
       <section id="features" className="scroll-mt-16">
         <div className={`${container} py-20 md:py-28`}>
-          <SectionTitle eyebrow="Features" title="Built for the way parts actually move." body="Every number comes from a movement in the ledger, so what you see is what is on the shelf, in the trailer or on the truck." />
+          <SectionTitle title="Built for the way parts actually move." body="Every number comes from a movement in the ledger, so what you see is what is on the shelf, in the trailer or on the truck." />
           <FeatureGrid items={CORE} columns={3} className="mt-14" />
         </div>
       </section>
@@ -55,12 +55,12 @@ export default function ProductPage() {
       <section id="strato" className="scroll-mt-16 border-t border-border bg-surface">
         <div className={`${container} grid items-center gap-12 py-20 md:py-28 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-16`}>
           <Reveal>
-            <div className="text-[12px] font-[600] uppercase tracking-[0.1em] text-accent">Strato</div>
-            <h2 className="mt-3 text-[30px] font-semibold leading-[1.1] tracking-[-0.02em] text-text md:text-[40px]">Ask for the change. Approve it once.</h2>
-            <p className="mt-4 text-[16px] leading-7 text-text-secondary md:text-[17px]">Strato reads your items, BOMs and movements, drafts the change, and shows it in the table before anything is written.</p>
+            <Rule />
+            <h2 className="display mt-5">Ask for the change. Approve it once.</h2>
+            <p className="lede mt-4">Strato reads your items, BOMs and movements, drafts the change, and shows it in the table before anything is written.</p>
             <ul className="mt-8 flex flex-col gap-5">
               {STRATO_POINTS.map((p) => (
-                <li key={p.title} className="border-l-2 border-accent pl-4">
+                <li key={p.title} className="border-l-2 border-brand-red pl-4">
                   <h3 className="text-[15px] font-semibold text-text">{p.title}</h3>
                   <p className="mt-1 text-[14px] leading-6 text-text-secondary">{p.body}</p>
                 </li>
