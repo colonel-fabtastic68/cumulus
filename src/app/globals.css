@@ -514,6 +514,29 @@ input[type="number"]::-webkit-outer-spin-button {
   max-width: 34em;
 }
 
+/* Home hero: a firmer red wash under the copy and a skewed red slab, edged with speed stripes, behind the calculator. */
+.hero-ground {
+  background:
+    radial-gradient(1000px 520px at 0% -10%, rgba(196, 22, 28, 0.16), transparent 70%),
+    var(--bg);
+}
+.hero-slab {
+  left: calc(50% + 56px);
+  right: -12%;
+  background: var(--brand-red);
+  border-left: 14px solid var(--brand-black);
+  transform: skewX(-9deg);
+  transform-origin: bottom left;
+}
+.hero-slab::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: -40px;
+  width: 10px;
+  background: var(--brand-red);
+}
+
 /* Race patterns: one per section, never behind body text, always aria-hidden. */
 .pat-checker {
   background: repeating-conic-gradient(var(--brand-black) 0 25%, var(--surface) 0 50%) 0 0 / 16px 16px;

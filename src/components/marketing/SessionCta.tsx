@@ -67,7 +67,7 @@ export function SessionCta({ runtimeConfig, placement }: { runtimeConfig: Runtim
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <Button variant="primary" size="lg" href="/#demo" iconRight={<ArrowRight />}>
+      <Button variant="primary" size="lg" href="/#demo" iconRight={<ArrowRight />} className="bg-brand-red! hover:bg-brand-red-deep! active:bg-brand-red-deep!">
         Book a demo
       </Button>
       <Button size="lg" href="/product">

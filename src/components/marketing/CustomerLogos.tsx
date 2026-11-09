@@ -3,6 +3,7 @@ import { Reveal } from "./Reveal";
 import { container } from "./shared";
 
 /**
+ * Off the home page since 2026-11-09 while each team approves the use of its name; put `<CustomerLogos />` back in the landing page when they do.
  * Who builds with cumulusOS. Names are set as wordmarks until each team sends
  * a logo file; a `placeholder` entry holds a slot open. Add a row here to add a logo.
  */
