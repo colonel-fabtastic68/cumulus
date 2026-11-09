@@ -69,9 +69,9 @@ export default async function ProspectDemoPage({ params }: { params: Promise<{ s
             <Logo prospect={prospect} alt={`${company} logo`} />
           </div>
           <p className={styles.byline}>
-            Put together by Baker and Mitch,
+            Put together by Baker,
             <br />
-            the founders of cumulusOS
+            co-founder of cumulusOS
           </p>
         </div>
       </header>
@@ -290,7 +290,7 @@ export default async function ProspectDemoPage({ params }: { params: Promise<{ s
             </h2>
             <ul className={styles.assure}>
               <li>Leave with a plan for what to import first and what to connect.</li>
-              <li>You talk to Baker and Mitch, not a sales team.</li>
+              <li>You talk to Baker, not a sales team.</li>
             </ul>
             <div className={styles.inlineCta} style={{ marginTop: 24 }}>
               <a className={`${styles.btn} ${styles.btnLight}`} href="#demo">

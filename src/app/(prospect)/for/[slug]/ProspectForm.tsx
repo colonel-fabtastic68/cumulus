@@ -42,7 +42,7 @@ export function ProspectForm({ company }: { company: string }) {
         <div>
           <h2 className={styles.formTitle}>Thanks, {name.trim().split(/\s+/)[0]}.</h2>
           <p className={styles.formSub}>
-            Baker or Mitch will write to {email.trim()} with times, usually the same business day.
+            Baker will write to {email.trim()} with times, usually the same business day.
           </p>
         </div>
         <p>

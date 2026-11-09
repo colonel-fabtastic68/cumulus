@@ -26,8 +26,8 @@ export function DemoSection({ calendlyUrl }: { calendlyUrl?: string }) {
             <div className="flex items-start gap-2.5">
               <Users className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
               <div>
-                <dt className="font-medium text-text">The founders</dt>
-                <dd>Baker and Mitch, not a sales team.</dd>
+                <dt className="font-medium text-text">A founder</dt>
+                <dd>Baker, not a sales team.</dd>
               </div>
             </div>
             <div className="flex items-start gap-2.5">
