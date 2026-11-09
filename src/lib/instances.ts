@@ -142,6 +142,7 @@ export const SHARED_ONLY_PREFIXES = [
   "/demo",
   "/dpa",
   "/e/",
+  "/for/",
   "/eula",
   "/privacy",
   "/terms",
