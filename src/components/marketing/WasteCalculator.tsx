@@ -60,12 +60,15 @@ export function WasteCalculator() {
       </div>
 
       <div className="bg-brand-black px-5 py-5 text-band-text sm:px-6" aria-live="polite">
-        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-          <div>
+        <div className="flex flex-col gap-3">
+          {/* The figure scales to the card: each glyph of the expanded face is about 1.1em wide, so the size is the width divided by the character count, capped at 44px. */}
+          <div className="[container-type:inline-size]">
             <div className="text-[12.5px] text-band-text-secondary">Estimated cost a year</div>
-            <div className="race-number mt-1.5 text-[clamp(32px,8vw,44px)] text-band-text">{money(total)}</div>
+            <div className="race-number mt-1.5 whitespace-nowrap text-band-text" style={{ fontSize: `min(44px, ${(100 / (money(total).length * 1.1)).toFixed(2)}cqw)` }}>
+              {money(total)}
+            </div>
           </div>
-          <dl className="grid grid-cols-[auto_auto] gap-x-3 gap-y-0.5 text-[12.5px] leading-5">
+          <dl className="grid grid-cols-[auto_auto] justify-start gap-x-3 gap-y-0.5 text-[12.5px] leading-5">
             <dt className="text-band-text-secondary">Inventory waste</dt>
             <dd className="text-right font-semibold tabular">{money(inventoryWaste)}</dd>
             <dt className="text-band-text-secondary">Wage waste</dt>
