@@ -436,8 +436,9 @@ export function deadStockReport(items: Item[], movements: StockMovement[], days:
     .sort((a, b) => (a.lastMovementAt ?? "").localeCompare(b.lastMovementAt ?? ""));
 }
 
-/** Factor 17: monthly consumption totals for a loose seasonality view. */
-export function seasonalityReport(movements: StockMovement[], months = 12, itemId?: string): Array<{ month: string; sold: number; consumed: number }> {
+/** Factor 17: monthly consumption totals for a loose seasonality view: every item, one item, or a set of items (several part numbers, a category). */
+export function seasonalityReport(movements: StockMovement[], months = 12, itemId?: string | ReadonlySet<string>): Array<{ month: string; sold: number; consumed: number }> {
+  const only = typeof itemId === "string" ? new Set([itemId]) : itemId;
   const out = new Map<string, { month: string; sold: number; consumed: number }>();
   const now = new Date();
   for (let i = months - 1; i >= 0; i--) {
@@ -446,7 +447,7 @@ export function seasonalityReport(movements: StockMovement[], months = 12, itemI
     out.set(key, { month: key, sold: 0, consumed: 0 });
   }
   for (const m of movements) {
-    if (itemId && m.itemId !== itemId) continue;
+    if (only && !only.has(m.itemId)) continue;
     const key = m.occurredAt.slice(0, 7);
     const row = out.get(key);
     if (!row) continue;

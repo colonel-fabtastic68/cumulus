@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, Layers, Plus, Trash2 } from "lucide-react";
-import type { BomLine, Item } from "@/lib/types";
+import type { BomLine, BomLineKind, Item } from "@/lib/types";
+import { bomChoiceGroups, isModularBom } from "@/lib/bomOptions";
+import { useFeature } from "@/lib/useFeature";
 import { buildableQty, explodeBom, rolledUpCost, updateItem, whereUsedDeep } from "@/lib/inventory";
 import { useStore } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
@@ -69,27 +71,57 @@ interface DraftLine {
   itemId: string;
   qty: string;
   wastePct: string;
+  /** Modular BOMs: required, optional, or one alternative of a choice. */
+  kind: BomLineKind;
+  group: string;
+  isDefault: boolean;
+  note?: string;
 }
+
+const toDraft = (l: BomLine): DraftLine => ({ itemId: l.itemId, qty: String(l.qty), wastePct: l.wastePct !== undefined ? String(l.wastePct) : "", kind: l.kind ?? "required", group: l.group ?? "", isDefault: !!l.isDefault, note: l.note });
+
+/** A stored line from a draft. Every field a line can carry goes through here, so saving the editor never drops one. */
+const toLine = (d: DraftLine): BomLine => ({
+  itemId: d.itemId,
+  qty: Number(d.qty),
+  wastePct: d.wastePct.trim() === "" ? undefined : Number(d.wastePct),
+  ...(d.note ? { note: d.note } : {}),
+  ...(d.kind !== "required" ? { kind: d.kind } : {}),
+  ...(d.kind === "choice" && d.group.trim() ? { group: d.group.trim() } : {}),
+  ...(d.kind !== "required" && d.isDefault ? { isDefault: true } : {}),
+});
+
+const ROLE_OPTIONS: Array<{ value: BomLineKind; label: string }> = [
+  { value: "required", label: "Required" },
+  { value: "optional", label: "Optional" },
+  { value: "choice", label: "Choice" },
+];
 
 function BomEditor({ item, items, currency, canEdit }: { item: Item; items: Item[]; currency: string; canEdit: boolean }) {
   const store = useStore();
   const user = useCurrentUser();
   const toast = useToast();
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
-  const [draft, setDraft] = useState<DraftLine[]>(() => item.bom.map((l) => ({ itemId: l.itemId, qty: String(l.qty), wastePct: l.wastePct !== undefined ? String(l.wastePct) : "" })));
+  const [draft, setDraft] = useState<DraftLine[]>(() => item.bom.map(toDraft));
   const [saving, setSaving] = useState(false);
+  // The role column shows when the feature is on, and always for a BOM that already has optional or choice lines.
+  const modularEnabled = useFeature("modularBoms");
+  const showRoles = modularEnabled || isModularBom(item.bom);
   const [explodeQty, setExplodeQty] = useState("10");
   const [consumeSub, setConsumeSub] = useState(true);
 
   const parsed = useMemo<BomLine[]>(
     () =>
       draft
-        .map((d) => ({ itemId: d.itemId, qty: Number(d.qty), wastePct: d.wastePct.trim() === "" ? undefined : Number(d.wastePct) }))
+        .map(toLine)
         .filter((l) => byId.has(l.itemId) && Number.isFinite(l.qty) && l.qty > 0),
     [draft, byId],
   );
-  const invalid = draft.some((d) => !Number.isFinite(Number(d.qty)) || Number(d.qty) <= 0 || (d.wastePct.trim() !== "" && (!Number.isFinite(Number(d.wastePct)) || Number(d.wastePct) < 0)));
-  const dirty = JSON.stringify(parsed) !== JSON.stringify(item.bom.map((l) => ({ itemId: l.itemId, qty: l.qty, wastePct: l.wastePct })));
+  const unnamedChoice = draft.some((d) => d.kind === "choice" && !d.group.trim());
+  const invalid = unnamedChoice || draft.some((d) => !Number.isFinite(Number(d.qty)) || Number(d.qty) <= 0 || (d.wastePct.trim() !== "" && (!Number.isFinite(Number(d.wastePct)) || Number(d.wastePct) < 0)));
+  const dirty = JSON.stringify(parsed) !== JSON.stringify(item.bom.map((l) => toLine(toDraft(l))));
+  const choiceGroups = useMemo(() => bomChoiceGroups(parsed), [parsed]);
+  const loneChoices = choiceGroups.filter((g) => g.lines.length === 1).map((g) => g.group);
 
   const draftItem = useMemo(() => ({ ...item, bom: parsed }), [item, parsed]);
   const rolled = useMemo(() => rolledUpCost(items, draftItem), [items, draftItem]);
@@ -102,6 +134,7 @@ function BomEditor({ item, items, currency, canEdit }: { item: Item; items: Item
   const shortages = reqs.filter((r) => r.shortage > 0);
 
   const save = async () => {
+    if (unnamedChoice) return toast("Name the choice each Choice line belongs to (for example “Wheel finish”)", "critical");
     if (invalid) return toast("Fix the highlighted quantities first", "critical");
     setSaving(true);
     try {
@@ -150,7 +183,7 @@ function BomEditor({ item, items, currency, canEdit }: { item: Item; items: Item
             )}
             {canEdit && dirty && (
               <>
-                <Button size="sm" onClick={() => setDraft(item.bom.map((l) => ({ itemId: l.itemId, qty: String(l.qty), wastePct: l.wastePct !== undefined ? String(l.wastePct) : "" })))}>
+                <Button size="sm" onClick={() => setDraft(item.bom.map(toDraft))}>
                   Discard
                 </Button>
                 <Button size="sm" variant="primary" loading={saving} disabled={invalid} onClick={save}>
@@ -164,6 +197,7 @@ function BomEditor({ item, items, currency, canEdit }: { item: Item; items: Item
           <thead>
             <tr>
               <th>Component</th>
+              {showRoles && <th className="w-72">Role</th>}
               <th className="w-28 text-right">Qty per</th>
               <th className="w-24 text-right">Waste %</th>
               <th className="text-right">On hand</th>
@@ -175,7 +209,7 @@ function BomEditor({ item, items, currency, canEdit }: { item: Item; items: Item
           <tbody>
             {draft.length === 0 && (
               <tr>
-                <td colSpan={canEdit ? 7 : 6} className="py-6 text-center text-text-tertiary">
+                <td colSpan={(canEdit ? 7 : 6) + (showRoles ? 1 : 0)} className="py-6 text-center text-text-tertiary">
                   No components yet. Add the parts and sub-assemblies this item is built from.
                 </td>
               </tr>
@@ -200,6 +234,56 @@ function BomEditor({ item, items, currency, canEdit }: { item: Item; items: Item
                       {comp.status !== "active" && <Badge tone={comp.status === "superseded" ? "warning" : "default"}>{comp.status}</Badge>}
                     </div>
                   </td>
+                  {showRoles && (
+                    <td>
+                      {canEdit ? (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <select
+                            value={d.kind}
+                            onChange={(e) => update(idx, { kind: e.target.value as BomLineKind })}
+                            aria-label={`Role of ${comp.sku}`}
+                            className="h-7 rounded-[var(--radius-sm)] border border-border-strong/70 bg-surface px-1.5 text-[12.5px] outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+                          >
+                            {ROLE_OPTIONS.map((o) => (
+                              <option key={o.value} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                          {d.kind === "choice" && (
+                            <input
+                              value={d.group}
+                              onChange={(e) => update(idx, { group: e.target.value })}
+                              placeholder="Choice name"
+                              list={`bom-groups-${item.id}`}
+                              aria-label={`Choice ${comp.sku} belongs to`}
+                              className={cn("h-7 w-32 rounded-[var(--radius-sm)] border bg-surface px-2 text-[12.5px] outline-none placeholder:text-text-tertiary focus:border-accent focus:ring-2 focus:ring-accent/20", d.group.trim() ? "border-border-strong/70" : "border-critical")}
+                            />
+                          )}
+                          {d.kind !== "required" && (
+                            <label className="inline-flex items-center gap-1 text-[12px] text-text-secondary" title={d.kind === "choice" ? "Used when nobody chooses" : "Included unless someone leaves it out"}>
+                              <input
+                                type="checkbox"
+                                checked={d.isDefault}
+                                onChange={(e) =>
+                                  // A choice has one default: ticking this one unticks the others in its group.
+                                  setDraft((rows) => rows.map((r, i) => (i === idx ? { ...r, isDefault: e.target.checked } : d.kind === "choice" && e.target.checked && r.kind === "choice" && r.group.trim() === d.group.trim() ? { ...r, isDefault: false } : r)))
+                                }
+                              />
+                              {d.kind === "choice" ? "Default" : "Included by default"}
+                            </label>
+                          )}
+                        </div>
+                      ) : d.kind === "required" ? (
+                        <span className="text-text-tertiary">Required</span>
+                      ) : (
+                        <span className="inline-flex flex-wrap items-center gap-1.5">
+                          <Badge tone={d.kind === "choice" ? "info" : "default"}>{d.kind === "choice" ? `Choice · ${d.group}` : "Optional"}</Badge>
+                          {d.isDefault && <span className="text-[12px] text-text-tertiary">default</span>}
+                        </span>
+                      )}
+                    </td>
+                  )}
                   <td className="text-right">
                     {canEdit ? (
                       <input
@@ -246,8 +330,8 @@ function BomEditor({ item, items, currency, canEdit }: { item: Item; items: Item
             })}
             {draft.length > 0 && (
               <tr className="bg-surface-subdued">
-                <td colSpan={5} className="text-right font-medium">
-                  Rolled-up cost per unit
+                <td colSpan={showRoles ? 6 : 5} className="text-right font-medium">
+                  Rolled-up cost per unit{isModularBom(parsed) ? " (default options)" : ""}
                 </td>
                 <td className="text-right font-medium tabular">{formatMoney(rolled, currency)}</td>
                 {canEdit && <td />}
@@ -255,6 +339,19 @@ function BomEditor({ item, items, currency, canEdit }: { item: Item; items: Item
             )}
           </tbody>
         </SimpleTable>
+        {showRoles && (
+          <>
+            <datalist id={`bom-groups-${item.id}`}>
+              {choiceGroups.map((g) => (
+                <option key={g.group} value={g.group} />
+              ))}
+            </datalist>
+            <p className="mt-1.5 text-[12px] text-text-tertiary">
+              Optional lines can be left out of a build. Choice lines that share a name are alternatives: one of them is built in, decided when the assembly is built or planned.
+              {loneChoices.length > 0 && <span className="text-warning"> {loneChoices.map((g) => `“${g}”`).join(", ")} {loneChoices.length === 1 ? "has" : "have"} only one alternative so far.</span>}
+            </p>
+          </>
+        )}
         {canEdit && (
           <div className="mt-2 flex items-center gap-2">
             <ItemPicker
@@ -264,7 +361,7 @@ function BomEditor({ item, items, currency, canEdit }: { item: Item; items: Item
               exclude={exclude}
               filter={(i) => i.status === "active"}
               onChange={(comp) => {
-                if (comp) setDraft((d) => [...d, { itemId: comp.id, qty: "1", wastePct: "" }]);
+                if (comp) setDraft((d) => [...d, { itemId: comp.id, qty: "1", wastePct: "", kind: "required", group: "", isDefault: false }]);
               }}
             />
             <span className="inline-flex items-center gap-1 text-[12px] text-text-tertiary">

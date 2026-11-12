@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Beef, Boxes, QrCode, CalendarDays, ClipboardList, ClipboardCheck, FolderOpen, ListChecks, Contact, Download, FileBarChart2, FileText, Hammer, Home, MessageSquare, PackageCheck, Package, Plug, Receipt, RefreshCw, Repeat, RotateCcw, Settings, ShoppingCart, Sparkles, Tags, TrendingUp, Truck, Upload, UserRound, Users, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, Beef, Boxes, BriefcaseBusiness, Factory, Layers, QrCode, CalendarDays, ClipboardList, ClipboardCheck, FolderOpen, ListChecks, Contact, Download, FileBarChart2, FileText, Hammer, Home, MessageSquare, PackageCheck, Package, Plug, Receipt, RefreshCw, Repeat, RotateCcw, Settings, ShoppingCart, Sparkles, Tags, TrendingUp, Truck, Upload, UserRound, Users, type LucideIcon } from "lucide-react";
 
 export interface NavItem {
   href: string;
@@ -91,6 +91,32 @@ export const RANCH_NAV: NavItem = {
 export function navWithRanch(nav: NavItem[]): NavItem[] {
   const at = nav.findIndex((n) => n.href === "/inventory");
   return [...nav.slice(0, at + 1), RANCH_NAV, ...nav.slice(at + 1)];
+}
+
+/**
+ * The main navigation with the pages of unreleased features that are switched on
+ * (src/lib/features.ts): Work orders joins BOM as a group, Jobs follows Customers.
+ */
+export function navWithFeatures(nav: NavItem[], on: { workOrders: boolean; jobs: boolean }): NavItem[] {
+  let out = nav;
+  if (on.workOrders) {
+    out = out.map((n) =>
+      n.href === "/builds"
+        ? {
+            ...n,
+            children: [
+              { href: "/builds", label: "Bills of materials", icon: Layers },
+              { href: "/builds/work-orders", label: "Work orders", icon: Factory },
+            ],
+          }
+        : n,
+    );
+  }
+  if (on.jobs) {
+    const at = out.findIndex((n) => n.href === "/customers");
+    out = [...out.slice(0, at + 1), { href: "/jobs", label: "Jobs", icon: BriefcaseBusiness }, ...out.slice(at + 1)];
+  }
+  return out;
 }
 
 export const NAV_ORDER: readonly string[] = [...NAV, ...NAV_SECONDARY].flatMap((n) => (n.children ? n.children.map((c) => c.href) : [n.href]));

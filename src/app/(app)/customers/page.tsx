@@ -1,14 +1,16 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { Download, Mail, MessageSquareText, Plus } from "lucide-react";
+import { Download, FileDown, Mail, MessageSquareText, Plus } from "lucide-react";
 import type { Customer } from "@/lib/types";
 import { useAgent } from "@/components/agent/AgentProvider";
-import { Badge, Button, Page, QueryParamEffect, SearchField, Table, type Column } from "@/components/ui";
+import { Badge, Button, Page, QueryParamEffect, SearchField, Table, useToast, type Column } from "@/components/ui";
 import { canWrite, useCurrentUser } from "@/lib/auth";
 import { customerHistory, saveCustomer } from "@/lib/customers";
-import { priceGroupLabel, priceGroups } from "@/lib/catalog";
-import { formatMoney, formatRelative } from "@/lib/format";
+import { customFieldsFor, priceGroupLabel, priceGroups } from "@/lib/catalog";
+import { formatMoney, formatRelative, pluralize } from "@/lib/format";
+import { csvFilename, downloadCsv } from "@/components/reports/csv";
+import { useFeature } from "@/lib/useFeature";
 import { useCollection, useSettings, useStore } from "@/lib/store/provider";
 import { CustomerDrawer, CustomerModal } from "@/components/customers";
 
@@ -39,6 +41,42 @@ export default function CustomersPage() {
       .map((c) => ({ c, h: customerHistory(c, { orders, rmas, quotes }) }));
   }, [customers, orders, rmas, quotes, q]);
   const selected = useMemo(() => customers.find((c) => c.id === selectedId) ?? null, [customers, selectedId]);
+  const canExport = useFeature("customerExport");
+  const toast = useToast();
+
+  /** The customers on screen (after the search), one row each, with what they have bought. */
+  const exportCsv = () => {
+    const fields = customFieldsFor(settings, "customers");
+    downloadCsv(
+      csvFilename(q.trim() ? "customers-filtered" : "customers"),
+      ["Name", "Company", "Email", "Phone", "Street", "Street 2", "City", "State", "Postal code", "Country", "Price group", "Discount %", "Tax exempt", "Do not contact", "Tags", "Orders", "Revenue", "Last order", "Notes", ...fields.map((f) => f.label)],
+      [...rows]
+        .sort((a, b) => a.c.name.localeCompare(b.c.name))
+        .map(({ c, h }) => [
+          c.name,
+          c.company,
+          c.email,
+          c.phone,
+          c.address?.street1,
+          c.address?.street2,
+          c.address?.city,
+          c.address?.state,
+          c.address?.zip,
+          c.address?.country,
+          groups.find((g) => g.id === c.priceGroupId)?.name,
+          c.discountPct,
+          c.taxExempt ? "yes" : "",
+          c.doNotContact ? "yes" : "",
+          c.tags?.join(", "),
+          h.orders.length,
+          h.revenue,
+          h.lastOrderAt?.slice(0, 10),
+          c.notes,
+          ...fields.map((f) => c.attributes?.[f.key]),
+        ]),
+    );
+    toast(`Exported ${pluralize(rows.length, "customer")} to CSV`, "success");
+  };
 
   const columns: Column<(typeof rows)[number]>[] = [
     { key: "name", header: "Customer", render: (r) => <span className="font-medium text-text">{r.c.name}</span>, sortValue: (r) => r.c.name },
@@ -99,6 +137,11 @@ export default function CustomersPage() {
           <Button icon={<Download />} href="/import#customers">
             Import
           </Button>
+          {canExport && (
+            <Button icon={<FileDown />} onClick={exportCsv} disabled={rows.length === 0}>
+              Export
+            </Button>
+          )}
         </>
       }
     >

@@ -5,3 +5,4 @@ export * from "./BuildHistoryTable";
 export * from "./BuildDetailModal";
 export * from "./ExportBomMenu";
 export * from "./CopyBomModal";
+export * from "./BomOptionsPicker";

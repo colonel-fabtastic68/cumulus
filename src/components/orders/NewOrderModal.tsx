@@ -19,6 +19,7 @@ import { useTerms } from "@/lib/useTerms";
 import { useDefaultLocation, useLocations } from "@/lib/locations";
 import { routedLocation } from "@/lib/inventory";
 import { enteredFor, toStockQty, unitOptions } from "@/lib/units";
+import { jobIsOpen } from "@/lib/jobs";
 
 interface NewOrderModalProps {
   open: boolean;
@@ -80,6 +81,9 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
   const locations = useLocations();
   const home = useDefaultLocation();
   const pickLocation = features.lineLocations && locations.length > 1;
+  const jobs = useCollection("jobs");
+  const openJobs = useMemo(() => (features.jobs ? jobs.filter(jobIsOpen).sort((a, b) => a.number.localeCompare(b.number)) : []), [features.jobs, jobs]);
+  const [jobId, setJobId] = useState("");
 
   const [customer, setCustomer] = useState(template?.customer ?? "");
   const [customerEmail, setCustomerEmail] = useState(template?.customerEmail ?? "");
@@ -223,6 +227,7 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
         shipTo: address,
         source,
         note: note.trim() || undefined,
+        ...(jobId ? { jobId } : {}),
         lines: validLines.map((l) => ({
           itemId: l.item!.id,
           qty: stockQty(l),
@@ -289,6 +294,7 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
         </FormGrid>
         <FormGrid cols={3}>
           <TextField label="Order number" hint="(optional)" value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} placeholder="Next SO number" help="Leave blank for the next SO-xxxx, or type your own (a customer PO, a web order id)." />
+          {openJobs.length > 0 && <Select label="Job" hint="(optional)" value={jobId} onChange={(e) => setJobId(e.target.value)} options={[{ value: "", label: "No job" }, ...openJobs.map((j) => ({ value: j.id, label: `${j.number} · ${j.name}` }))]} help="Files the order under a job or project." />}
         </FormGrid>
         <FormGrid cols={3}>
           <div className="sm:col-span-2">

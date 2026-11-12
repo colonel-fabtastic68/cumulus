@@ -11,7 +11,8 @@ import { useCollection, useSettings } from "@/lib/store/provider";
 import { isLowStock } from "@/lib/inventory";
 import { useSession } from "@/lib/session";
 import { APP_HOME } from "@/lib/auth-routes";
-import { isChildNavActive, isNavActive, NAV, NAV_SECONDARY, navWithRanch, type NavItem } from "./nav";
+import { isChildNavActive, isNavActive, NAV, NAV_SECONDARY, navWithFeatures, navWithRanch, type NavItem } from "./nav";
+import { useFeatures } from "@/lib/useFeature";
 import { hasFeature } from "@/lib/instances";
 import { FeedbackChip } from "./FeedbackChip";
 
@@ -30,7 +31,12 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const openOrders = orders.filter((o) => o.status === "open").length;
   const openRmas = rmas.filter((r) => r.status === "open" || r.status === "inspecting").length;
   const openPos = purchaseOrders.filter((p) => p.status === "draft" || p.status === "sent" || p.status === "partial").length;
-  const counts: Record<string, number> = { "/inventory": lowCount, "/orders": openOrders, "/orders/purchase": openPos, "/rmas": openRmas };
+  const features = useFeatures();
+  const workOrders = useCollection("workOrders");
+  const openRuns = features.workOrders ? workOrders.filter((w) => w.status === "released" || w.status === "in_progress").length : 0;
+  const mainNav = navWithFeatures(hasFeature(instance, "ranch") ? navWithRanch(NAV) : NAV, { workOrders: features.workOrders, jobs: features.jobs });
+  const counts: Record<string, number> = {
+    "/builds/work-orders": openRuns, "/inventory": lowCount, "/orders": openOrders, "/orders/purchase": openPos, "/rmas": openRmas };
 
   // Keep the active entry visible when the page changes from the keyboard (Shift+↑/↓) on short windows.
   useEffect(() => {
@@ -153,7 +159,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         </div>
       )}
       <nav ref={navRef} className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 pb-3">
-        {(hasFeature(instance, "ranch") ? navWithRanch(NAV) : NAV).map(renderLink)}
+        {mainNav.map(renderLink)}
         <div className="mt-4 mb-1 px-2.5 text-[12px] font-[550] text-text-secondary">Workspace</div>
         {NAV_SECONDARY.map(renderLink)}
       </nav>
