@@ -2,7 +2,7 @@
  * Client-side tool execution. Maps agent tool calls onto inventory services.
  * Everything here runs in the browser against the active store.
  */
-import type { Item, Rma, StockAlertRule, StockMovement, Supplier, WorkspaceDocument } from "@/lib/types";
+import type { BomLine, BomSelection, Item, JobAssignee, JobStatus, Rma, StockAlertRule, StockMovement, Supplier, VariantAxis, WorkOrder, WorkspaceDocument } from "@/lib/types";
 import type { UploadDocumentInput } from "@/lib/documents";
 import { entriesFor, type LabelEntry } from "@/lib/labels/entries";
 import { buildLabelPdf } from "@/lib/labels/pdf";
@@ -50,6 +50,11 @@ import { createPurchaseOrder, findTemplate, mergePurchaseOrders, poIsOpen, poLin
 import { loadReplenishmentPlan, replenish, snoozeReplenishment, type ReplenishmentRow } from "@/lib/replenishment";
 import { customersFor, findLots, lotLabel, lotSourceLabel, traceLot, upstreamLots, type TraceSource } from "@/lib/traceability";
 import { cogsBetween, COSTING_LABELS, inventoryValueAt, receiptsBetween, totalValue, valueItems } from "@/lib/valuation";
+import { bomChoiceGroups, bomLineKind, bomOptionalLines, bomSelectionError, describeBomSelection, isModularBom } from "@/lib/bomOptions";
+import { cancelWorkOrder, committedToProduction, committedValue, completeWorkOrder, createWorkOrder, productionSchedule, releaseWorkOrder, updateWorkOrder, workOrderIsLate, workOrderIsOpen, workOrderNeeds, workOrderRemaining, type WorkOrderPatch } from "@/lib/workOrders";
+import { assignToJob, createJob, jobCost, jobDocuments, jobIsOpen, updateJob, type JobDocument, type JobInput } from "@/lib/jobs";
+import { isVariantParent, planVariants, saveVariants, variantLabel, variantsOf } from "@/lib/variants";
+import { overstockQty } from "@/lib/overstock";
 import type { AgentToolName } from "./tools";
 
 function planRow(r: ReplenishmentRow) {
@@ -316,6 +321,175 @@ function patchFromChanges(changes: BulkPlanRow["changes"]): ItemPatch {
   return Object.fromEntries(Object.entries(changes).map(([k, v]) => [k, v.to])) as ItemPatch;
 }
 
+// ---- Modular BOMs, work orders, jobs, variants -------------------------------------------
+
+interface BomOptionsInput {
+  /** SKU of the alternative to use for each choice. */
+  choose?: string[];
+  /** SKUs of the optional parts to include. */
+  withOptional?: string[];
+}
+
+/** A tool's choose / withOptional SKUs as a BOM selection; undefined for a plain BOM or when nothing was chosen. */
+function bomSelectionFrom(items: Item[], asm: Item, raw: unknown): BomSelection | undefined {
+  const input = (raw ?? {}) as BomOptionsInput;
+  if (!isModularBom(asm.bom) || (!input.choose?.length && !input.withOptional)) return undefined;
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const groups = bomChoiceGroups(asm.bom);
+  const choices: Record<string, string> = {};
+  for (const sku of input.choose ?? []) {
+    const comp = findItem(items, String(sku));
+    // An alternative names its own choice; a part offered under two choices fills the first one still open.
+    const group = comp ? (groups.find((g) => !(g.group in choices) && g.lines.some((l) => l.itemId === comp.id)) ?? groups.find((g) => g.lines.some((l) => l.itemId === comp.id))) : undefined;
+    if (!comp || !group) throw new InventoryError(`${sku} is not an alternative on ${asm.sku}. Its choices: ${groups.map((g) => `${g.group} (${g.lines.map((l) => byId.get(l.itemId)?.sku ?? l.itemId).join(" or ")})`).join("; ") || "none"}`);
+    if (group.group in choices && choices[group.group] !== comp.id) throw new InventoryError(`${asm.sku}: ${group.group} takes one alternative, but both ${byId.get(choices[group.group]!)?.sku} and ${comp.sku} were chosen`);
+    choices[group.group] = comp.id;
+  }
+  const optional = input.withOptional?.map((sku) => {
+    const comp = findItem(items, String(sku));
+    if (!comp) throw new InventoryError(`Unknown SKU ${sku}`);
+    return comp.id;
+  });
+  const selection: BomSelection = { ...(Object.keys(choices).length ? { choices } : {}), ...(optional ? { optional } : {}) };
+  const error = bomSelectionError(asm.bom, selection);
+  if (error) throw new InventoryError(`${asm.sku}: ${error}`);
+  return selection;
+}
+
+/** What a modular BOM leaves open, by SKU, for getItem. */
+function bomOptionsOf(asm: Item, byId: Map<string, Item>) {
+  if (!isModularBom(asm.bom)) return undefined;
+  const sku = (id: string) => byId.get(id)?.sku ?? id;
+  return {
+    choices: bomChoiceGroups(asm.bom).map((g) => ({ choice: g.group, default: sku(g.defaultItemId), alternatives: g.lines.map((l) => sku(l.itemId)) })),
+    optional: bomOptionalLines(asm.bom).map((l) => ({ sku: sku(l.itemId), includedByDefault: !!l.isDefault })),
+  };
+}
+
+interface BomLineInput {
+  sku: string;
+  qty?: number;
+  wastePct?: number;
+  role?: "required" | "optional" | "choice";
+  choice?: string;
+  isDefault?: boolean;
+}
+
+/** One BOM line after an update: fields the call leaves out keep what the line had. */
+function mergedBomLine(prev: BomLine | undefined, itemId: string, l: BomLineInput): BomLine {
+  const kind = l.role ?? prev?.kind;
+  const group = (l.choice ?? prev?.group)?.trim() || undefined;
+  if (kind === "choice" && !group) throw new InventoryError(`${l.sku}: a choice line needs the name of the choice it belongs to`);
+  const isDefault = l.isDefault ?? prev?.isDefault;
+  const line: BomLine = { itemId, qty: l.qty ?? prev?.qty ?? 1 };
+  const wastePct = l.wastePct ?? prev?.wastePct;
+  if (wastePct !== undefined) line.wastePct = wastePct;
+  if (prev?.note) line.note = prev.note;
+  if (kind && kind !== "required") {
+    line.kind = kind;
+    if (kind === "choice") line.group = group;
+    if (isDefault) line.isDefault = true;
+  }
+  return line;
+}
+
+/** The BOM an updateBom call leaves behind. strict = unknown components and loops are errors (the write); otherwise they are skipped (the preview). */
+function nextBom(items: Item[], asm: Item, mode: string, lines: BomLineInput[], strict: boolean): BomLine[] {
+  const ancestors = strict ? new Set(whereUsedDeep(items, asm.id).map((a) => a.id)) : new Set<string>();
+  const resolved: Array<{ comp: Item; line: BomLineInput }> = [];
+  for (const l of lines) {
+    const comp = findItem(items, l.sku);
+    if (!comp) {
+      if (strict) throw new InventoryError(`Unknown component ${l.sku}`);
+      continue;
+    }
+    if (strict && comp.id === asm.id) throw new InventoryError("An assembly cannot contain itself");
+    if (strict && ancestors.has(comp.id)) throw new InventoryError(`${comp.sku} already uses ${asm.sku} (directly or through a sub-assembly); adding it would create a BOM loop`);
+    resolved.push({ comp, line: l });
+  }
+  if (mode === "replace") return resolved.map(({ comp, line }) => mergedBomLine(undefined, comp.id, line));
+  let bom = [...asm.bom];
+  for (const { comp, line } of resolved) {
+    if (mode === "remove") {
+      bom = bom.filter((b) => b.itemId !== comp.id);
+      continue;
+    }
+    const idx = bom.findIndex((b) => b.itemId === comp.id);
+    const next = mergedBomLine(bom[idx], comp.id, line);
+    if (idx >= 0) bom[idx] = next;
+    else bom.push(next);
+  }
+  return bom;
+}
+
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A YYYY-MM-DD argument, or undefined when it was left out. */
+function dateArg(value: unknown, label: string): string | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  const text = String(value).slice(0, 10);
+  if (!DATE_ONLY.test(text)) throw new InventoryError(`${label} must be a date as YYYY-MM-DD`);
+  return text;
+}
+
+const sameNumber = (a: string | undefined, b: unknown) => !!a && a.trim().toUpperCase() === String(b ?? "").trim().toUpperCase();
+
+async function findWorkOrder(store: Store, number: unknown): Promise<WorkOrder> {
+  if (!String(number ?? "").trim()) throw new InventoryError("Give the work order's number, e.g. WO-1001");
+  const wo = (await store.list("workOrders")).find((w) => sameNumber(w.number, number) || w.id === number);
+  if (!wo) throw new InventoryError(`Unknown work order ${number}`);
+  return wo;
+}
+
+/** The job a tool names by number: an id, null to clear, undefined when the argument was left out. */
+async function jobIdArg(store: Store, number: unknown): Promise<string | null | undefined> {
+  if (number === undefined) return undefined;
+  if (number === null || String(number).trim() === "") return null;
+  const job = (await store.list("jobs")).find((j) => sameNumber(j.number, number) || j.id === number);
+  if (!job) throw new InventoryError(`Unknown job ${number}`);
+  return job.id;
+}
+
+/** Sales orders, purchase orders and work orders by their numbers, for filing under a job. */
+async function jobDocumentsByNumber(store: Store, numbers: string[]): Promise<Array<{ collection: JobDocument; id: string; number: string }>> {
+  if (numbers.length === 0) return [];
+  const [orders, purchaseOrders, workOrders] = await Promise.all([store.list("orders"), store.list("purchaseOrders"), store.list("workOrders")]);
+  return numbers.map((n) => {
+    const order = orders.find((o) => sameNumber(o.number, n));
+    if (order) return { collection: "orders" as const, id: order.id, number: order.number };
+    const po = purchaseOrders.find((p) => sameNumber(p.number, n));
+    if (po) return { collection: "purchaseOrders" as const, id: po.id, number: po.number };
+    const wo = workOrders.find((w) => sameNumber(w.number, n));
+    if (wo) return { collection: "workOrders" as const, id: wo.id, number: wo.number };
+    throw new InventoryError(`No sales order, purchase order or work order is numbered ${n}`);
+  });
+}
+
+/** A work order as a report row; full adds the parts list, builds and note. */
+function workOrderRow(wo: WorkOrder, items: Item[], byId: Map<string, Item>, refs: { job?: string; order?: string; builds?: string[] }, full: boolean) {
+  const asm = byId.get(wo.assemblyId);
+  const needs = workOrderNeeds(wo, items);
+  const short = needs.filter((n) => n.shortage > 0);
+  const options = asm && wo.options ? describeBomSelection(asm.bom, wo.options, (id) => byId.get(id)?.name ?? id) : "";
+  return {
+    number: wo.number,
+    assembly: asm?.sku,
+    name: asm?.name,
+    qty: wo.qty,
+    completed: wo.qtyCompleted,
+    status: wo.status,
+    priority: wo.priority && wo.priority !== "normal" ? wo.priority : undefined,
+    startOn: wo.startOn,
+    dueOn: wo.dueOn,
+    late: workOrderIsLate(wo) || undefined,
+    job: refs.job,
+    order: refs.order,
+    options: options || undefined,
+    shortOn: short.length ? short.map((n) => ({ sku: n.item.sku, shortBy: n.shortage })) : undefined,
+    ...(full ? { parts: needs.map((n) => ({ sku: n.item.sku, name: n.item.name, stillNeeded: n.required, onHand: n.available, shortBy: n.shortage || undefined })), partsFixed: wo.components.length > 0, builds: refs.builds?.length ? refs.builds : undefined, note: wo.note } : {}),
+  };
+}
+
 // ---------------------------------------------------------------------------
 
 export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: ExecContext): Promise<unknown> {
@@ -450,7 +624,18 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
         supersededBy: item.supersededBy ? byId.get(item.supersededBy)?.sku : undefined,
         priceBreaks: item.priceBreaks,
         expectedWastePct: item.expectedWastePct,
-        bom: item.bom.map((l) => ({ sku: byId.get(l.itemId)?.sku, name: byId.get(l.itemId)?.name, qty: l.qty, wastePct: l.wastePct, onHand: byId.get(l.itemId)?.onHand })),
+        mapPrice: item.mapPrice,
+        priceBelowMap: (item.mapPrice !== undefined && item.price < item.mapPrice) || undefined,
+        overMaxBy: overstockQty(item) || undefined,
+        units: item.uoms?.length || item.purchaseUnit || item.salesUnit ? { other: item.uoms?.map((u) => ({ unit: u.unit, holds: u.factor })), buyIn: item.purchaseUnit, sellIn: item.salesUnit } : undefined,
+        variantOf: item.variantOf ? { sku: byId.get(item.variantOf)?.sku, options: variantLabel(item.variantOptions, byId.get(item.variantOf)?.variantAxes) } : undefined,
+        variantOptions: isVariantParent(item) ? item.variantAxes : undefined,
+        variants: isVariantParent(item) ? variantsOf(items, item.id).map((v) => ({ sku: v.sku, options: variantLabel(v.variantOptions, item.variantAxes), onHand: v.onHand, status: v.status === "active" ? undefined : v.status })) : undefined,
+        bom: item.bom.map((l) => {
+          const role = bomLineKind(l);
+          return { sku: byId.get(l.itemId)?.sku, name: byId.get(l.itemId)?.name, qty: l.qty, wastePct: l.wastePct, onHand: byId.get(l.itemId)?.onHand, ...(role === "required" ? {} : { role, choice: role === "choice" ? l.group : undefined, isDefault: l.isDefault || undefined }) };
+        }),
+        bomOptions: bomOptionsOf(item, byId),
         buildable: item.type === "assembly" ? buildableQty(items, item) : undefined,
         whereUsed: whereUsed(items, item.id).map((w) => ({ sku: w.assembly.sku, name: w.assembly.name, qtyPer: w.qtyPer })),
         replenishment: item.replenishment,
@@ -469,11 +654,15 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
       if (!asm) throw new InventoryError(`Unknown SKU ${input.sku}`);
       const qty = Number(input.qty) || 1;
       const consume = input.consumeSubassemblies !== false;
-      const reqs = explodeBom(items, asm, qty, { consumeSubassemblies: consume, explodeShortfallOnly: !consume });
+      const selection = bomSelectionFrom(items, asm, input);
+      const opts = { consumeSubassemblies: consume, explodeShortfallOnly: !consume, selection };
+      const reqs = explodeBom(items, asm, qty, opts);
+      const byId = new Map(items.map((i) => [i.id, i]));
       return {
         assembly: asm.sku,
         qty,
-        buildableNow: buildableQty(items, asm),
+        builtWith: describeBomSelection(asm.bom, selection, (id) => byId.get(id)?.name ?? id) || undefined,
+        buildableNow: buildableQty(items, asm, opts),
         requirements: reqs.map((r) => ({ sku: r.item.sku, name: r.item.name, required: r.required, available: r.available, shortage: r.shortage, depth: r.depth })),
         shortages: reqs.filter((r) => r.shortage > 0).map((r) => r.item.sku),
       };
@@ -563,6 +752,66 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
           return [...receipts].sort((a, b) => b.receivedAt.localeCompare(a.receivedAt)).slice(0, limit).map((r) => ({ number: r.number, supplier: suppliers.find((s) => s.id === r.supplierId)?.name, reference: r.reference, receivedAt: r.receivedAt.slice(0, 10), lines: r.lines.map((l) => ({ sku: byId.get(l.itemId)?.sku, qty: l.qty, unitCost: l.unitCost })) }));
         case "recentBuilds":
           return [...builds].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit).map((b) => ({ number: b.number, assembly: byId.get(b.assemblyId)?.sku, qty: b.qty, completedAt: b.completedAt?.slice(0, 10) }));
+        case "workOrders": {
+          const [workOrders, jobs] = await Promise.all([store.list("workOrders"), store.list("jobs")]);
+          const refs = (wo: WorkOrder) => ({ job: jobs.find((j) => j.id === wo.jobId)?.number, order: orders.find((o) => o.id === wo.orderId)?.number, builds: (wo.buildIds ?? []).map((id) => builds.find((b) => b.id === id)?.number ?? id) });
+          if (input.number) {
+            const wo = workOrders.find((w) => sameNumber(w.number, input.number));
+            if (!wo) throw new InventoryError(`Unknown work order ${input.number}`);
+            return workOrderRow(wo, items, byId, refs(wo), true);
+          }
+          const open = workOrders.filter(workOrderIsOpen);
+          const rows = (input.all ? workOrders : open).sort((a, b) => (a.dueOn ?? a.startOn ?? "9").localeCompare(b.dueOn ?? b.startOn ?? "9") || a.number.localeCompare(b.number));
+          return { open: open.length, late: open.filter((w) => workOrderIsLate(w)).length, committedValue: committedValue(workOrders, items), total: rows.length, workOrders: rows.slice(0, limit).map((wo) => workOrderRow(wo, items, byId, refs(wo), false)) };
+        }
+        case "productionSchedule": {
+          const workOrders = await store.list("workOrders");
+          const committed = Array.from(committedToProduction(workOrders, items), ([id, qty]) => ({ sku: byId.get(id)?.sku ?? id, committed: qty, onHand: byId.get(id)?.onHand ?? 0, shortBy: round(Math.max(0, qty - (byId.get(id)?.onHand ?? 0)), 3) || undefined }));
+          return {
+            weeks: productionSchedule(workOrders).slice(0, limit).map((w) => ({ weekOf: w.week || "unscheduled", units: w.units, workOrders: w.workOrders.map((wo) => ({ number: wo.number, assembly: byId.get(wo.assemblyId)?.sku, remaining: workOrderRemaining(wo), status: wo.status, dueOn: wo.dueOn, priority: wo.priority && wo.priority !== "normal" ? wo.priority : undefined, late: workOrderIsLate(wo) || undefined })) })),
+            partsCommitted: committed.sort((a, b) => (b.shortBy ?? 0) - (a.shortBy ?? 0) || a.sku.localeCompare(b.sku)).slice(0, limit),
+            committedValue: committedValue(workOrders, items),
+          };
+        }
+        case "jobs": {
+          const [jobs, workOrders, purchaseOrders] = await Promise.all([store.list("jobs"), store.list("workOrders"), store.list("purchaseOrders")]);
+          const src = { orders, purchaseOrders, workOrders, builds, movements };
+          const row = (job: (typeof jobs)[number], full: boolean) => {
+            const cost = jobCost(job, src);
+            const docs = jobDocuments(job.id, src);
+            return {
+              number: job.number,
+              name: job.name,
+              customer: job.customer,
+              status: job.status,
+              startOn: job.startOn,
+              dueOn: job.dueOn,
+              crew: job.crew?.map((c) => (c.role ? `${c.name} (${c.role})` : c.name)),
+              budget: job.budget,
+              revenue: cost.revenue,
+              cost: cost.cost,
+              margin: cost.margin,
+              budgetUsedPct: cost.budgetUsedPct,
+              ...(full
+                ? {
+                    costFromPurchases: cost.purchases,
+                    costFromMaterialsBuilt: cost.materials,
+                    salesOrders: docs.orders.map((o) => ({ number: o.number, status: o.status, total: round(o.lines.reduce((t, l) => t + l.qty * l.unitPrice, 0)) })),
+                    purchaseOrders: docs.purchaseOrders.map((p) => ({ number: p.number, status: p.status, supplier: p.supplier, total: poTotal(p) })),
+                    workOrders: docs.workOrders.map((w) => ({ number: w.number, assembly: byId.get(w.assemblyId)?.sku, qty: w.qty, completed: w.qtyCompleted, status: w.status })),
+                    note: job.note,
+                  }
+                : { documents: { salesOrders: docs.orders.length, purchaseOrders: docs.purchaseOrders.length, workOrders: docs.workOrders.length } }),
+            };
+          };
+          if (input.number) {
+            const job = jobs.find((j) => sameNumber(j.number, input.number));
+            if (!job) throw new InventoryError(`Unknown job ${input.number}`);
+            return row(job, true);
+          }
+          const rows = (input.all ? jobs : jobs.filter(jobIsOpen)).sort((a, b) => (a.dueOn ?? "9").localeCompare(b.dueOn ?? "9") || a.number.localeCompare(b.number));
+          return { open: jobs.filter(jobIsOpen).length, total: rows.length, jobs: rows.slice(0, limit).map((j) => row(j, false)) };
+        }
         default:
           throw new InventoryError(`Unknown report ${report}`);
       }
@@ -658,7 +907,8 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
       const items = await store.list("items");
       const asm = findItem(items, String(input.sku ?? ""));
       if (!asm) throw new InventoryError(`Unknown SKU ${input.sku}`);
-      const build = await buildAssembly(store, actor, { assemblyId: asm.id, qty: Number(input.qty), consumeSubassemblies: input.consumeSubassemblies as boolean | undefined, note: input.note as string | undefined });
+      const options = bomSelectionFrom(items, asm, input);
+      const build = await buildAssembly(store, actor, { assemblyId: asm.id, qty: Number(input.qty), consumeSubassemblies: input.consumeSubassemblies as boolean | undefined, note: input.note as string | undefined, ...(options ? { options } : {}) });
       return { ok: true, build: build.number, qty: build.qty, componentsConsumed: build.components.length, summary: `Built ${build.qty} × ${asm.sku} (${build.number})` };
     }
 
@@ -666,30 +916,7 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
       const items = await store.list("items");
       const asm = findItem(items, String(input.sku ?? ""));
       if (!asm) throw new InventoryError(`Unknown SKU ${input.sku}`);
-      const mode = (input.mode as string) ?? "merge";
-      const lines = (input.lines as Array<{ sku: string; qty?: number; wastePct?: number }>) ?? [];
-      const ancestors = new Set(whereUsedDeep(items, asm.id).map((a) => a.id));
-      let bom = [...asm.bom];
-      for (const l of lines) {
-        const comp = findItem(items, l.sku);
-        if (!comp) throw new InventoryError(`Unknown component ${l.sku}`);
-        if (comp.id === asm.id) throw new InventoryError("An assembly cannot contain itself");
-        if (ancestors.has(comp.id)) throw new InventoryError(`${comp.sku} already uses ${asm.sku} (directly or through a sub-assembly); adding it would create a BOM loop`);
-        if (mode === "remove") {
-          bom = bom.filter((b) => b.itemId !== comp.id);
-        } else {
-          const idx = bom.findIndex((b) => b.itemId === comp.id);
-          const line = { itemId: comp.id, qty: l.qty ?? bom[idx]?.qty ?? 1, wastePct: l.wastePct ?? bom[idx]?.wastePct };
-          if (idx >= 0) bom[idx] = line;
-          else bom.push(line);
-        }
-      }
-      if (mode === "replace") {
-        bom = lines.map((l) => {
-          const comp = findItem(items, l.sku)!;
-          return { itemId: comp.id, qty: l.qty ?? 1, wastePct: l.wastePct };
-        });
-      }
+      const bom = nextBom(items, asm, (input.mode as string) ?? "merge", (input.lines as BomLineInput[]) ?? [], true);
       await updateItem(store, actor, asm.id, { bom, type: "assembly" }, String(input.reason ?? "BOM updated by agent"));
       return { ok: true, sku: asm.sku, lines: bom.length, summary: `${asm.sku} BOM now has ${bom.length} line${bom.length === 1 ? "" : "s"}` };
     }
@@ -1061,6 +1288,129 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
       };
     }
 
+    case "saveWorkOrder": {
+      const action = String(input.action ?? "");
+      const items = await store.list("items");
+      const byId = new Map(items.map((i) => [i.id, i]));
+      const shortOn = (wo: WorkOrder) => workOrderNeeds(wo, items).filter((n) => n.shortage > 0).map((n) => ({ sku: n.item.sku, shortBy: n.shortage }));
+      const shortText = (short: Array<{ sku: string }>) => (short.length ? ` · short on ${short.map((x) => x.sku).join(", ")}` : "");
+      const startOn = dateArg(input.startOn, "startOn");
+      const dueOn = dateArg(input.dueOn, "dueOn");
+      const priority = input.priority as WorkOrder["priority"] | undefined;
+      const note = typeof input.note === "string" ? input.note : undefined;
+      const jobId = await jobIdArg(store, input.jobNumber);
+      let orderId: string | undefined;
+      if (input.orderNumber) {
+        const order = (await store.list("orders")).find((o) => sameNumber(o.number, input.orderNumber));
+        if (!order) throw new InventoryError(`Unknown sales order ${input.orderNumber}`);
+        orderId = order.id;
+      }
+      if (action === "create") {
+        const asm = findItem(items, String(input.sku ?? ""));
+        if (!asm) throw new InventoryError(input.sku ? `Unknown SKU ${input.sku}` : "Give the SKU of the assembly to build");
+        const wo = await createWorkOrder(store, actor, { assemblyId: asm.id, qty: Number(input.qty), startOn, dueOn, priority, options: bomSelectionFrom(items, asm, input), jobId: jobId ?? undefined, orderId, note, release: Boolean(input.release) });
+        const short = shortOn(wo);
+        return { ok: true, workOrder: wo.number, status: wo.status, shortOn: short.length ? short : undefined, page: "/builds/work-orders", summary: `${wo.status === "released" ? "Released" : "Planned"} ${wo.number}: ${wo.qty} × ${asm.sku}${wo.dueOn ? `, due ${wo.dueOn}` : ""}${shortText(short)}` };
+      }
+      const wo = await findWorkOrder(store, input.number);
+      const asm = byId.get(wo.assemblyId);
+      switch (action) {
+        case "update": {
+          const patch: WorkOrderPatch = {};
+          if (input.qty !== undefined) patch.qty = Number(input.qty);
+          if (startOn) patch.startOn = startOn;
+          if (dueOn) patch.dueOn = dueOn;
+          if (priority) patch.priority = priority;
+          if (note !== undefined) patch.note = note.trim() || undefined;
+          if (jobId !== undefined) patch.jobId = jobId ?? undefined;
+          if (orderId) patch.orderId = orderId;
+          if ((input.choose || input.withOptional) && asm) patch.options = bomSelectionFrom(items, asm, input);
+          if (Object.keys(patch).length === 0) throw new InventoryError("Nothing to change: give qty, dates, priority, note, job, or choose / withOptional");
+          const next = await updateWorkOrder(store, actor, wo.id, patch);
+          return { ok: true, workOrder: next.number, status: next.status, qty: next.qty, dueOn: next.dueOn, summary: `Updated ${next.number}` };
+        }
+        case "release": {
+          const next = await releaseWorkOrder(store, actor, wo.id);
+          const short = shortOn(next);
+          return { ok: true, workOrder: next.number, status: next.status, shortOn: short.length ? short : undefined, summary: `Released ${next.number}${shortText(short)}` };
+        }
+        case "complete": {
+          const res = await completeWorkOrder(store, actor, wo.id, { qty: input.qty !== undefined ? Number(input.qty) : undefined, note });
+          const done = res.workOrder.status === "completed";
+          return { ok: true, workOrder: res.workOrder.number, status: res.workOrder.status, completed: res.workOrder.qtyCompleted, of: res.workOrder.qty, build: res.buildNumber, summary: `${done ? "Completed" : "Booked units on"} ${res.workOrder.number} (${res.buildNumber}): ${res.workOrder.qtyCompleted} of ${res.workOrder.qty} × ${asm?.sku ?? "assembly"} built` };
+        }
+        case "cancel": {
+          const next = await cancelWorkOrder(store, actor, wo.id, note);
+          return { ok: true, workOrder: next.number, status: next.status, unitsAlreadyBuilt: next.qtyCompleted || undefined, summary: `Cancelled ${next.number}` };
+        }
+        default:
+          throw new InventoryError(`Unknown work order action ${action}`);
+      }
+    }
+
+    case "saveJob": {
+      const [jobs, customers, members] = await Promise.all([store.list("jobs"), store.list("customers"), store.list("members")]);
+      const existing = input.number ? jobs.find((j) => sameNumber(j.number, input.number)) : undefined;
+      if (input.number && !existing) throw new InventoryError(`Unknown job ${input.number}`);
+      // Everything is looked up before anything is written, so a mistyped number changes nothing.
+      const link = await jobDocumentsByNumber(store, (input.link as string[] | undefined) ?? []);
+      const unlink = await jobDocumentsByNumber(store, (input.unlink as string[] | undefined) ?? []);
+      const fields: Partial<JobInput> & { status?: JobStatus } = {};
+      if (typeof input.name === "string") fields.name = input.name;
+      if (typeof input.customer === "string") {
+        const customer = customers.find((c) => c.name.toLowerCase() === String(input.customer).trim().toLowerCase());
+        fields.customer = customer?.name ?? String(input.customer).trim();
+        fields.customerId = customer?.id;
+      }
+      const startOn = dateArg(input.startOn, "startOn");
+      const dueOn = dateArg(input.dueOn, "dueOn");
+      if (startOn) fields.startOn = startOn;
+      if (dueOn) fields.dueOn = dueOn;
+      if (input.budget !== undefined) fields.budget = Number(input.budget);
+      if (typeof input.note === "string") fields.note = input.note;
+      if (Array.isArray(input.crew)) {
+        fields.crew = (input.crew as Array<{ name: string; role?: string; contact?: string }>).map((c) => {
+          const member = members.find((m) => m.name.toLowerCase() === String(c.name ?? "").trim().toLowerCase());
+          const row: JobAssignee = { name: member?.name ?? String(c.name ?? "") };
+          if (member) row.memberId = member.id;
+          if (c.role) row.role = c.role;
+          if (c.contact) row.contact = c.contact;
+          return row;
+        });
+      }
+      const status = input.status as JobStatus | undefined;
+      let job;
+      if (existing) {
+        if (status) fields.status = status;
+        job = Object.keys(fields).length ? await updateJob(store, actor, existing.id, fields) : existing;
+      } else {
+        if (!fields.name?.trim()) throw new InventoryError("Give the job a name");
+        job = await createJob(store, actor, { ...fields, name: fields.name });
+        if (status && status !== "open") job = await updateJob(store, actor, job.id, { status });
+      }
+      for (const d of link) await assignToJob(store, d.collection, d.id, job.id);
+      for (const d of unlink) await assignToJob(store, d.collection, d.id, null);
+      const filed = [link.length ? `filed ${link.map((d) => d.number).join(", ")}` : null, unlink.length ? `took off ${unlink.map((d) => d.number).join(", ")}` : null].filter(Boolean).join("; ");
+      return { ok: true, job: job.number, name: job.name, status: job.status, created: !existing, linked: link.length ? link.map((d) => d.number) : undefined, unlinked: unlink.length ? unlink.map((d) => d.number) : undefined, page: "/jobs", summary: `${existing ? "Updated" : "Opened"} ${job.number}: ${job.name}${filed ? ` (${filed})` : ""}` };
+    }
+
+    case "createVariants": {
+      const items = await store.list("items");
+      const parent = findItem(items, String(input.sku ?? ""));
+      if (!parent) throw new InventoryError(`Unknown SKU ${input.sku}`);
+      const axes = ((input.options as VariantAxis[] | undefined) ?? []).map((a) => ({ name: String(a.name ?? ""), values: (a.values ?? []).map(String) }));
+      const res = await saveVariants(store, actor, parent.id, axes);
+      const family = variantsOf(await store.list("items"), parent.id);
+      return {
+        ok: true,
+        parent: parent.sku,
+        created: res.created.map((c) => c.sku),
+        variants: family.length,
+        noLongerMatchAnOption: res.orphaned.length ? res.orphaned.map((o) => o.sku) : undefined,
+        summary: `${res.created.length ? `Created ${res.created.length} variant${res.created.length === 1 ? "" : "s"} of ${parent.sku}` : `No new variants of ${parent.sku} were needed`}; the family has ${family.length}`,
+      };
+    }
+
     default:
       throw new InventoryError(`Unknown tool ${name as string}`);
   }
@@ -1112,21 +1462,12 @@ export async function previewPatches(name: AgentToolName, rawInput: unknown, ctx
     case "updateBom": {
       const asm = findItem(items, String(input.sku ?? ""));
       if (!asm) return out;
-      const mode = (input.mode as string) ?? "merge";
-      const lines = (input.lines as Array<{ sku: string; qty?: number; wastePct?: number }>) ?? [];
-      let bom = [...asm.bom];
-      for (const l of lines) {
-        const comp = findItem(items, l.sku);
-        if (!comp) continue;
-        if (mode === "remove") bom = bom.filter((b) => b.itemId !== comp.id);
-        else {
-          const idx = bom.findIndex((b) => b.itemId === comp.id);
-          const line = { itemId: comp.id, qty: l.qty ?? bom[idx]?.qty ?? 1, wastePct: l.wastePct ?? bom[idx]?.wastePct };
-          if (idx >= 0) bom[idx] = line;
-          else bom.push(line);
-        }
+      let bom: BomLine[];
+      try {
+        bom = nextBom(items, asm, (input.mode as string) ?? "merge", (input.lines as BomLineInput[]) ?? [], false);
+      } catch {
+        return out;
       }
-      if (mode === "replace") bom = lines.map((l) => ({ itemId: findItem(items, l.sku)?.id ?? "", qty: l.qty ?? 1, wastePct: l.wastePct })).filter((b) => b.itemId);
       out[asm.id] = { bom, type: "assembly" };
       return out;
     }
@@ -1140,6 +1481,7 @@ export async function describeProposal(name: AgentToolName, rawInput: unknown, c
   const input = (rawInput ?? {}) as Record<string, unknown>;
   const items = await ctx.store.list("items");
   const skuOf = (s: unknown) => findItem(items, String(s ?? ""))?.sku ?? String(s);
+  const nameOf = (id: string) => items.find((i) => i.id === id)?.name ?? id;
   try {
     switch (name) {
       case "bulkUpdateItems": {
@@ -1199,11 +1541,65 @@ export async function describeProposal(name: AgentToolName, rawInput: unknown, c
         const lines = (input.lines as Array<Record<string, unknown>>) ?? [];
         return { title: `Receive ${lines.length} line${lines.length === 1 ? "" : "s"}${input.supplierName ? ` from ${input.supplierName}` : ""}`, lines: lines.slice(0, 20).map((l) => `${skuOf(l.sku)} × ${l.qty}${l.unitCost !== undefined ? ` @ ${l.unitCost}` : ""}`) };
       }
-      case "buildAssembly":
-        return { title: `Build ${input.qty} × ${skuOf(input.sku)}`, lines: [input.consumeSubassemblies === false ? "Explode sub-assemblies to base parts" : "Pull sub-assemblies from stock"] };
+      case "buildAssembly": {
+        const asm = findItem(items, String(input.sku ?? ""));
+        const built = asm ? describeBomSelection(asm.bom, bomSelectionFrom(items, asm, input), nameOf) : "";
+        return { title: `Build ${input.qty} × ${skuOf(input.sku)}`, lines: [input.consumeSubassemblies === false ? "Explode sub-assemblies to base parts" : "Pull sub-assemblies from stock", ...(built ? [built] : [])] };
+      }
       case "updateBom": {
-        const lines = (input.lines as Array<Record<string, unknown>>) ?? [];
-        return { title: `Update BOM for ${skuOf(input.sku)} (${input.mode ?? "merge"})`, lines: lines.map((l) => `${skuOf(l.sku)}${l.qty !== undefined ? ` × ${l.qty}` : ""}`) };
+        const lines = (input.lines as BomLineInput[]) ?? [];
+        return { title: `Update BOM for ${skuOf(input.sku)} (${input.mode ?? "merge"})`, lines: lines.map((l) => `${skuOf(l.sku)}${l.qty !== undefined ? ` × ${l.qty}` : ""}${l.role === "optional" ? " · optional" : l.role === "choice" ? ` · choice: ${l.choice ?? "?"}` : ""}${l.isDefault ? " (default)" : ""}`) };
+      }
+      case "saveWorkOrder": {
+        const action = String(input.action ?? "");
+        const dates = [input.startOn ? `Start ${input.startOn}` : null, input.dueOn ? `Due ${input.dueOn}` : null].filter(Boolean).join(" · ");
+        const extras = [dates || null, input.priority ? `Priority: ${input.priority}` : null, input.jobNumber ? `Job ${input.jobNumber}` : input.jobNumber === null ? "Taken off its job" : null, input.orderNumber ? `For ${input.orderNumber}` : null, input.note ? String(input.note) : null].filter((x): x is string => Boolean(x));
+        const shortLines = (reqs: Array<{ item: Item; required: number; available: number; shortage: number }>) => reqs.filter((r) => r.shortage > 0).slice(0, 12).map((r) => `Short on ${r.item.sku}: needs ${r.required}, ${r.available} on hand`);
+        if (action === "create") {
+          const asm = findItem(items, String(input.sku ?? ""));
+          const selection = asm ? bomSelectionFrom(items, asm, input) : undefined;
+          const built = asm ? describeBomSelection(asm.bom, selection, nameOf) : "";
+          const qty = Number(input.qty) || 0;
+          const short = asm && qty > 0 ? shortLines(explodeBom(items, asm, qty, { consumeSubassemblies: true, selection })) : [];
+          return { title: `${input.release ? "Release" : "Plan"} a work order: ${input.qty} × ${skuOf(input.sku)}`, lines: [input.release ? "The parts list is fixed and the parts are committed. Nothing leaves stock until units are completed." : "Planned only: nothing is committed or moved until it is released.", ...(built ? [built] : []), ...extras, ...short] };
+        }
+        const wo = await findWorkOrder(ctx.store, input.number);
+        const asm = items.find((i) => i.id === wo.assemblyId);
+        const what = `${wo.number} (${wo.qty} × ${asm?.sku ?? "assembly"})`;
+        if (action === "complete") {
+          const qty = input.qty !== undefined ? Number(input.qty) : workOrderRemaining(wo);
+          const needs = asm && qty > 0 ? explodeBom(items, asm, qty, { consumeSubassemblies: wo.consumeSubassemblies, selection: wo.options }) : [];
+          return { title: `Book ${qty} finished on ${what}`, lines: [`Builds ${qty} × ${asm?.sku ?? "assembly"}: components leave stock and the finished units arrive.`, `${wo.qtyCompleted} of ${wo.qty} done so far`, ...shortLines(needs)] };
+        }
+        if (action === "release") return { title: `Release ${what}`, lines: ["Fixes the parts list from the BOM as it stands and commits the parts. Nothing leaves stock yet.", ...shortLines(workOrderNeeds(wo, items))] };
+        if (action === "cancel") return { title: `Cancel ${what}`, lines: [wo.qtyCompleted > 0 ? `${wo.qtyCompleted} unit${wo.qtyCompleted === 1 ? "" : "s"} already built stay in stock` : "Nothing has been built on it", ...(input.note ? [`Reason: ${input.note}`] : [])] };
+        return { title: `Update ${what}`, lines: [input.qty !== undefined ? `Quantity: ${wo.qty} → ${input.qty}` : null, ...extras, (input.choose || input.withOptional) && asm ? describeBomSelection(asm.bom, bomSelectionFrom(items, asm, input), nameOf) : null].filter((x): x is string => Boolean(x)) };
+      }
+      case "saveJob": {
+        const crew = (input.crew as Array<{ name: string; role?: string }> | undefined) ?? undefined;
+        const lines = [
+          input.number && input.name ? `Name: ${input.name}` : null,
+          input.customer ? `Customer: ${input.customer}` : null,
+          input.status ? `Status: ${String(input.status).replace("_", " ")}` : null,
+          input.startOn || input.dueOn ? [input.startOn ? `Start ${input.startOn}` : null, input.dueOn ? `Due ${input.dueOn}` : null].filter(Boolean).join(" · ") : null,
+          input.budget !== undefined ? `Budget: ${Number(input.budget).toFixed(2)}` : null,
+          crew ? (crew.length ? `Crew: ${crew.map((c) => (c.role ? `${c.name} (${c.role})` : c.name)).join(", ")}` : "Crew: nobody") : null,
+          (input.link as string[] | undefined)?.length ? `File under it: ${(input.link as string[]).join(", ")}` : null,
+          (input.unlink as string[] | undefined)?.length ? `Take off it: ${(input.unlink as string[]).join(", ")}` : null,
+          input.note ? String(input.note) : null,
+        ].filter((x): x is string => Boolean(x));
+        return { title: input.number ? `Update job ${input.number}` : `Open a job: ${input.name ?? ""}`, lines };
+      }
+      case "createVariants": {
+        const parent = findItem(items, String(input.sku ?? ""));
+        const axes = ((input.options as VariantAxis[] | undefined) ?? []).map((a) => ({ name: String(a.name ?? ""), values: (a.values ?? []).map(String) }));
+        if (!parent) return { title: `Create variants of ${input.sku}`, lines: [`Unknown SKU ${input.sku}`] };
+        const plan = planVariants(parent, axes, items);
+        const fresh = plan.filter((p) => !p.existing);
+        return {
+          title: `Create ${fresh.length} variant${fresh.length === 1 ? "" : "s"} of ${parent.sku}`,
+          lines: [axes.map((a) => `${a.name}: ${a.values.join(", ")}`).join(" · "), `Each is its own item with its own stock${plan.length > fresh.length ? `; ${plan.length - fresh.length} already exist` : ""}`, ...fresh.slice(0, 20).map((p) => `${p.sku} · ${p.name}`), ...(fresh.length > 20 ? [`…and ${fresh.length - 20} more`] : [])],
+        };
       }
       case "createOrder": {
         const lines = (input.lines as Array<Record<string, unknown>>) ?? [];

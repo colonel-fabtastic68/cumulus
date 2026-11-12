@@ -1,6 +1,7 @@
 import { createGoogle } from "@ai-sdk/google";
 import { convertToModelMessages, createUIMessageStreamResponse, isStepCount, streamText, toUIMessageStream, wrapLanguageModel, type UIMessage } from "ai";
-import { agentTools } from "@/lib/agent/tools";
+import { agentToolsFor, TOOL_FEATURES, type ToolFeatureFlags } from "@/lib/agent/tools";
+import { serverFeatureEnabled } from "@/lib/features";
 import { explainChainError, fallbackMiddleware } from "@/lib/agent/fallback";
 import { compactHistory } from "@/lib/agent/history";
 
@@ -28,7 +29,24 @@ function friendlyError(error: unknown): string {
   return explainChainError(error, MODELS);
 }
 
-function systemPrompt(context: string, userName: string, autoApprove: boolean) {
+/** Guidance for unreleased features, added to the prompt only while the feature is on for the workspace. */
+const FEATURE_GUIDANCE: Record<(typeof TOOL_FEATURES)[number], string> = {
+  workOrders:
+    "- Production: a work order (WO-xxxx) is a planned run of an assembly. The workOrders and productionSchedule reports show what is open, due and short on parts; saveWorkOrder plans, releases, completes and cancels. Parts stay on hand until units are completed (a released run only commits them). Completing books the build, so never also call buildAssembly for units that belong to a work order.",
+  jobs: "- Jobs: a job (JOB-xxxx) groups the sales orders, purchase orders and work orders for one project or install, with a crew and a budget. The jobs report gives revenue, cost and margin; saveJob opens and updates jobs and files documents under them.",
+  modularBoms:
+    "- Modular BOMs: a BOM line can be optional, or one alternative of a named choice. getItem shows each line's role and, under bomOptions, what is left to decide. Tools that build take choose / withOptional; anything left out uses the BOM's defaults. When a choice matters and the user has not said which alternative, ask before building.",
+  variants: "- Variants: an item with options (Size, Color) is a parent; every combination is its own item with its own SKU and stock (getItem on the parent lists them; createVariants adds them). Stock, orders and builds use a variant's SKU, never the parent's.",
+};
+
+/** The unreleased tool features to declare: what the workspace says is on, limited to what this deployment allows. */
+function toolFeatures(requested: unknown): ToolFeatureFlags {
+  const asked = new Set(Array.isArray(requested) ? requested.map(String) : []);
+  return Object.fromEntries(TOOL_FEATURES.map((f) => [f, asked.has(f) && serverFeatureEnabled(f, { [f]: true })]));
+}
+
+function systemPrompt(context: string, userName: string, autoApprove: boolean, features: ToolFeatureFlags) {
+  const extra = TOOL_FEATURES.filter((f) => features[f]).map((f) => `\n${FEATURE_GUIDANCE[f]}`).join("");
   return `You are Strato, the inventory assistant built into cumulusOS, a small company's inventory workspace. You can read everything and change anything through tools. Refer to yourself as Strato.
 
 You are talking with ${userName}. Today is ${new Date().toISOString().slice(0, 10)}.
@@ -52,7 +70,7 @@ You are talking with ${userName}. Today is ${new Date().toISOString().slice(0, 1
 - Costing: the workspace snapshot names the costing method (standard, average or FIFO). Movements carry the cost they were booked at; the valuation report values the shelf under the method, gives COGS over a window and the value on a past date (asOf).
 - Cycle counts: proposeCycleCount picks what to count and the expected quantities; startCycleCount begins a count (pass your expectations as proposals so the sheet shows them next to the system quantity); recordCycleCounts enters what was found; getCycleCount compares; completeCycleCount books the differences as count movements. Never use adjustStock for a count that is on a sheet.
 - Labels and barcodes: createLabelSheet prints QR codes or barcodes for items, assemblies, locations, suppliers or batches onto label stock (listLabelTemplates has the sheets and rolls) and files the PDF under Documents › Label sheets; it needs approval like any write. Default to QR codes that link into cumulusOS unless the user names a barcode type; use the item's UPC for ean13 / upca. Point people to Exports › Labels & barcodes to adjust the layout by hand, and to the result's labelsPage link.
-- Format money with two decimals and the workspace currency.
+- Format money with two decimals and the workspace currency.${extra}
 
 ## Workspace snapshot
 ${context}`;
@@ -72,16 +90,17 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   }
-  const body = (await req.json()) as { messages: UIMessage[]; context?: string; userName?: string; autoApprove?: boolean };
+  const body = (await req.json()) as { messages: UIMessage[]; context?: string; userName?: string; autoApprove?: boolean; features?: string[] };
+  const features = toolFeatures(body.features);
   const google = createGoogle({ apiKey });
 
   const messages = compactHistory(body.messages);
   const result = streamText({
     model: modelWithFallback(google),
-    instructions: systemPrompt(body.context ?? "(no snapshot provided)", body.userName ?? "a teammate", body.autoApprove ?? false),
+    instructions: systemPrompt(body.context ?? "(no snapshot provided)", body.userName ?? "a teammate", body.autoApprove ?? false, features),
     // A proposal the person never answered has no result; dropping it beats failing the whole turn.
     messages: await convertToModelMessages(messages, { ignoreIncompleteToolCalls: true }),
-    tools: agentTools,
+    tools: agentToolsFor(features),
     stopWhen: isStepCount(16),
     // Retries, fallbacks and quota waits all happen inside the chain.
     maxRetries: 0,

@@ -7,7 +7,7 @@
  * proposal card and only run after approval (unless agentAutoApprove).
  */
 import { z } from "zod";
-import { tool } from "ai";
+import { tool, type ToolSet } from "ai";
 
 const skuList = z.array(z.string()).describe("Item SKUs (case-insensitive)");
 
@@ -78,6 +78,57 @@ const bulkChange = {
     .describe("Per-item values when items get different values, e.g. [{sku:'A', set:{price:10}}, {sku:'B', set:{price:12}}]. Listed SKUs are targeted automatically, so one call covers any number of items."),
 };
 
+/** Modular BOMs: which alternatives and optional parts to build with. Flat SKU lists keep the declaration small; an alternative's SKU names its choice. */
+const bomOptionsInput = {
+  choose: z.array(z.string()).optional().describe("Modular BOM: SKU of the alternative to use for each choice; others use their default"),
+  withOptional: z.array(z.string()).optional().describe("Modular BOM: SKUs of optional parts to include; omit for the defaults, [] for none"),
+};
+
+const REPORTS = ["lowStock", "valuation", "shelfLife", "deadStock", "consumption", "seasonality", "backorders", "kpis", "transfers", "openOrders", "openRmas", "recentActivity", "suppliers", "recentReceipts", "recentBuilds", "workOrders", "productionSchedule", "jobs"] as const;
+
+/**
+ * Tools, reports and parameters that belong to an unreleased feature (src/lib/features.ts).
+ * They are only declared to the model while the feature is on, so a workspace without them
+ * pays nothing for them in its prompt. See agentToolsFor.
+ */
+export const TOOL_FEATURES = ["workOrders", "jobs", "variants", "modularBoms"] as const;
+export type ToolFeature = (typeof TOOL_FEATURES)[number];
+
+const REPORT_FEATURE: Partial<Record<(typeof REPORTS)[number], ToolFeature>> = { workOrders: "workOrders", productionSchedule: "workOrders", jobs: "jobs" };
+
+const getReportInput = z.object({
+  report: z.enum(REPORTS),
+  days: z.number().optional().describe("Window in days for consumption/deadStock/valuation COGS (default 90 / 120 / 30)"),
+  sku: z.string().optional().describe("Restrict seasonality/consumption to one item"),
+  asOf: z.string().optional().describe("valuation: YYYY-MM-DD to value the stock as it stood at the end of that day"),
+  number: z.string().optional().describe("workOrders / jobs: one record in full (WO-1001, JOB-1001)"),
+  all: z.boolean().optional().describe("workOrders / jobs: include closed ones"),
+  limit: z.number().optional(),
+});
+
+const explodeBomInput = z.object({ sku: z.string(), qty: z.number().default(1), consumeSubassemblies: z.boolean().optional().describe("true = pull sub-assemblies from their own stock (default). false = explode them to base parts."), ...bomOptionsInput });
+const buildAssemblyInput = z.object({ sku: z.string(), qty: z.number(), consumeSubassemblies: z.boolean().optional(), note: z.string().optional(), ...bomOptionsInput });
+
+const bomLineInput = z.object({ sku: z.string(), qty: z.number().optional(), wastePct: z.number().optional() });
+const modularBomLineInput = bomLineInput.extend({
+  role: z.enum(["required", "optional", "choice"]).optional(),
+  choice: z.string().optional().describe("role choice: the choice's name; lines sharing it are alternatives"),
+  isDefault: z.boolean().optional().describe("Used when nobody chooses"),
+});
+const updateBomInput = <L extends z.ZodType>(line: L) => z.object({ sku: z.string(), mode: z.enum(["replace", "merge", "remove"]).default("merge"), lines: z.array(line), reason: z.string().optional() });
+
+const DESC = {
+  getReport:
+    "Run a built-in report. lowStock: items below min with reorder qty and days of cover (shelf count only; getReplenishment uses the forecast). valuation: inventory value under the workspace's costing method (standard / average / FIFO), by category, with COGS and receipts over N days and the value on a past date (asOf). shelfLife: oldest batches on the shelf. deadStock: no consumption in N days. consumption: usage by layer (sold / consumed in builds / written off) over N days. seasonality: monthly sales & consumption. backorders: open order lines short on stock with when they could ship. kpis: turnover, days on hand, fill rate, stockouts over N days. transfers: stock moving between locations. openOrders, openRmas, recentActivity, suppliers, recentReceipts, recentBuilds.",
+  getReportWorkOrders: " workOrders: open production runs with progress, due date and parts short. productionSchedule: open runs by week due, and parts committed to released runs against on hand.",
+  getReportJobs: " jobs: open jobs with crew, documents, revenue, cost and margin.",
+  explodeBom: "Component requirements to build a quantity of an assembly, including sub-assemblies and shortages.",
+  buildAssembly: "Build an assembly from its BOM: consumes components (and sub-assemblies) and adds finished units to stock. Fails with a shortage list if parts are missing.",
+  updateBom: "Replace or modify the bill of materials for an assembly. Use mode 'replace' to set the full list, 'merge' to add/update lines, 'remove' to drop lines.",
+  bomOptions: " A modular BOM takes choose / withOptional (getItem lists them).",
+  updateBomModular: " A line's role makes it optional, or one alternative of a named choice.",
+};
+
 export const agentTools = {
   // ---- READ -----------------------------------------------------------------
   getWorkspaceSummary: tool({
@@ -117,24 +168,12 @@ export const agentTools = {
     description: "Full detail for one item: fields, BOM, where-used, recent stock movements, lots on the shelf, buildable quantity (for assemblies).",
     inputSchema: z.object({ sku: z.string().describe("SKU or item id") }),
   }),
-  explodeBom: tool({
-    description: "Component requirements to build a quantity of an assembly, including sub-assemblies and shortages.",
-    inputSchema: z.object({ sku: z.string(), qty: z.number().default(1), consumeSubassemblies: z.boolean().optional().describe("true = pull sub-assemblies from their own stock (default). false = explode them to base parts.") }),
-  }),
+  explodeBom: tool({ description: DESC.explodeBom + DESC.bomOptions, inputSchema: explodeBomInput }),
   whereUsed: tool({
     description: "Which assemblies use this item, directly and indirectly.",
     inputSchema: z.object({ sku: z.string() }),
   }),
-  getReport: tool({
-    description: "Run a built-in report. lowStock: items below min with reorder qty and days of cover (shelf count only; getReplenishment uses the forecast). valuation: inventory value under the workspace's costing method (standard / average / FIFO), by category, with COGS and receipts over N days and the value on a past date (asOf). shelfLife: oldest batches on the shelf. deadStock: no consumption in N days. consumption: usage by layer (sold / consumed in builds / written off) over N days. seasonality: monthly sales & consumption. backorders: open order lines short on stock with when they could ship. kpis: turnover, days on hand, fill rate, stockouts over N days. transfers: stock moving between locations. openOrders, openRmas, recentActivity, suppliers, recentReceipts, recentBuilds.",
-    inputSchema: z.object({
-      report: z.enum(["lowStock", "valuation", "shelfLife", "deadStock", "consumption", "seasonality", "backorders", "kpis", "transfers", "openOrders", "openRmas", "recentActivity", "suppliers", "recentReceipts", "recentBuilds"]),
-      days: z.number().optional().describe("Window in days for consumption/deadStock/valuation COGS (default 90 / 120 / 30)"),
-      sku: z.string().optional().describe("Restrict seasonality/consumption to one item"),
-      asOf: z.string().optional().describe("valuation: YYYY-MM-DD to value the stock as it stood at the end of that day"),
-      limit: z.number().optional(),
-    }),
-  }),
+  getReport: tool({ description: DESC.getReport + DESC.getReportWorkOrders + DESC.getReportJobs, inputSchema: getReportInput }),
   getReplenishment: tool({
     description: "The replenishment plan, forecast-based: for every item with a min/max or a replenishment rule, on hand, incoming (open purchase orders, transfers in transit), outgoing (open sales orders, components for suggested builds), forecast, min/max, usage per day, days of cover, the date to order by, the suggested quantity and route (buy from the supplier or build from the BOM). status 'order' = forecast below min; 'covered' = below min on the shelf but incoming covers it; 'snoozed'; 'ok'. Read-only; use replenish to act. Prefer this over suggestPurchaseOrders.",
     inputSchema: z.object({ status: z.enum(["order", "covered", "snoozed", "ok", "all"]).optional().describe("Default: order"), supplierName: z.string().optional(), route: z.enum(["buy", "build"]).optional(), limit: z.number().optional() }),
@@ -205,19 +244,8 @@ export const agentTools = {
       note: z.string().optional(),
     }),
   }),
-  buildAssembly: tool({
-    description: "Build an assembly from its BOM: consumes components (and sub-assemblies) and adds finished units to stock. Fails with a shortage list if parts are missing.",
-    inputSchema: z.object({ sku: z.string(), qty: z.number(), consumeSubassemblies: z.boolean().optional(), note: z.string().optional() }),
-  }),
-  updateBom: tool({
-    description: "Replace or modify the bill of materials for an assembly. Use mode 'replace' to set the full list, 'merge' to add/update lines, 'remove' to drop lines.",
-    inputSchema: z.object({
-      sku: z.string(),
-      mode: z.enum(["replace", "merge", "remove"]).default("merge"),
-      lines: z.array(z.object({ sku: z.string(), qty: z.number().optional(), wastePct: z.number().optional() })),
-      reason: z.string().optional(),
-    }),
-  }),
+  buildAssembly: tool({ description: DESC.buildAssembly + DESC.bomOptions, inputSchema: buildAssemblyInput }),
+  updateBom: tool({ description: DESC.updateBom + DESC.updateBomModular, inputSchema: updateBomInput(modularBomLineInput) }),
   deactivateItems: tool({
     description: "Deactivate or supersede part numbers in bulk. Provide supersededBySku to mark them as superseded by a replacement.",
     inputSchema: z.object({ skus: skuList.optional(), filter: itemFilter.optional(), supersededBySku: z.string().optional(), reason: z.string() }),
@@ -350,6 +378,46 @@ export const agentTools = {
       folder: z.string().optional().describe("Documents folder (default Label sheets)"),
     }),
   }),
+
+  // ---- Unreleased features (declared only while the feature is on; see agentToolsFor) ----
+  saveWorkOrder: tool({
+    description:
+      "Plan or change a work order: a planned production run of an assembly. create: sku and qty; release: true commits the parts at once. update: qty, dates, priority, note, job. release: fix the parts list and commit the parts. complete: book finished units (qty, default all still open); this builds them, so components leave stock. cancel: stop it. Every action but create needs number.",
+    inputSchema: z.object({
+      action: z.enum(["create", "update", "release", "complete", "cancel"]),
+      number: z.string().optional().describe("WO-1001"),
+      sku: z.string().optional().describe("create: the assembly"),
+      qty: z.number().optional(),
+      startOn: z.string().optional().describe("YYYY-MM-DD"),
+      dueOn: z.string().optional().describe("YYYY-MM-DD"),
+      priority: z.enum(["low", "normal", "high"]).optional(),
+      jobNumber: z.string().nullable().optional().describe("JOB-1001; null takes it off the job"),
+      orderNumber: z.string().optional().describe("Sales order it is made for"),
+      ...bomOptionsInput,
+      release: z.boolean().optional(),
+      note: z.string().optional().describe("On cancel, the reason"),
+    }),
+  }),
+  saveJob: tool({
+    description: "Create (omit number; name required) or update a job or project that sales orders, purchase orders and work orders are filed under. An update changes only the fields given. crew replaces the crew list. link / unlink take document numbers (SO-, PO-, WO-).",
+    inputSchema: z.object({
+      number: z.string().optional().describe("JOB-1001"),
+      name: z.string().optional(),
+      customer: z.string().optional(),
+      status: z.enum(["open", "on_hold", "completed", "cancelled"]).optional(),
+      startOn: z.string().optional().describe("YYYY-MM-DD"),
+      dueOn: z.string().optional().describe("YYYY-MM-DD"),
+      budget: z.number().optional().describe("Expected cost"),
+      note: z.string().optional(),
+      crew: z.array(z.object({ name: z.string(), role: z.string().optional(), contact: z.string().optional() })).optional().describe("Team members by name, or outside contractors and installers"),
+      link: z.array(z.string()).optional(),
+      unlink: z.array(z.string()).optional(),
+    }),
+  }),
+  createVariants: tool({
+    description: "Create an item's variants from options such as Size and Color: each combination becomes its own item with its own stock and an automatic SKU. options is the complete list; only missing combinations are created.",
+    inputSchema: z.object({ sku: z.string().describe("The parent item"), options: z.array(z.object({ name: z.string(), values: z.array(z.string()) })) }),
+  }),
 };
 
 export type AgentTools = typeof agentTools;
@@ -382,6 +450,9 @@ export const WRITE_TOOLS: AgentToolName[] = [
   "syncChannel",
   "assignStoreSkus",
   "createLabelSheet",
+  "saveWorkOrder",
+  "saveJob",
+  "createVariants",
 ];
 
 export function isWriteTool(name: string): name is AgentToolName {
@@ -431,4 +502,44 @@ export const TOOL_LABELS: Record<AgentToolName, string> = {
   deleteItems: "Delete items",
   listLabelTemplates: "Label templates",
   createLabelSheet: "Create label sheet",
+  saveWorkOrder: "Work order",
+  saveJob: "Save job",
+  createVariants: "Create variants",
 };
+
+/** Whole tools that exist only while a feature is on. */
+const TOOL_FEATURE: Partial<Record<AgentToolName, ToolFeature>> = { saveWorkOrder: "workOrders", saveJob: "jobs", createVariants: "variants" };
+
+export type ToolFeatureFlags = Partial<Record<ToolFeature, boolean>>;
+
+/** The feature a tool belongs to, when it is not part of the released product. */
+export function toolFeature(name: string): ToolFeature | undefined {
+  return TOOL_FEATURE[name as AgentToolName];
+}
+
+/**
+ * The tool set to declare to the model for a workspace: every released tool,
+ * plus the tools, reports and parameters of the unreleased features that are
+ * on. With none on, the declarations are exactly the released product's, so
+ * building a feature never grows the prompt for a workspace that cannot use it.
+ */
+export function agentToolsFor(on: ToolFeatureFlags): ToolSet {
+  if (TOOL_FEATURES.every((f) => on[f])) return agentTools;
+  const out: Record<string, unknown> = {};
+  for (const [name, t] of Object.entries(agentTools)) {
+    const feature = toolFeature(name);
+    if (!feature || on[feature]) out[name] = t;
+  }
+  const reports = REPORTS.filter((r) => !REPORT_FEATURE[r] || on[REPORT_FEATURE[r]!]);
+  const records = on.workOrders || on.jobs;
+  out.getReport = tool({
+    description: DESC.getReport + (on.workOrders ? DESC.getReportWorkOrders : "") + (on.jobs ? DESC.getReportJobs : ""),
+    inputSchema: (records ? getReportInput : getReportInput.omit({ number: true, all: true })).extend({ report: z.enum(reports as [string, ...string[]]) }),
+  });
+  if (!on.modularBoms) {
+    out.explodeBom = tool({ description: DESC.explodeBom, inputSchema: explodeBomInput.omit({ choose: true, withOptional: true }) });
+    out.buildAssembly = tool({ description: DESC.buildAssembly, inputSchema: buildAssemblyInput.omit({ choose: true, withOptional: true }) });
+    out.updateBom = tool({ description: DESC.updateBom, inputSchema: updateBomInput(bomLineInput) });
+  }
+  return out as ToolSet;
+}

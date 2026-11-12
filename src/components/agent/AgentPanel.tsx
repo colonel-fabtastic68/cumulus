@@ -5,13 +5,14 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls, type InferUITools, type UIDataTypes, type UIMessage } from "ai";
 import { ArrowUp, Check, ChevronDown, ChevronRight, Eye, History, Loader2, Plus, RefreshCw, Sparkles, Square, X } from "lucide-react";
 import { Badge, Banner, Button, IconButton, Markdown, Menu, useToast } from "@/components/ui";
-import { agentTools, isWriteTool, TOOL_LABELS, type AgentToolName } from "@/lib/agent/tools";
+import { agentTools, isWriteTool, TOOL_FEATURES, TOOL_LABELS, type AgentToolName, type ToolFeatureFlags } from "@/lib/agent/tools";
 import { describeProposal, executeTool, previewPatches, PREVIEWABLE_TOOLS } from "@/lib/agent/execute";
 import { buildAgentContext } from "@/lib/agent/context";
 import { useApi } from "@/lib/api-client";
 import { useDocuments } from "@/lib/documents";
 import { useCollection, usePreview, useSettings, useStore } from "@/lib/store/provider";
 import { useCurrentUser, canWrite } from "@/lib/auth";
+import { useFeatures } from "@/lib/useFeature";
 import type { AgentSession, Item } from "@/lib/types";
 import { isLowStock } from "@/lib/inventory";
 import { cn, newId, nowIso } from "@/lib/utils";
@@ -21,7 +22,7 @@ import { useAgent } from "./AgentProvider";
 export type AgentUIMessage = UIMessage<unknown, UIDataTypes, InferUITools<typeof agentTools>>;
 
 /** Latest request body for the transport. Updated from an effect so the transport closure never reads React state during render. */
-const latestBody = { context: "", userName: "", autoApprove: false };
+const latestBody = { context: "", userName: "", autoApprove: false, features: [] as string[] };
 
 /** Starter prompts shaped by the workspace so they never name an item that does not exist. */
 function buildSuggestions(items: Item[], lowCount: number, inactivityDays: number): string[] {
@@ -114,12 +115,21 @@ export function AgentChat({ onClose, pending, consumePending, pendingSession, co
   const purchaseOrders = useCollection("purchaseOrders");
   const purchaseOrderTemplates = useCollection("purchaseOrderTemplates");
   const movements = useCollection("movements");
-  const context = useMemo(() => buildAgentContext({ items, suppliers, orders, rmas, settings: [settings], members, integrations, purchaseOrders, purchaseOrderTemplates, movements }, pageContext), [items, suppliers, orders, rmas, settings, members, integrations, purchaseOrders, purchaseOrderTemplates, movements, pageContext]);
+  const workOrders = useCollection("workOrders");
+  const jobs = useCollection("jobs");
+  // Unreleased features Strato may use here: their tools are only declared to the model while they are on.
+  const flags = useFeatures();
+  const toolFeatures = useMemo(() => Object.fromEntries(TOOL_FEATURES.map((f) => [f, flags[f]])) as ToolFeatureFlags, [flags]);
+  const context = useMemo(
+    () => buildAgentContext({ items, suppliers, orders, rmas, settings: [settings], members, integrations, purchaseOrders, purchaseOrderTemplates, movements, workOrders, jobs }, { ...pageContext, features: toolFeatures }),
+    [items, suppliers, orders, rmas, settings, members, integrations, purchaseOrders, purchaseOrderTemplates, movements, workOrders, jobs, pageContext, toolFeatures],
+  );
   useEffect(() => {
     latestBody.context = context;
     latestBody.userName = user.name;
     latestBody.autoApprove = autoApprove;
-  }, [context, user.name, autoApprove]);
+    latestBody.features = TOOL_FEATURES.filter((f) => toolFeatures[f]);
+  }, [context, user.name, autoApprove, toolFeatures]);
   const api = useApi();
   const docs = useDocuments();
   const execCtx = useMemo(() => ({ store, actor: { id: user.id, name: user.name }, api, uploadDocument: docs.upload, origin: typeof window !== "undefined" ? window.location.origin : "" }), [store, user.id, user.name, api, docs.upload]);

@@ -3,9 +3,12 @@ import { costingMethod, inventoryValue, isLowStock, reorderQty } from "@/lib/inv
 import { replenishmentPlan, replenishmentSummary } from "@/lib/replenishment";
 import { COSTING_LABELS } from "@/lib/valuation";
 import { describeAnswers } from "@/lib/onboarding";
+import { jobIsOpen } from "@/lib/jobs";
+import { workOrderIsLate, workOrderIsOpen, workOrderNeeds, workOrderRemaining } from "@/lib/workOrders";
+import type { ToolFeatureFlags } from "./tools";
 
 /** Compact text snapshot of the workspace for Strato's system prompt. */
-export function buildAgentContext(ws: Pick<WorkspaceSnapshot, "items" | "suppliers" | "orders" | "rmas" | "settings" | "members"> & Partial<Pick<WorkspaceSnapshot, "integrations" | "purchaseOrders" | "purchaseOrderTemplates" | "movements">>, extra: { page?: string; selectedSkus?: string[] } = {}): string {
+export function buildAgentContext(ws: Pick<WorkspaceSnapshot, "items" | "suppliers" | "orders" | "rmas" | "settings" | "members"> & Partial<Pick<WorkspaceSnapshot, "integrations" | "purchaseOrders" | "purchaseOrderTemplates" | "movements" | "workOrders" | "jobs">>, extra: { page?: string; selectedSkus?: string[]; features?: ToolFeatureFlags } = {}): string {
   const settings = ws.settings[0];
   const active = ws.items.filter((i) => i.status === "active");
   const low = ws.items.filter((i) => isLowStock(i, ws.settings?.[0]?.stockAlerts)).sort((a, b) => a.onHand / (a.minQty || 1) - b.onHand / (b.minQty || 1));
@@ -46,6 +49,23 @@ export function buildAgentContext(ws: Pick<WorkspaceSnapshot, "items" | "supplie
     const s = replenishmentSummary(plan);
     const toOrder = plan.filter((r) => r.status === "order");
     lines.push(`Replenishment (forecast = on hand + on order − open sales orders): ${s.toOrder} to order${s.late ? ` (${s.late} late)` : ""}, est. ${s.estCost.toFixed(2)} across ${s.suppliers} supplier${s.suppliers === 1 ? "" : "s"}${s.builds ? `, ${s.builds} to build` : ""}; ${s.covered} covered by incoming; ${s.snoozed} snoozed; ${s.auto} on automatic rules${toOrder.length ? `. Top: ${toOrder.slice(0, 8).map((r) => `${r.item.sku} forecast ${r.forecast}/${r.min ?? "?"} ${r.route} ${r.toOrder}${r.supplier ? ` from ${r.supplier.name}` : ""}`).join("; ")}` : ""}`);
+  }
+  // Unreleased features: one line each, only while the feature is on and there is something open.
+  if (extra.features?.workOrders) {
+    const open = (ws.workOrders ?? []).filter(workOrderIsOpen).sort((a, b) => (a.dueOn ?? a.startOn ?? "9").localeCompare(b.dueOn ?? b.startOn ?? "9") || a.number.localeCompare(b.number));
+    if (open.length) {
+      const byId = new Map(ws.items.map((i) => [i.id, i]));
+      const count = (status: string) => open.filter((w) => w.status === status).length;
+      const late = open.filter((w) => workOrderIsLate(w)).length;
+      const short = open.filter((w) => workOrderNeeds(w, ws.items).some((n) => n.shortage > 0));
+      lines.push(
+        `Work orders: ${open.length} open (${count("planned")} planned, ${count("released")} released, ${count("in_progress")} in progress)${late ? `, ${late} late` : ""}${short.length ? `; short on parts: ${short.slice(0, 6).map((w) => w.number).join(", ")}` : ""}. Next: ${open.slice(0, 5).map((w) => `${w.number} ${workOrderRemaining(w)} × ${byId.get(w.assemblyId)?.sku ?? "?"}${w.dueOn ? ` due ${w.dueOn}` : ""}`).join("; ")}`,
+      );
+    }
+  }
+  if (extra.features?.jobs) {
+    const open = (ws.jobs ?? []).filter(jobIsOpen).sort((a, b) => (a.dueOn ?? "9").localeCompare(b.dueOn ?? "9") || a.number.localeCompare(b.number));
+    if (open.length) lines.push(`Jobs: ${open.length} open (${open.slice(0, 5).map((j) => `${j.number} ${j.name}${j.customer ? ` for ${j.customer}` : ""}${j.status === "on_hold" ? ", on hold" : ""}${j.dueOn ? `, due ${j.dueOn}` : ""}`).join("; ")})`);
   }
   if (extra.page) lines.push(`User is viewing: ${extra.page}`);
   if (extra.selectedSkus?.length) lines.push(`User has selected these SKUs in the table: ${extra.selectedSkus.join(", ")}`);

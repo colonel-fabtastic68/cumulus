@@ -7,7 +7,8 @@
  * operations. Stateless: every request stands on its own; no session ids.
  */
 import { z } from "zod";
-import { agentTools, isWriteTool, TOOL_LABELS, type AgentToolName } from "@/lib/agent/tools";
+import { agentTools, agentToolsFor, isWriteTool, TOOL_FEATURES, TOOL_LABELS, type AgentToolName } from "@/lib/agent/tools";
+import { serverFeatureEnabled } from "@/lib/features";
 import { executeTool, type ExecContext } from "@/lib/agent/execute";
 import { getServerStore } from "./store";
 
@@ -51,10 +52,16 @@ function fail(id: JsonRpcId, code: number, message: string, data?: unknown): Jso
 
 type ZodLike = Parameters<typeof z.toJSONSchema>[0];
 
+/** The tools this deployment offers: released ones, plus those of unreleased features that are on here (never in production). */
+function offeredTools() {
+  return agentToolsFor(Object.fromEntries(TOOL_FEATURES.map((f) => [f, serverFeatureEnabled(f)])));
+}
+
 /** Strato tool → MCP tool descriptor with a JSON Schema input. */
 export function listTools() {
-  return (Object.keys(agentTools) as AgentToolName[]).map((name) => {
-    const t = agentTools[name] as { description?: string; inputSchema: unknown };
+  const tools = offeredTools();
+  return (Object.keys(tools) as AgentToolName[]).map((name) => {
+    const t = tools[name] as { description?: string; inputSchema: unknown };
     const schema = z.toJSONSchema(t.inputSchema as ZodLike) as Record<string, unknown>;
     delete schema.$schema;
     return {
@@ -91,9 +98,10 @@ async function execContext(): Promise<ExecContext> {
 }
 
 async function callTool(name: string, args: unknown) {
-  if (!(name in agentTools)) throw new ToolError(`Unknown tool "${name}"`);
+  const tools = offeredTools();
+  if (!(name in agentTools) || !(name in tools)) throw new ToolError(`Unknown tool "${name}"`);
   const toolName = name as AgentToolName;
-  const schema = (agentTools[toolName] as { inputSchema: unknown }).inputSchema as z.ZodType;
+  const schema = (tools[toolName] as { inputSchema: unknown }).inputSchema as z.ZodType;
   const parsed = schema.safeParse(args ?? {});
   if (!parsed.success) throw new ToolError(`Invalid arguments for ${name}: ${parsed.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`).join("; ")}`);
   const ctx = await execContext();

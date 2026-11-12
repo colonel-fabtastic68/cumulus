@@ -33,6 +33,16 @@ Server routes use `serverFeatureEnabled("documentEmail", settings.features)`.
 
 Fields that belong to a feature are optional on the types, so existing workspaces need no migration, and a form only writes them while the feature is on.
 
+### Strato and unreleased features
+
+Strato never loads a feature's records into its prompt. It gets one summary line per feature (`src/lib/agent/context.ts`) and reads detail through tools that run in the browser.
+
+- A tool, report or parameter that belongs to an unreleased feature is registered in `src/lib/agent/tools.ts` (`TOOL_FEATURES`, `TOOL_FEATURE`, `REPORT_FEATURE`) and is only declared to the model while the feature is on. `agentToolsFor({})` returns exactly the released declarations, so a workspace without the feature pays nothing for it. The MCP endpoint lists tools the same way.
+- The chat sends the features that are on for the workspace; `/api/agent` keeps only those this deployment allows, and adds that feature's paragraph of guidance to the prompt.
+- Today: `saveWorkOrder`, `saveJob`, `createVariants`; the `workOrders`, `productionSchedule` and `jobs` reports; `choose` / `withOptional` on `explodeBom`, `buildAssembly` and `saveWorkOrder`; line roles on `updateBom`. `getItem` returns variants, BOM options, other units and MAP whenever an item has them.
+- With all four features on, the declarations are about 13% larger than the released set. Prefer a new report or parameter on an existing tool over a new tool.
+- When a feature is released, move its entries out of the feature maps and delete the pruning for it in `agentToolsFor`.
+
 ## Where each item stands
 
 Status: **Built** = working on staging behind its flag. **Framework** = data model and tested logic, with the first screen. **Planned** = waiting on a decision.
@@ -79,7 +89,7 @@ Status: **Built** = working on staging behind its flag. **Framework** = data mod
 
 ## Known gaps before release
 
-- Strato has no tools for work orders, jobs, variants or modular BOMs yet.
+- Strato covers work orders, jobs, variants and modular BOMs (see below). It has no tools yet for unit conversions on order lines, period close, pick lists, document email or the QuickBooks Desktop export.
 - The data exports (Exports → Data) do not include work orders or jobs.
 - Purchase orders are not unit-aware; receiving in a case and stocking in eaches still needs the conversion by hand.
 - QuickBooks Desktop IIF needs a test import; item list export is not included.
