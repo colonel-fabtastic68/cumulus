@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
-import { currentInstance } from "@/lib/firebase-config";
+import { currentInstance, releaseStage } from "@/lib/firebase-config";
 import { useSettings } from "@/lib/store/provider";
 import { useAuth, useCurrentUser } from "@/lib/auth";
 import { useAgent } from "@/components/agent/AgentProvider";
@@ -14,7 +14,9 @@ import {
   CompanySection,
   DataSection,
   InventoryPolicySection,
+  LabsSection,
   LocationsSection,
+  labsFeatures,
   QuotingSection,
   ShippingSection,
   TimeMachineSection,
@@ -94,6 +96,11 @@ export default function SettingsPage() {
         {!currentInstance() && (
           <Row id="billing">
             <BillingSection settings={settings} />
+          </Row>
+        )}
+        {labsFeatures(releaseStage()).length > 0 && (
+          <Row id="labs">
+            <LabsSection settings={settings} readOnly={readOnly} />
           </Row>
         )}
         {canManage && (

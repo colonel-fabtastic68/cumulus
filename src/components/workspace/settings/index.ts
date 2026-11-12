@@ -13,3 +13,4 @@ export * from "./sections";
 export * from "./CatalogSection";
 export * from "./StockAlertsForm";
 export * from "./TimeMachineSection";
+export * from "./LabsSection";

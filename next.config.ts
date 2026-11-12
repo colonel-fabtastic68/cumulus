@@ -5,6 +5,11 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(__dirname),
   },
+  // Staging and other preview deployments (dev.cumulusos.com) must not be indexed as copies of the live site.
+  async headers() {
+    if (process.env.VERCEL_ENV !== "preview") return [];
+    return [{ source: "/:path*", headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }] }];
+  },
   // The agent was called Nimbus until September 2026. Old links and bookmarks keep working.
   async redirects() {
     return [

@@ -45,6 +45,8 @@ export default function ExportsPage() {
     cycleCounts: useCollection("cycleCounts"),
     documents: useCollection("documents"),
     packs: useCollection("packs"),
+    workOrders: useCollection("workOrders"),
+    jobs: useCollection("jobs"),
   };
   const [selected, setSelected] = useState<Set<DatasetId>>(() => new Set<DatasetId>(["items"]));
   const [format, setFormat] = useState<ExportFormat>("csv");

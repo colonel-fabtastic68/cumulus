@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { DemoBar } from "./DemoBar";
+import { StagingBar } from "./StagingBar";
 import { StockPushBridge } from "@/components/workspace/integrations/StockPushBridge";
 import { RanchSquareBridge } from "@/components/ranch/RanchSquareBridge";
 import { hasFeature } from "@/lib/instances";
@@ -16,7 +17,7 @@ import { Onboarding } from "./Onboarding";
 import { PreviewBar } from "./PreviewBar";
 import { Banner, Button, Skeleton } from "@/components/ui";
 import { signInHref } from "@/lib/auth-routes";
-import { currentInstance, isDemo } from "@/lib/firebase-config";
+import { currentInstance, isDemo, releaseStage } from "@/lib/firebase-config";
 import { useSession } from "@/lib/session";
 import { WorkspaceHub } from "@/components/workspace/hub";
 import { useNavArrowKeys } from "./useNavArrowKeys";
@@ -211,6 +212,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       )}
       <div className="flex min-w-0 flex-1 flex-col">
+        {releaseStage() === "staging" && !isDemo() && <StagingBar />}
         {isDemo() && <DemoBar />}
         <TopBar onMenu={() => setMobileNav(true)} />
         <StockPushBridge />

@@ -7,6 +7,7 @@
  */
 import type { StockAlertRule,
   ActivityEvent,
+  BomSelection,
   ActivityType,
   Address,
   Build,
@@ -36,6 +37,8 @@ import type { StockAlertRule,
 import type { Store, WriteOp } from "@/lib/store/types";
 import { daysBetween, newId, nowIso, round, sum } from "@/lib/utils";
 import { seedSettings } from "@/lib/seed";
+import { bomSelectionError, resolveBom } from "@/lib/bomOptions";
+import { toDateInput } from "@/lib/format";
 
 export type Actor = Pick<Member, "id" | "name">;
 
@@ -91,6 +94,16 @@ export function itemDefaults(partial: Partial<Item> & { sku: string; name: strin
     dimensions: partial.dimensions,
     imageUrl: partial.imageUrl,
     attributes: partial.attributes,
+    groupPrices: partial.groupPrices,
+    suppliers: partial.suppliers,
+    mapPrice: partial.mapPrice,
+    uoms: partial.uoms,
+    purchaseUnit: partial.purchaseUnit,
+    salesUnit: partial.salesUnit,
+    pickAsParts: partial.pickAsParts,
+    variantAxes: partial.variantAxes,
+    variantOf: partial.variantOf,
+    variantOptions: partial.variantOptions,
     createdAt: partial.createdAt ?? now,
     updatedAt: now,
     updatedBy: partial.updatedBy,
@@ -201,17 +214,20 @@ export interface ExplodeOptions {
   consumeSubassemblies?: boolean;
   /** Explode sub-assemblies only when their stock is insufficient. */
   explodeShortfallOnly?: boolean;
+  /** Modular BOMs: what was chosen for the assembly being exploded. Sub-assemblies, and a missing selection, use their defaults. */
+  selection?: BomSelection;
 }
 
 /**
  * Explode a BOM into component requirements for building `qty` of `assembly`.
- * Handles BOMs within BOMs (factor 2d/20).
+ * Handles BOMs within BOMs (factor 2d/20). A modular BOM (optional and choice
+ * lines, src/lib/bomOptions.ts) is reduced to the lines actually built first.
  */
 export function explodeBom(items: Item[], assembly: Item, qty: number, opts: ExplodeOptions = {}): Requirement[] {
   const byId = new Map(items.map((i) => [i.id, i]));
   const acc = new Map<string, Requirement>();
   const visit = (asm: Item, mult: number, depth: number, path: Set<string>) => {
-    for (const line of asm.bom) {
+    for (const line of resolveBom(asm.bom, depth === 0 ? opts.selection : undefined)) {
       const comp = byId.get(line.itemId);
       if (!comp) continue;
       const need = round(line.qty * mult * (1 + (line.wastePct ?? comp.expectedWastePct ?? 0) / 100), 3);
@@ -263,7 +279,8 @@ export function rolledUpCost(items: Item[], assembly: Item, depth = 0): number {
   if (assembly.type !== "assembly" || assembly.bom.length === 0 || depth > 8) return assembly.unitCost;
   const byId = new Map(items.map((i) => [i.id, i]));
   let total = 0;
-  for (const line of assembly.bom) {
+  // A modular BOM is costed as it is built when nobody chooses: default alternatives, default-included options.
+  for (const line of resolveBom(assembly.bom)) {
     const comp = byId.get(line.itemId);
     if (!comp) continue;
     total += rolledUpCost(items, comp, depth + 1) * line.qty * (1 + (line.wastePct ?? 0) / 100);
@@ -449,7 +466,7 @@ async function loadSettings(store: Store): Promise<WorkspaceSettings> {
 
 type CounterKind = keyof WorkspaceSettings["counters"];
 
-const NUMBER_PREFIXES: Record<CounterKind, string> = { receipt: "RCV-", build: "BLD-", order: "SO-", rma: "RMA-", transfer: "TR-", shipment: "SH-", quote: "QT-", purchaseOrder: "PO-", cycleCount: "CC-", lot: "LOT-" };
+const NUMBER_PREFIXES: Record<CounterKind, string> = { receipt: "RCV-", build: "BLD-", order: "SO-", rma: "RMA-", transfer: "TR-", shipment: "SH-", quote: "QT-", purchaseOrder: "PO-", cycleCount: "CC-", lot: "LOT-", workOrder: "WO-", job: "JOB-" };
 
 /**
  * Reserves document numbers of several kinds in ONE settings patch. A batch
@@ -599,7 +616,10 @@ export async function movementOps(
   const items = await store.list("items");
   const lots = await store.list("lots");
   const locations = await store.list("locations");
-  const method = costingMethod(await loadSettings(store));
+  const settings = await loadSettings(store);
+  const method = costingMethod(settings);
+  // Period close (src/lib/periodLock.ts): nothing may be dated into a closed period.
+  const closedThrough = settings.periodLock?.through;
   const byId = new Map(items.map((i) => [i.id, { ...i }]));
   const lotById = new Map(lots.map((l) => [l.id, { ...l }]));
   const touchedLots = new Set<string>();
@@ -614,6 +634,9 @@ export async function movementOps(
     const item = byId.get(input.itemId);
     if (!item) throw new InventoryError(`Unknown item ${input.itemId}`);
     if (input.qty === 0) continue;
+    if (closedThrough && toDateInput(input.occurredAt ?? now) <= closedThrough) {
+      throw new InventoryError(`The books are closed through ${closedThrough}. Date this on a later day, or ask an owner or admin to reopen the period in Settings.`, { closedThrough });
+    }
     const locationId = input.locationId ?? homeId;
     if (locationId !== homeId && !locations.some((l) => l.id === locationId)) throw new InventoryError(`Unknown location ${locationId}`);
     const stock = stockMap(item, homeId);
@@ -940,6 +963,11 @@ export interface BuildInput {
   occurredAt?: string;
   /** Consume components from and put the assembly into this location; defaults to the workspace default. */
   locationId?: string;
+  /** Modular BOMs: the alternatives and optional parts to build with. Gaps fall back to the BOM's defaults. */
+  options?: BomSelection;
+  /** The work order this build books units against, and the job it is for. */
+  workOrderId?: string;
+  jobId?: string;
 }
 
 /** Factor 19/20: build an assembly, relieving components (and sub-assemblies) correctly. */
@@ -951,7 +979,9 @@ export async function buildAssembly(store: Store, actor: Actor, input: BuildInpu
   if (input.qty <= 0) throw new InventoryError("Build quantity must be positive");
   if (!Number.isInteger(input.qty)) throw new InventoryError("Build quantity must be a whole number");
   const consumeSub = input.consumeSubassemblies ?? true;
-  const reqs = explodeBom(items, assembly, input.qty, { consumeSubassemblies: consumeSub, explodeShortfallOnly: !consumeSub });
+  const optionsError = bomSelectionError(assembly.bom, input.options);
+  if (optionsError) throw new InventoryError(`Cannot build ${assembly.sku}: ${optionsError}`);
+  const reqs = explodeBom(items, assembly, input.qty, { consumeSubassemblies: consumeSub, explodeShortfallOnly: !consumeSub, selection: input.options });
   const short = reqs.filter((r) => r.shortage > 0);
   if (short.length) {
     throw new InventoryError(
@@ -971,6 +1001,9 @@ export async function buildAssembly(store: Store, actor: Actor, input: BuildInpu
     consumeSubassemblies: consumeSub,
     components: reqs.map((r) => ({ itemId: r.item.id, qtyPer: round(r.required / input.qty, 4), qtyConsumed: r.required })),
     lotId,
+    ...(input.options ? { options: input.options } : {}),
+    ...(input.workOrderId ? { workOrderId: input.workOrderId } : {}),
+    ...(input.jobId ? { jobId: input.jobId } : {}),
     note: input.note,
     completedAt: occurredAt,
     createdAt: nowIso(),
@@ -1004,7 +1037,9 @@ export interface OrderInput {
   number?: string;
   source?: SalesOrder["source"];
   note?: string;
-  lines: Array<{ itemId: string; qty: number; unitPrice?: number }>;
+  lines: Array<{ itemId: string; qty: number; unitPrice?: number; locationId?: string; entered?: OrderLine["entered"] }>;
+  /** The job or project the order is for. */
+  jobId?: string;
   /** Fulfill immediately. */
   fulfill?: boolean;
   customerEmail?: string;
@@ -1045,8 +1080,9 @@ export async function createOrder(store: Store, actor: Actor, input: OrderInput)
     lines: input.lines.map((l) => {
       const item = byId.get(l.itemId);
       if (!item) throw new InventoryError(`Unknown item ${l.itemId}`);
-      return { itemId: item.id, qty: l.qty, unitPrice: l.unitPrice ?? priceForQty(item, l.qty) };
+      return { itemId: item.id, qty: l.qty, unitPrice: l.unitPrice ?? priceForQty(item, l.qty), ...(l.locationId ? { locationId: l.locationId } : {}), ...(l.entered ? { entered: l.entered } : {}) };
     }),
+    ...(input.jobId ? { jobId: input.jobId } : {}),
     note: input.note,
     customerEmail: input.customerEmail,
     shipTo: input.shipTo,
@@ -1127,7 +1163,9 @@ export async function shipOrder(store: Store, actor: Actor, input: ShipInput): P
     if (!line || !item) throw new InventoryError(`${order.number} has no open line for ${item?.sku ?? req.itemId}`);
     const open = openQty(line);
     if (req.qty > open + 1e-9) throw new InventoryError(`Only ${open} of ${item.sku} is still open on ${order.number}`);
-    const locationId = locationFor(item);
+    // A location chosen on the order line wins over the part's routing and the shipment's own location.
+    const lineLocationId = !input.ignoreRouting && line.locationId && (line.locationId === homeId || locations.some((l) => l.id === line.locationId && l.active)) ? line.locationId : undefined;
+    const locationId = lineLocationId ?? locationFor(item);
     const available = qtyAt(item, locationId, homeId);
     if (settings.relievePolicy === "on_fulfill" && item.type === "assembly" && item.bom.length > 0 && available < req.qty) {
       // Relieve components for the portion not on the shelf.

@@ -10,6 +10,7 @@
  * browser is expected.
  */
 import { instanceForHost, instanceRuntime, type InstanceRuntime } from "@/lib/instances";
+import { forcedFeaturesFromEnv, releaseStageFromEnv, type ReleaseStage } from "@/lib/features";
 
 export interface FirebaseConfig {
   apiKey: string;
@@ -35,6 +36,10 @@ export interface RuntimeConfig {
    * Absent on the shared product.
    */
   instance?: InstanceRuntime;
+  /** Where this deployment sits in the release flow (src/lib/features.ts): staging and development show unreleased features. Absent = production. */
+  stage?: ReleaseStage;
+  /** Features forced on for the whole deployment (CUMULUS_FEATURES). */
+  features?: string[];
 }
 
 /** Env names in the order they are consulted; the NEXT_PUBLIC_ ones are legacy. */
@@ -90,6 +95,8 @@ export function runtimeConfigFromEnv(): RuntimeConfig {
     workspaceId: pick(process.env, ENV_NAMES.workspaceId) ?? "default",
     emailCodes: !!(cleanEnv(process.env.RESEND_API_KEY) && (cleanEnv(process.env.FIREBASE_SERVICE_ACCOUNT_JSON) || cleanEnv(process.env.FIREBASE_SERVICE_ACCOUNT_B64))),
     calendlyUrl: cleanEnv(process.env.CALENDLY_URL),
+    stage: releaseStageFromEnv(process.env),
+    features: forcedFeaturesFromEnv(process.env),
   };
 }
 
@@ -103,7 +110,7 @@ export function runtimeConfigForHost(host: string | null | undefined): RuntimeCo
   const base = runtimeConfigFromEnv();
   const inst = instanceForHost(host);
   if (!inst) return base;
-  return { firebase: base.firebase, workspaceId: inst.workspaceId, emailCodes: false, instance: instanceRuntime(inst) };
+  return { firebase: base.firebase, workspaceId: inst.workspaceId, emailCodes: false, instance: instanceRuntime(inst), stage: base.stage, features: base.features };
 }
 
 /** Client-side: the bespoke instance this page belongs to, if any. */
@@ -121,6 +128,11 @@ export function setRuntimeConfig(config: RuntimeConfig) {
 /** The active runtime config. Local mode until the server has injected one. */
 export function getRuntimeConfig(): RuntimeConfig {
   return injected ?? { firebase: null, workspaceId: "default" };
+}
+
+/** The release stage the page was rendered for. */
+export function releaseStage(): ReleaseStage {
+  return getRuntimeConfig().stage ?? "production";
 }
 
 /** True inside the public demo (see src/lib/demo.ts). */

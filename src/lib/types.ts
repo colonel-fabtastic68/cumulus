@@ -26,6 +26,40 @@ export interface BomLine {
   /** Expected waste on this component when building, as a percentage (0-100). */
   wastePct?: number;
   note?: string;
+  /**
+   * Modular BOMs. required (the default) is always built in. optional may be left out when the
+   * assembly is built. choice is one of several alternatives that share a `group`: exactly one is built in.
+   */
+  kind?: BomLineKind;
+  /** Name of the choice this line belongs to, e.g. "Wheel finish". Lines with the same group are alternatives. */
+  group?: string;
+  /** The alternative used when nobody chooses, or an optional line that is included unless someone leaves it out. */
+  isDefault?: boolean;
+}
+
+export type BomLineKind = "required" | "optional" | "choice";
+
+/** What was decided for a modular BOM when it was built or planned (src/lib/bomOptions.ts). */
+export interface BomSelection {
+  /** Choice group name → the component chosen for it. */
+  choices?: Record<string, ID>;
+  /** Optional components that were included. */
+  optional?: ID[];
+}
+
+/** Another unit an item is bought, stocked or sold in. One of `unit` equals `factor` of the item's stocking unit. */
+export interface UnitConversion {
+  /** e.g. "case", "pk100", "pint". */
+  unit: string;
+  /** How many stocking units one of these is: a case of 12 has factor 12; a pint of an item stocked in gallons has 0.125. */
+  factor: number;
+  label?: string;
+}
+
+/** One option on a parent item, e.g. Size with S, M, L. */
+export interface VariantAxis {
+  name: string;
+  values: string[];
 }
 
 /** A web image for a product: hosted on the store or anywhere reachable; channels are sent the URLs. */
@@ -91,6 +125,21 @@ export interface Item {
   color?: string;
   /** Price per customer price group (Settings → Catalog), keyed by group id. Falls back to the list price. */
   groupPrices?: Record<string, number>;
+  /** Minimum advertised price: the lowest price the brand allows this item to be shown at. */
+  mapPrice?: number;
+  /** Other units this item is bought or sold in (src/lib/units.ts). Stock is always counted in `unit`. */
+  uoms?: UnitConversion[];
+  /** Unit purchase order lines start in (one of uoms). Absent = the stocking unit. */
+  purchaseUnit?: string;
+  /** Unit sales order lines start in (one of uoms). Absent = the stocking unit. */
+  salesUnit?: string;
+  /** Assemblies: on a pick list, break this item out to its parts (it ships as a kit of parts, not built). */
+  pickAsParts?: boolean;
+  /** Variants (src/lib/variants.ts). A parent lists its options; it holds no stock of its own. */
+  variantAxes?: VariantAxis[];
+  /** A variant points at its parent and says which value it is for each option. */
+  variantOf?: ID;
+  variantOptions?: Record<string, string>;
 
   externalIds?: {
     shopify?: string;
@@ -318,10 +367,110 @@ export interface Build {
   components: BuildComponent[];
   /** The batch of finished units this build produced. */
   lotId?: ID;
+  /** Modular BOMs: which alternatives and optional parts went into this build. */
+  options?: BomSelection;
+  /** The work order this build completed units for. */
+  workOrderId?: ID;
+  jobId?: ID;
   note?: string;
   completedAt?: string;
   createdAt: string;
   createdBy: string;
+}
+
+export type WorkOrderStatus = "planned" | "released" | "in_progress" | "completed" | "cancelled";
+
+export interface WorkOrderComponent {
+  itemId: ID;
+  /** For the whole run, waste included. */
+  qtyRequired: number;
+  /** Consumed so far by completed units. */
+  qtyConsumed: number;
+}
+
+/**
+ * A planned production run of one assembly (src/lib/workOrders.ts). Planned is a
+ * date on the schedule; released fixes the component list and commits the parts;
+ * each completion books a Build (components out, finished units in) until the run is done.
+ */
+export interface WorkOrder {
+  id: ID;
+  number: string; // WO-1001
+  assemblyId: ID;
+  qty: number;
+  /** Finished units booked so far. */
+  qtyCompleted: number;
+  status: WorkOrderStatus;
+  priority?: "low" | "normal" | "high";
+  /** Planned window (YYYY-MM-DD). */
+  startOn?: string;
+  dueOn?: string;
+  /** Where components are taken from and finished units land. Absent = the default location. */
+  locationId?: ID;
+  consumeSubassemblies: boolean;
+  /** Modular BOMs: the alternatives and optional parts this run is built with. */
+  options?: BomSelection;
+  /** The parts the run needs, fixed when it is released. Empty while planned (the BOM may still change). */
+  components: WorkOrderComponent[];
+  /** The sales order this run is for, when it was made to order. */
+  orderId?: ID;
+  jobId?: ID;
+  /** Members doing the work. */
+  assignedTo?: ID[];
+  /** Builds booked against this run, oldest first. */
+  buildIds?: ID[];
+  note?: string;
+  releasedAt?: string;
+  startedAt?: string;
+  completedAt?: string;
+  cancelledAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+}
+
+export type JobStatus = "open" | "on_hold" | "completed" | "cancelled";
+
+/** Someone working a job: a member of the workspace, or an outside contractor or installer known by name. */
+export interface JobAssignee {
+  memberId?: ID;
+  name: string;
+  /** e.g. "Installer", "Electrician", "Project lead". */
+  role?: string;
+  contact?: string;
+}
+
+/**
+ * A job or project (src/lib/jobs.ts): the thing sales orders, purchase orders,
+ * work orders and stock issues are for. Documents point at it with `jobId`.
+ */
+export interface Job {
+  id: ID;
+  number: string; // JOB-1001
+  name: string;
+  customerId?: ID;
+  /** Customer name as written, kept even if the record changes. */
+  customer?: string;
+  status: JobStatus;
+  site?: Address;
+  startOn?: string;
+  dueOn?: string;
+  crew?: JobAssignee[];
+  /** What the job is expected to cost, for the budget bar. */
+  budget?: number;
+  note?: string;
+  completedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+}
+
+/** One time a document was emailed from cumulusOS. */
+export interface DocumentEmail {
+  to: string;
+  subject: string;
+  at: string;
+  by: string;
 }
 
 export type OrderSource = "manual" | "shopify" | "woocommerce" | "import";
@@ -332,6 +481,16 @@ export interface OrderLine {
   unitPrice: number;
   /** Units shipped so far. The difference to qty is open, and backordered when stock is short. */
   shipped?: number;
+  /** Ship this line from here instead of the item's fulfillment location or the shipment's own. */
+  locationId?: ID;
+  /** What was typed when the line was entered in another unit ("2 case"); qty stays in the stocking unit. */
+  entered?: EnteredQty;
+}
+
+/** A quantity as the person entered it, in one of the item's other units. */
+export interface EnteredQty {
+  qty: number;
+  unit: string;
 }
 
 export interface SalesOrder {
@@ -357,6 +516,10 @@ export interface SalesOrder {
   createdBy: string;
   /** Ranch instances: how a web order of packs became pounds of cuts, and whether Square has been told. */
   bridge?: OrderBridge;
+  /** The job or project this order is for. */
+  jobId?: ID;
+  /** Confirmations emailed to the customer from the order. */
+  emails?: DocumentEmail[];
 }
 
 /** Ranch bridge bookkeeping on a web order (see src/lib/ranch). */
@@ -564,6 +727,8 @@ export interface PurchaseOrderLine {
   /** The supplier's own part number, as printed on the order. */
   supplierSku?: string;
   note?: string;
+  /** What was typed when the line was entered in another unit ("3 case"); qty stays in the stocking unit. */
+  entered?: EnteredQty;
 }
 
 /** Goods ordered from a supplier. Stock moves only when a receipt is booked against it. */
@@ -596,6 +761,10 @@ export interface PurchaseOrder {
   mergedAt?: string;
   /** Orders folded into this one. */
   mergedFrom?: ID[];
+  /** The job or project these goods are for. */
+  jobId?: ID;
+  /** Times the order was emailed to the supplier from cumulusOS. */
+  emails?: DocumentEmail[];
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -890,7 +1059,20 @@ export type ActivityType =
   | "backup.restored"
   | "count.started"
   | "count.completed"
-  | "count.cancelled";
+  | "count.cancelled"
+  | "order.emailed"
+  | "po.emailed"
+  | "workOrder.created"
+  | "workOrder.released"
+  | "workOrder.progress"
+  | "workOrder.completed"
+  | "workOrder.cancelled"
+  | "job.created"
+  | "job.updated"
+  | "job.completed"
+  | "period.closed"
+  | "period.reopened"
+  | "category.renamed";
 
 export interface ActivityEvent {
   id: ID;
@@ -898,7 +1080,7 @@ export interface ActivityEvent {
   message: string;
   actorId: string;
   actorName: string;
-  entityType?: "item" | "receipt" | "build" | "order" | "rma" | "supplier" | "member" | "transfer" | "shipment" | "integration" | "location" | "quote" | "purchaseOrder" | "cycleCount";
+  entityType?: "item" | "receipt" | "build" | "order" | "rma" | "supplier" | "member" | "transfer" | "shipment" | "integration" | "location" | "quote" | "purchaseOrder" | "cycleCount" | "workOrder" | "job";
   entityId?: ID;
   /** Free-form details, e.g. { count: 12 } for bulk operations. */
   meta?: Record<string, unknown>;
@@ -1043,6 +1225,8 @@ export interface WorkspaceSettings {
     purchaseOrder?: number;
     cycleCount?: number;
     lot?: number;
+    workOrder?: number;
+    job?: number;
   };
   /** How stock is valued and what consumption costs. Absent = standard cost. */
   costing?: CostingSettings;
@@ -1057,7 +1241,40 @@ export interface WorkspaceSettings {
   stockAlerts?: StockAlertRule;
   /** Answers from the guided setup after the workspace was created; shapes the import hub and Strato's suggestions. */
   onboarding?: OnboardingAnswers;
+  /** Unreleased features this workspace switched on or off in Settings → Labs (src/lib/features.ts). */
+  features?: Record<string, boolean>;
+  /** What the workspace calls things. Absent = the cumulusOS words. */
+  terminology?: Terminology;
+  /** The books are closed through a date: stock movements dated on or before it are refused (src/lib/periodLock.ts). */
+  periodLock?: PeriodLock;
+  /** Account names used when documents are exported to accounting (src/lib/accounting). */
+  accounting?: AccountingSettings;
   updatedAt: string;
+}
+
+export interface Terminology {
+  /** What the item code is called: "SKU" unless set, e.g. "Part number". */
+  itemCode?: string;
+  /** Short form for narrow columns, e.g. "PN". */
+  itemCodeShort?: string;
+}
+
+export interface PeriodLock {
+  /** Last closed day (YYYY-MM-DD). */
+  through: string;
+  lockedAt: string;
+  lockedBy: ID;
+  lockedByName?: string;
+  note?: string;
+}
+
+/** The chart-of-accounts names QuickBooks Desktop expects on imported transactions. They must match the company file exactly. */
+export interface AccountingSettings {
+  income?: string;
+  cogs?: string;
+  inventoryAsset?: string;
+  receivable?: string;
+  payable?: string;
 }
 
 /** How the business runs inventory today and what it wants from cumulusOS. Every field is optional until the walkthrough is finished or skipped. */
@@ -1269,6 +1486,8 @@ export interface CollectionMap {
   cycleCounts: CycleCount;
   documents: WorkspaceDocument;
   packs: PackListing;
+  workOrders: WorkOrder;
+  jobs: Job;
 }
 
 export type CollectionName = keyof CollectionMap;
@@ -1301,6 +1520,8 @@ export const COLLECTIONS: CollectionName[] = [
   "cycleCounts",
   "documents",
   "packs",
+  "workOrders",
+  "jobs",
 ];
 
 /** A full snapshot of a workspace. Used for seed data, export and import. */
