@@ -10,7 +10,9 @@ import { formatNumber, pluralize } from "@/lib/format";
 import { entriesFor, type LabelData } from "@/lib/labels/entries";
 import { buildLabelPdf } from "@/lib/labels/pdf";
 import { layoutLabels, printCss, renderSvgs, sheetHtml, symbologyProblem } from "@/lib/labels/render";
-import { DEFAULT_SPEC, LABEL_KINDS, SYMBOLOGIES, TEMPLATES, findTemplate, isTwoD, labelsPerPage, resolveTemplate, type LabelKind, type LabelSpec, type Symbology } from "@/lib/labels/spec";
+import { DEFAULT_ITEM_DETAILS, DEFAULT_SPEC, ITEM_DETAIL_PARTS, LABEL_KINDS, SYMBOLOGIES, TEMPLATES, findTemplate, isTwoD, labelsPerPage, resolveTemplate, type ItemDetailPart, type LabelKind, type LabelSpec, type Symbology } from "@/lib/labels/spec";
+import { useFeatures } from "@/lib/useFeature";
+import { useTerms } from "@/lib/useTerms";
 import { openPrintWindow } from "@/lib/print";
 import { useCollection, useItems, useSettings } from "@/lib/store/provider";
 import { canWrite, useCurrentUser } from "@/lib/auth";
@@ -56,6 +58,10 @@ export function LabelStudio() {
   const toast = useToast();
   const { open: openAgent, setPageContext } = useAgent();
   const writable = canWrite(user);
+  const features = useFeatures();
+  const terms = useTerms();
+  /** The document the quantities came from ("PO-1004"), when the studio was opened from one. */
+  const [countSource, setCountSource] = useState<string | null>(null);
 
   const [spec, setSpec] = useState<LabelSpec>(DEFAULT_SPEC);
   const [selection, setSelection] = useState<Selection>("all");
@@ -81,7 +87,7 @@ export function LabelStudio() {
   }, []);
 
   const data = useMemo<LabelData>(() => ({ items, locations, suppliers, lots }), [items, locations, suppliers, lots]);
-  const all = useMemo(() => entriesFor(spec.kind, data), [spec.kind, data]);
+  const all = useMemo(() => entriesFor(spec.kind, data, undefined, spec.itemDetails), [spec.kind, data, spec.itemDetails]);
 
   const onParams = useCallback(
     (p: Record<string, string>) => {
@@ -95,6 +101,22 @@ export function LabelStudio() {
         const k = kind ?? "item";
         const pool = entriesFor(k, data);
         setSelection(new Set(pool.filter((e) => wantedIds.has(e.id) || wantedCodes.has(e.code.toUpperCase()) || (e.gtin && wantedCodes.has(e.gtin))).map((e) => e.id)));
+        // qty=CODE:3,CODE2:12 from a purchase order or a receipt: that many labels for each record.
+        if (p.qty) {
+          const byCode = new Map(p.qty.split(",").map((pair) => {
+            const at = pair.lastIndexOf(":");
+            return [pair.slice(0, at).trim().toUpperCase(), Number(pair.slice(at + 1))] as [string, number];
+          }));
+          const counts: Record<string, number> = {};
+          for (const e of pool) {
+            const n = byCode.get(e.code.toUpperCase());
+            if (n !== undefined && Number.isFinite(n) && n > 0) counts[e.id] = Math.ceil(n);
+          }
+          if (Object.keys(counts).length) {
+            setSpec((s) => ({ ...s, counts }));
+            setCountSource(p.source?.slice(0, 40) || "the document");
+          }
+        }
       }
     },
     [data],
@@ -130,7 +152,8 @@ export function LabelStudio() {
   const setField = (k: keyof LabelSpec["fields"], v: boolean) => setSpec((s) => ({ ...s, fields: { ...s.fields, [k]: v } }));
   const setCustom = (k: string, v: string) => setSpec((s) => ({ ...s, custom: { ...s.custom, [k]: Number(v) } }));
   const changeKind = (kind: LabelKind) => {
-    setSpec((s) => ({ ...s, kind, fields: { ...s.fields, price: kind === "item" || kind === "assembly" ? s.fields.price : false } }));
+    setSpec((s) => ({ ...s, kind, counts: undefined, fields: { ...s.fields, price: kind === "item" || kind === "assembly" ? s.fields.price : false } }));
+    setCountSource(null);
     setSelection("all");
     setQuery("");
     setPage(0);
@@ -321,9 +344,24 @@ export function LabelStudio() {
               </div>
             )}
             <div className="grid grid-cols-2 gap-2">
-              <TextField label="Copies each" type="number" min="1" max="200" value={String(spec.copies)} onChange={(e) => setSpec((s) => ({ ...s, copies: Math.max(1, Number(e.target.value) || 1) }))} />
+              <TextField label="Copies each" type="number" min="1" max="200" value={String(spec.copies)} onChange={(e) => setSpec((s) => ({ ...s, copies: Math.max(1, Number(e.target.value) || 1) }))} disabled={!!spec.counts} help={spec.counts ? "Set by the quantities below" : undefined} />
               <TextField label="Skip on 1st sheet" type="number" min="0" value={String(spec.startAt)} onChange={(e) => setSpec((s) => ({ ...s, startAt: Math.max(0, Number(e.target.value) || 0) }))} hint="Used positions" />
             </div>
+            {spec.counts && (
+              <div className="rounded-[var(--radius)] border border-border bg-surface-subdued p-2.5 text-[12.5px] text-text-secondary">
+                <span className="font-medium text-text">One label per unit on {countSource}.</span> {formatNumber(Object.values(spec.counts).reduce((a, n) => a + n, 0))} labels in all.{" "}
+                <button
+                  type="button"
+                  className="font-medium text-accent hover:underline"
+                  onClick={() => {
+                    setSpec((s) => ({ ...s, counts: undefined }));
+                    setCountSource(null);
+                  }}
+                >
+                  One per line instead
+                </button>
+              </div>
+            )}
             <Toggle label="Outline each label" help="For plain paper, or to check alignment on a test print." checked={spec.border} onChange={(v) => setSpec((s) => ({ ...s, border: v }))} />
           </div>
 
@@ -343,8 +381,25 @@ export function LabelStudio() {
           <div className="card flex flex-col gap-2 p-4">
             <h3 className="text-[13.5px] font-semibold text-text">Printed beside the code</h3>
             <Checkbox label="Name" checked={spec.fields.name} onChange={(v) => setField("name", v)} />
-            <Checkbox label={spec.kind === "lot" ? "Lot number" : spec.kind === "location" ? "Location code" : "SKU / code"} checked={spec.fields.code} onChange={(v) => setField("code", v)} />
+            <Checkbox label={spec.kind === "lot" ? "Lot number" : spec.kind === "location" ? "Location code" : `${terms.itemCodeShort} / code`} checked={spec.fields.code} onChange={(v) => setField("code", v)} />
             <Checkbox label="Details" help={spec.kind === "item" || spec.kind === "assembly" ? "Category and bin" : spec.kind === "lot" ? "SKU, supplier lot, expiry" : spec.kind === "location" ? "Kind of location" : "Phone or email"} checked={spec.fields.detail} onChange={(v) => setField("detail", v)} />
+            {features.labelFields && spec.fields.detail && (spec.kind === "item" || spec.kind === "assembly") && (
+              <div className="ml-6 flex flex-col gap-1.5 border-l border-border pl-3">
+                {ITEM_DETAIL_PARTS.map((part) => {
+                  const current = spec.itemDetails ?? DEFAULT_ITEM_DETAILS;
+                  return (
+                    <Checkbox
+                      key={part.id}
+                      label={part.label}
+                      help={part.hint}
+                      checked={current.includes(part.id)}
+                      // Kept in the listed order so the line reads the same whichever box was ticked first.
+                      onChange={(on) => setSpec((s) => ({ ...s, itemDetails: ITEM_DETAIL_PARTS.map((x) => x.id).filter((id): id is ItemDetailPart => (id === part.id ? on : current.includes(id))) }))}
+                    />
+                  );
+                })}
+              </div>
+            )}
             {(spec.kind === "item" || spec.kind === "assembly") && <Checkbox label="Price" checked={spec.fields.price} onChange={(v) => setField("price", v)} />}
             <div className="mt-1">
               <div className="mb-1 text-[12.5px] font-medium text-text">Text size</div>

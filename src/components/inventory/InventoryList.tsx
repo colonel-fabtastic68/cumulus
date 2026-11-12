@@ -20,7 +20,11 @@ import { StockAlertsModal } from "./StockAlertsModal";
 import { BulkEditModal } from "./BulkEditModal";
 import { RoutingByGroupModal } from "./RoutingByGroupModal";
 import { useInventoryColumns } from "./InventoryColumns";
-import { INVENTORY_VIEWS, describeFilters, matchesSearch, matchesView, type InventoryView } from "./inventoryFilters";
+import { INVENTORY_VIEWS, describeFilters, inventoryViews, matchesSearch, matchesView, type InventoryView } from "./inventoryFilters";
+import { openPurchaseQty } from "@/lib/purchaseOrders";
+import { overstockTotal } from "@/lib/overstock";
+import { useFeatures } from "@/lib/useFeature";
+import { useTerms } from "@/lib/useTerms";
 import { downloadCsv, itemsToCsv } from "./exportItemsCsv";
 
 type Dialog = "new" | "adjust" | "build" | "bulk" | "routing" | "deactivate" | "delete" | null;
@@ -49,6 +53,11 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
   const byId = useItemsById();
   const { preview } = usePreview();
   const suppliers = useCollection("suppliers");
+  const purchaseOrders = useCollection("purchaseOrders");
+  const features = useFeatures();
+  const terms = useTerms();
+  const views = useMemo(() => inventoryViews({ overstock: features.overstock }), [features.overstock]);
+  const onOrder = useMemo(() => openPurchaseQty(purchaseOrders), [purchaseOrders]);
 
   const [q, setQ] = useState(initialQuery);
   const [view, setView] = useState<InventoryView>(initialView);
@@ -69,7 +78,7 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
 
   const supplierById = useMemo(() => new Map(suppliers.map((s) => [s.id, s.name])), [suppliers]);
   const supplierName = useCallback((id?: string) => (id ? supplierById.get(id) : undefined), [supplierById]);
-  const columns = useInventoryColumns({ currency, supplierName, location });
+  const columns = useInventoryColumns({ currency, supplierName, location, onOrder });
 
   const categories = useMemo(() => Array.from(new Set(items.map((i) => i.category).filter((c): c is string => !!c))).sort((a, b) => a.localeCompare(b)), [items]);
   const supplierOptions = useMemo(() => [...suppliers].sort((a, b) => a.name.localeCompare(b.name)).map((s) => ({ value: s.id, label: s.name })), [suppliers]);
@@ -87,7 +96,7 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
     [items, q, category, supplierId, location],
   );
   const counts = useMemo(() => {
-    const out: Record<InventoryView, number> = { all: 0, active: 0, low: 0, assemblies: 0, inactive: 0 };
+    const out: Record<InventoryView, number> = { all: 0, active: 0, low: 0, overstock: 0, assemblies: 0, inactive: 0 };
     for (const i of base) for (const v of INVENTORY_VIEWS) if (matchesView(i, v.value, settings.stockAlerts)) out[v.value]++;
     return out;
   }, [base, settings.stockAlerts]);
@@ -95,6 +104,7 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
 
   const lowCount = useMemo(() => items.filter((i) => isLowStock(i, settings.stockAlerts)).length, [items, settings.stockAlerts]);
   const totalValue = useMemo(() => inventoryValue(items), [items]);
+  const overValue = useMemo(() => (features.overstock ? overstockTotal(items) : 0), [items, features.overstock]);
   const viewValue = useMemo(() => inventoryValue(rows), [rows]);
   const filtersActive = q.trim() !== "" || view !== "all" || category !== "" || supplierId !== "" || locationId !== "";
 
@@ -160,7 +170,7 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
     void runBulk(`Deleted ${pluralize(ids.length, "item")}`, () => deleteItems(store, user, ids));
   };
 
-  const subtitle = `${pluralize(items.length, "item")} · ${formatNumber(lowCount)} below minimum · value ${formatMoney(totalValue, currency)}`;
+  const subtitle = `${pluralize(items.length, "item")} · ${formatNumber(lowCount)} below minimum · value ${formatMoney(totalValue, currency)}${overValue > 0 ? ` · ${formatMoney(overValue, currency)} above max` : ""}`;
 
   const moreMenu = (
     <Menu
@@ -193,14 +203,19 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
 
   const toolbar = (
     <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-      <SearchField value={q} onChange={setQ} placeholder="Search SKU, name, tag, barcode, cross-reference" className="w-full sm:w-72" />
+      <SearchField value={q} onChange={setQ} placeholder={`Search ${terms.itemCodeShort}, name, tag, barcode, cross-reference`} className="w-full sm:w-72" />
       <div className="min-w-0 max-w-full overflow-x-auto">
-        <Segmented value={view} onChange={setView} options={INVENTORY_VIEWS.map((v) => ({ value: v.value, label: v.label, count: counts[v.value] }))} />
+        <Segmented value={view} onChange={setView} options={views.map((v) => ({ value: v.value, label: v.label, count: counts[v.value] }))} />
       </div>
       <Select value={category} onChange={(e) => setCategory(e.target.value)} placeholder="All categories" options={categories.map((c) => ({ value: c, label: c }))} containerClassName="w-full sm:w-44" aria-label="Category" />
       <Select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} placeholder="All suppliers" options={supplierOptions} containerClassName="w-full sm:w-48" aria-label="Supplier" />
       {locations.length > 1 && (
         <Select value={locationId} onChange={(e) => setLocationId(e.target.value)} placeholder="All locations" options={locations.map((l) => ({ value: l.id, label: l.name }))} containerClassName="w-full sm:w-44" aria-label="Location" />
+      )}
+      {features.resetFilters && filtersActive && (
+        <Button variant="plain" icon={<FilterX />} onClick={clearFilters}>
+          Reset filters
+        </Button>
       )}
     </div>
   );

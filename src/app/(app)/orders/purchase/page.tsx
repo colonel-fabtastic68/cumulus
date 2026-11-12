@@ -44,6 +44,8 @@ export default function PurchaseOrdersPage() {
   const [templateFrom, setTemplateFrom] = useState<PurchaseOrder | null>(null);
   const [templateName, setTemplateName] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+  // ?q=<part number> arrives from the On order column in Inventory: the list opens searched for that part.
+  const [search, setSearch] = useState("");
 
   const sortedTemplates = useMemo(() => [...templates].sort((a, b) => a.name.localeCompare(b.name)), [templates]);
   const template = useMemo(() => (templateId ? (templates.find((t) => t.id === templateId) ?? null) : null), [templates, templateId]);
@@ -221,10 +223,11 @@ export default function PurchaseOrdersPage() {
       <Suspense fallback={null}>
         <QueryParamEffect param="highlight" onValue={setSelectedId} />
         <QueryParamEffect param="new" onValue={onNewParam} />
+        <QueryParamEffect param="q" onValue={setSearch} />
       </Suspense>
       <div className="flex flex-col gap-4">
         <PurchaseOrderStats purchaseOrders={purchaseOrders} />
-        <PurchaseOrdersTable purchaseOrders={purchaseOrders} canWrite={writable} busyId={busyId} onSelect={(p) => setSelectedId(p.id)} onSend={send} onReceive={setReceiveTargets} onCancel={setCancelTarget} onMerge={startMerge} onNew={writable ? startNew : undefined} />
+        <PurchaseOrdersTable key={search} initialQuery={search} purchaseOrders={purchaseOrders} canWrite={writable} busyId={busyId} onSelect={(p) => setSelectedId(p.id)} onSend={send} onReceive={setReceiveTargets} onCancel={setCancelTarget} onMerge={startMerge} onNew={writable ? startNew : undefined} />
       </div>
 
       <NewPurchaseOrderModal

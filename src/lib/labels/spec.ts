@@ -83,6 +83,19 @@ export interface LabelFields {
   detail: boolean;
 }
 
+/** What the details line of an item label can carry. */
+export type ItemDetailPart = "category" | "bin" | "vendorPn" | "supplier" | "fitment";
+
+export const ITEM_DETAIL_PARTS: Array<{ id: ItemDetailPart; label: string; hint?: string }> = [
+  { id: "category", label: "Category" },
+  { id: "bin", label: "Bin location" },
+  { id: "vendorPn", label: "Vendor part number" },
+  { id: "supplier", label: "Supplier" },
+  { id: "fitment", label: "Fitment", hint: "From a custom field named Fitment" },
+];
+
+export const DEFAULT_ITEM_DETAILS: ItemDetailPart[] = ["category", "bin"];
+
 export interface LabelSpec {
   kind: LabelKind;
   templateId: string;
@@ -99,6 +112,10 @@ export interface LabelSpec {
   textScale: number;
   /** A hairline around each label, for plain paper and cutting. */
   border: boolean;
+  /** Item and assembly labels: what the details line carries. Absent = category and bin. */
+  itemDetails?: ItemDetailPart[];
+  /** Labels per record id, when a document sets them (one per unit received on a purchase order). Records not listed use `copies`. */
+  counts?: Record<string, number>;
 }
 
 export const DEFAULT_SPEC: LabelSpec = {

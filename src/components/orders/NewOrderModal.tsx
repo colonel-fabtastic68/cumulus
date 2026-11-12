@@ -13,6 +13,12 @@ import { saveOrderTemplate } from "@/lib/orderTemplates";
 import { ensureCustomer, findCustomer } from "@/lib/customers";
 import { ItemPicker } from "@/components/inventory";
 import { currencySymbol } from "./orderUtils";
+import { QuickLineEntry } from "./QuickLineEntry";
+import { useFeatures } from "@/lib/useFeature";
+import { useTerms } from "@/lib/useTerms";
+import { useDefaultLocation, useLocations } from "@/lib/locations";
+import { routedLocation } from "@/lib/inventory";
+import { enteredFor, toStockQty, unitOptions } from "@/lib/units";
 
 interface NewOrderModalProps {
   open: boolean;
@@ -35,9 +41,24 @@ interface LineState {
   unitPrice: string;
   /** Once the user edits the price by hand we stop recomputing it from quantity. */
   priceTouched: boolean;
+  /** Ship this line from here; "" leaves it to the part's routing and the shipment. */
+  locationId: string;
+  /** The unit qty was typed in; "" is the item's stocking unit. */
+  unit: string;
 }
 
-const newLine = (): LineState => ({ key: newId("ln"), item: null, qty: "1", unitPrice: "", priceTouched: false });
+const newLine = (): LineState => ({ key: newId("ln"), item: null, qty: "1", unitPrice: "", priceTouched: false, locationId: "", unit: "" });
+
+/** The line's quantity in the item's stocking unit: what the order, the price and the shelf are counted in. */
+function stockQty(l: Pick<LineState, "item" | "qty" | "unit">): number {
+  const n = Number(l.qty);
+  if (!l.item || !l.unit || !Number.isFinite(n)) return n;
+  try {
+    return toStockQty(l.item, n, l.unit);
+  } catch {
+    return n;
+  }
+}
 
 const SOURCE_OPTIONS: Array<{ value: OrderSource; label: string }> = [
   { value: "manual", label: "Manual" },
@@ -54,6 +75,11 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
   const customerRecords = useCollection("customers");
   const { currency } = useSettings();
   const symbol = currencySymbol(currency);
+  const features = useFeatures();
+  const terms = useTerms();
+  const locations = useLocations();
+  const home = useDefaultLocation();
+  const pickLocation = features.lineLocations && locations.length > 1;
 
   const [customer, setCustomer] = useState(template?.customer ?? "");
   const [customerEmail, setCustomerEmail] = useState(template?.customerEmail ?? "");
@@ -63,14 +89,15 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
   const [source, setSource] = useState<OrderSource>("manual");
   // Template lines find their items by id; the price is the template's, else today's price for that quantity.
   const [lines, setLines] = useState<LineState[]>(() => {
-    if (!template) return [newLine()];
+    // With keyboard entry the form starts empty: the entry row under the lines is where typing begins.
+    if (!template) return features.fastLineEntry ? [] : [newLine()];
     const fromTemplate = template.lines.flatMap((l) => {
       const item = allItems.find((i) => i.id === l.itemId);
       if (!item) return [];
       const price = l.unitPrice ?? priceForCustomer(item, l.qty, null);
-      return [{ key: newId("ln"), item, qty: String(l.qty), unitPrice: price === undefined ? "" : String(price), priceTouched: l.unitPrice !== undefined }];
+      return [{ key: newId("ln"), item, qty: String(l.qty), unitPrice: price === undefined ? "" : String(price), priceTouched: l.unitPrice !== undefined, locationId: "", unit: "" }];
     });
-    return fromTemplate.length ? fromTemplate : [newLine()];
+    return fromTemplate.length || features.fastLineEntry ? fromTemplate : [newLine()];
   });
   const [note, setNote] = useState(template?.note ?? "");
   const [orderNumber, setOrderNumber] = useState("");
@@ -80,12 +107,12 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
   const [savingTemplate, setSavingTemplate] = useState(false);
 
   const saveTemplate = async () => {
-    const chosen = lines.filter((l) => l.item && Number(l.qty) > 0);
+    const chosen = lines.filter((l) => l.item && stockQty(l) > 0);
     if (!templateName.trim() || chosen.length === 0) return;
     setSavingTemplate(true);
     try {
       const address = shipTo.street1.trim() ? { ...shipTo, country: shipTo.country.trim().toUpperCase() || "US" } : undefined;
-      const t = await saveOrderTemplate(store, user, { name: templateName, description: templateNote, customer, customerEmail, shipTo: address, note, lines: chosen.map((l) => ({ itemId: l.item!.id, qty: Number(l.qty), unitPrice: l.priceTouched && l.unitPrice !== "" ? Number(l.unitPrice) : undefined })) }, template?.id);
+      const t = await saveOrderTemplate(store, user, { name: templateName, description: templateNote, customer, customerEmail, shipTo: address, note, lines: chosen.map((l) => ({ itemId: l.item!.id, qty: stockQty(l), unitPrice: l.priceTouched && l.unitPrice !== "" ? Number(l.unitPrice) : undefined })) }, template?.id);
       toast(`Saved template “${t.name}”`, "success");
       setTemplateModal(false);
     } catch (e) {
@@ -127,15 +154,38 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
   /** Choosing an item (or a different one) always starts from its list price for the current quantity. */
   const setItem = (key: string, item: Item | null) =>
     patchLine(key, (l) => {
-      const qty = Math.max(1, Number(l.qty) || 1);
-      return { ...l, item, unitPrice: item ? String(priceFor(item, qty)) : "", priceTouched: false };
+      // A new item starts in the unit it is usually sold in.
+      const unit = features.unitConversions ? (item?.salesUnit ?? "") : "";
+      const qty = Math.max(1, stockQty({ item, qty: l.qty, unit }) || 1);
+      return { ...l, item, unit, unitPrice: item ? String(priceFor(item, qty)) : "", priceTouched: false };
     });
 
   const setQty = (key: string, qty: string) =>
     patchLine(key, (l) => {
-      const n = Number(qty);
+      const n = stockQty({ ...l, qty });
       const unitPrice = l.item && !l.priceTouched && Number.isFinite(n) && n > 0 ? String(priceFor(l.item, n)) : l.unitPrice;
       return { ...l, qty, unitPrice };
+    });
+
+  const setUnit = (key: string, unit: string) =>
+    patchLine(key, (l) => {
+      const n = stockQty({ ...l, unit });
+      const unitPrice = l.item && !l.priceTouched && Number.isFinite(n) && n > 0 ? String(priceFor(l.item, n)) : l.unitPrice;
+      return { ...l, unit, unitPrice };
+    });
+
+  /** Keyboard entry: a part already on the order gets the quantity added to its line instead of a second line. */
+  const addQuick = (item: Item, qty: number) =>
+    setLines((prev) => {
+      const unit = features.unitConversions ? (item.salesUnit ?? "") : "";
+      const existing = prev.find((l) => l.item?.id === item.id && l.unit === unit);
+      if (existing) {
+        const total = String((Number(existing.qty) || 0) + qty);
+        const n = stockQty({ ...existing, qty: total });
+        return prev.map((l) => (l === existing ? { ...l, qty: total, unitPrice: l.priceTouched ? l.unitPrice : String(priceFor(item, n)) } : l));
+      }
+      const n = stockQty({ item, qty: String(qty), unit });
+      return [...prev.filter((l) => l.item), { ...newLine(), item, qty: String(qty), unit, unitPrice: String(priceFor(item, n)) }];
     });
 
   const setPrice = (key: string, unitPrice: string) => patchLine(key, (l) => ({ ...l, unitPrice, priceTouched: true }));
@@ -144,20 +194,20 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
   const addLine = () => setLines((prev) => [...prev, newLine()]);
 
   const lineTotal = (l: LineState) => {
-    const q = Number(l.qty);
+    const q = stockQty(l);
     const p = Number(l.unitPrice);
     return Number.isFinite(q) && Number.isFinite(p) ? round(q * p) : 0;
   };
 
-  const validLines = lines.filter((l) => l.item && Number(l.qty) > 0);
+  const validLines = lines.filter((l) => l.item && stockQty(l) > 0);
   const total = round(sum(validLines.map(lineTotal)));
-  const shortLines = validLines.filter((l) => l.item && l.item.onHand < Number(l.qty));
+  const shortLines = validLines.filter((l) => l.item && l.item.onHand < stockQty(l));
 
   const submit = async () => {
     if (validLines.length === 0) return setError("Add at least one line with an item and a quantity");
     for (const l of lines) {
       if (!l.item) continue;
-      const q = Number(l.qty);
+      const q = stockQty(l);
       const p = Number(l.unitPrice);
       if (!Number.isFinite(q) || q <= 0) return setError(`Enter a quantity for ${l.item.sku}`);
       if (!Number.isFinite(p) || p < 0) return setError(`Enter a unit price for ${l.item.sku}`);
@@ -173,7 +223,13 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
         shipTo: address,
         source,
         note: note.trim() || undefined,
-        lines: validLines.map((l) => ({ itemId: l.item!.id, qty: Number(l.qty), unitPrice: Number(l.unitPrice) })),
+        lines: validLines.map((l) => ({
+          itemId: l.item!.id,
+          qty: stockQty(l),
+          unitPrice: Number(l.unitPrice),
+          ...(pickLocation && l.locationId ? { locationId: l.locationId } : {}),
+          ...(l.unit ? { entered: enteredFor(l.item!, Number(l.qty), l.unit) } : {}),
+        })),
         fulfill: shipNow,
       });
       // Every order points at a customer record; one is created from the order when none matches.
@@ -203,7 +259,7 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
       onClose={onClose}
       title="New order"
       subtitle={template ? `From template “${template.name}”. Check quantities and prices, then create.` : "Open orders wait on the shelf; stock is relieved when the order ships."}
-      size="lg"
+      size={features.largeOrderForms ? "full" : "lg"}
       footer={
         <>
           <Button variant="plain" icon={<BookmarkPlus />} onClick={() => setTemplateModal(true)} disabled={validLines.length === 0} className="mr-auto">
@@ -263,9 +319,11 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
         <div>
           <div className="mb-1.5 flex items-center justify-between">
             <span className="text-[12.5px] font-medium text-text">Lines</span>
-            <Button size="sm" variant="plain" icon={<Plus />} onClick={addLine}>
-              Add line
-            </Button>
+            {!features.fastLineEntry && (
+              <Button size="sm" variant="plain" icon={<Plus />} onClick={addLine}>
+                Add line
+              </Button>
+            )}
           </div>
           <div className="rounded-[var(--radius)] border border-border">
             <div className="hidden grid-cols-[minmax(0,1fr)_84px_120px_100px_32px] gap-2 border-b border-border bg-surface-subdued px-3 py-1.5 text-[12px] font-medium text-text-secondary sm:grid">
@@ -276,15 +334,40 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
               <span />
             </div>
             {lines.length === 0 ? (
-              <div className="px-3 py-6 text-center text-[12.5px] text-text-tertiary">No lines yet. Add one to get started.</div>
+              <div className="px-3 py-6 text-center text-[12.5px] text-text-tertiary">{features.fastLineEntry ? `No lines yet. Type a ${terms.itemCodeShort} below.` : "No lines yet. Add one to get started."}</div>
             ) : (
               lines.map((l) => {
-                const q = Number(l.qty);
+                const q = stockQty(l);
                 const short = l.item && Number.isFinite(q) && l.item.onHand < q;
+                const units = features.unitConversions && l.item ? unitOptions(l.item) : [];
+                const routed = l.item ? routedLocation("fulfill", l.item, locations) : undefined;
                 return (
                   <div key={l.key} className="grid grid-cols-1 gap-2 border-b border-border px-3 py-2 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_84px_120px_100px_32px] sm:items-start">
                     <div className="min-w-0">
-                      <ItemPicker value={l.item} onChange={(item) => setItem(l.key, item)} filter={(i) => i.status === "active"} placeholder="Search SKU or name" />
+                      <ItemPicker value={l.item} onChange={(item) => setItem(l.key, item)} filter={(i) => i.status === "active"} placeholder={`Search ${terms.itemCodeShort} or name`} />
+                      {l.item && (pickLocation || units.length > 1) && (
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12px] text-text-secondary">
+                          {pickLocation && (
+                            <label className="flex items-center gap-1.5">
+                              Ship from
+                              <Select
+                                aria-label={`Ship ${l.item.sku} from`}
+                                value={l.locationId}
+                                onChange={(e) => patchLine(l.key, (cur) => ({ ...cur, locationId: e.target.value }))}
+                                options={[{ value: "", label: `${(routed ?? home).name} (default)` }, ...locations.filter((loc) => loc.id !== (routed ?? home).id).map((loc) => ({ value: loc.id, label: loc.name }))]}
+                                containerClassName="w-44"
+                              />
+                            </label>
+                          )}
+                          {units.length > 1 && (
+                            <label className="flex items-center gap-1.5">
+                              Qty in
+                              <Select aria-label={`Unit for ${l.item.sku}`} value={units.some((u) => u.source !== "stock" && u.unit === l.unit) ? l.unit : ""} onChange={(e) => setUnit(l.key, e.target.value)} options={units.map((u) => ({ value: u.source === "stock" ? "" : u.unit, label: u.unit }))} containerClassName="w-28" />
+                            </label>
+                          )}
+                          {l.unit && Number.isFinite(q) && <span className="tabular">= {formatQty(q, l.item.unit || "ea")}{l.item.unit === "ea" || !l.item.unit ? " ea" : ""}</span>}
+                        </div>
+                      )}
                       {short && l.item && (
                         <p className="mt-1 text-[12px] text-warning">
                           Short by {formatQty(q - l.item.onHand, l.item.unit)} · {formatQty(l.item.onHand, l.item.unit)} on hand
@@ -305,6 +388,7 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
                 );
               })
             )}
+            {features.fastLineEntry && <QuickLineEntry onAdd={addQuick} codeLabel={terms.itemCodeShort} autoFocus={!!customer} />}
             <div className="flex items-center justify-between border-t border-border bg-surface-subdued px-3 py-2 text-[13px]">
               <span className="text-text-secondary">
                 {validLines.length} {validLines.length === 1 ? "line" : "lines"}

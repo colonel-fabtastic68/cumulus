@@ -11,18 +11,22 @@ import {
   AgentSection,
   BillingSection,
   CatalogSection,
+  CategoriesSection,
   CompanySection,
   DataSection,
   InventoryPolicySection,
   LabsSection,
   LocationsSection,
+  PeriodCloseSection,
   labsFeatures,
   QuotingSection,
   ShippingSection,
+  TerminologySection,
   TimeMachineSection,
   settingsSection,
 } from "@/components/workspace/settings";
 import { canManageTeam } from "@/components/workspace/team";
+import { useFeatures } from "@/lib/useFeature";
 
 /** One settings block. The id is the anchor search results and links point at (/settings#locations). */
 function Row({ id, children }: { id: string; children: ReactNode }) {
@@ -43,6 +47,7 @@ export default function SettingsPage() {
   const { setPageContext } = useAgent();
   const canManage = canManageTeam(user);
   const readOnly = !canManage;
+  const features = useFeatures();
 
   useEffect(() => {
     setPageContext({ page: "Settings" });
@@ -76,10 +81,17 @@ export default function SettingsPage() {
           <CompanySection key={formKey} settings={settings} readOnly={readOnly} />
         </Row>
         <Row id="inventory-policy">
-          <InventoryPolicySection key={formKey} settings={settings} readOnly={readOnly} />
+          <div className="flex flex-col gap-4">
+            <InventoryPolicySection key={formKey} settings={settings} readOnly={readOnly} />
+            {features.periodLocks && <PeriodCloseSection settings={settings} canManage={canManage} />}
+          </div>
         </Row>
         <Row id="catalog">
-          <CatalogSection key={formKey} settings={settings} readOnly={readOnly} />
+          <div className="flex flex-col gap-4">
+            <CatalogSection key={formKey} settings={settings} readOnly={readOnly} />
+            {features.partNumbers && <TerminologySection key={`terms-${formKey}`} settings={settings} readOnly={readOnly} />}
+            {features.categoryTools && <CategoriesSection readOnly={readOnly} />}
+          </div>
         </Row>
         <Row id="locations">
           <LocationsSection readOnly={readOnly} />

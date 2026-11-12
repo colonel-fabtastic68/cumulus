@@ -20,6 +20,8 @@ interface Props {
   onCancel: (po: PurchaseOrder) => void;
   onMerge?: (pos: PurchaseOrder[]) => void;
   onNew?: () => void;
+  /** Search the list opens with. */
+  initialQuery?: string;
 }
 
 const FILTERS: Array<{ value: PoFilter; label: string }> = [
@@ -32,11 +34,11 @@ const FILTERS: Array<{ value: PoFilter; label: string }> = [
   { value: "all", label: "All" },
 ];
 
-export function PurchaseOrdersTable({ purchaseOrders, canWrite, busyId, onSelect, onSend, onReceive, onCancel, onMerge, onNew }: Props) {
+export function PurchaseOrdersTable({ purchaseOrders, canWrite, busyId, onSelect, onSend, onReceive, onCancel, onMerge, onNew, initialQuery = "" }: Props) {
   const byId = useItemsById();
   const { currency } = useSettings();
   const [filter, setFilter] = useState<PoFilter>("open");
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(initialQuery);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
 
   const counts = useMemo(() => {

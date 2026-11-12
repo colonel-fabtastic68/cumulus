@@ -76,10 +76,11 @@ export interface ModalProps {
   subtitle?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
-  size?: "sm" | "md" | "lg" | "xl";
+  /** full: nearly the whole window, for forms with long line tables (orders). */
+  size?: "sm" | "md" | "lg" | "xl" | "full";
 }
 
-const sizes = { sm: "max-w-md", md: "max-w-xl", lg: "max-w-3xl", xl: "max-w-5xl" };
+const sizes = { sm: "max-w-md", md: "max-w-xl", lg: "max-w-3xl", xl: "max-w-5xl", full: "max-w-[min(1480px,96vw)]" };
 
 export function Modal({ open, onClose, title, subtitle, children, footer, size = "md" }: ModalProps) {
   const ref = useRef<HTMLDivElement>(null);
@@ -87,7 +88,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
 
   if (!open || typeof document === "undefined") return null;
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/30 p-4 pt-[8vh]" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className={cn("fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/30 p-4", size === "full" ? "pt-[3vh]" : "pt-[8vh]")} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={title ? `${id}-title` : undefined} className={cn("animate-in w-full rounded-[var(--radius-lg)] bg-surface shadow-[var(--shadow-pop)] outline-none", sizes[size])}>
         {(title || subtitle) && (
           <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-3.5">

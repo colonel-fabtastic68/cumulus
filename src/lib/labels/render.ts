@@ -79,7 +79,10 @@ export function layoutLabels(spec: LabelSpec, template: LabelTemplate, entries: 
   for (const entry of entries) {
     const text = encodedText(entry, spec.encode, spec.symbology, origin);
     const symbology = effectiveSymbology(spec.symbology, text);
-    for (let c = 0; c < copies; c++) {
+    // A document's own quantities (one label per unit received) win over the uniform copies setting.
+    const count = spec.counts?.[entry.id];
+    const n = count !== undefined && Number.isFinite(count) ? Math.max(0, Math.min(500, Math.floor(count))) : copies;
+    for (let c = 0; c < n; c++) {
       const page = Math.floor(slot / per);
       const i = slot % per;
       const col = i % template.cols;

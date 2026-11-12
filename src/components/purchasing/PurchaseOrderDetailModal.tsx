@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { BookmarkPlus, PackageCheck, Pencil, Printer, Send, XCircle } from "lucide-react";
+import { BookmarkPlus, Mail, PackageCheck, Pencil, Printer, QrCode, Send, XCircle } from "lucide-react";
 import type { PurchaseOrder } from "@/lib/types";
 import { poIsOpen, poIsOverdue, poLineOpenQty, poReceivedUnits, poTotal } from "@/lib/purchaseOrders";
 import { useCollection, useItemsById, useSettings } from "@/lib/store/provider";
@@ -9,6 +10,8 @@ import { formatDate, formatDateTime, formatMoney, formatRelative, pluralize } fr
 import { Badge, Button, DescriptionList, Modal, SimpleTable, useToast } from "@/components/ui";
 import { PoStatusBadge, printPurchaseOrder } from "./poUtils";
 import { printReceivingChecklist } from "@/lib/receivingChecklist";
+import { EmailDocumentModal } from "@/components/orders/EmailDocumentModal";
+import { useFeatures } from "@/lib/useFeature";
 import { ClipboardCheck } from "lucide-react";
 
 interface Props {
@@ -38,7 +41,20 @@ function Detail({ po, onClose, canWrite, busy, onSend, onReceive, onEdit, onCanc
   const receipts = useCollection("receipts").filter((r) => po.receiptIds?.includes(r.id));
   const settings = useSettings();
   const toast = useToast();
+  const features = useFeatures();
+  const [emailing, setEmailing] = useState(false);
   const supplier = suppliers.find((s) => s.id === po.supplierId);
+  // One label per unit: what has arrived so far, or the whole order while nothing has.
+  const labelsHref = (() => {
+    const anyReceived = po.lines.some((l) => (l.received ?? 0) > 0);
+    const pairs = po.lines.flatMap((l) => {
+      const sku = itemsById.get(l.itemId)?.sku;
+      const qty = anyReceived ? (l.received ?? 0) : l.qty;
+      return sku && qty > 0 ? [[sku, qty] as const] : [];
+    });
+    if (pairs.length === 0) return null;
+    return `/exports/labels?kind=item&skus=${encodeURIComponent(pairs.map(([sku]) => sku).join(","))}&qty=${encodeURIComponent(pairs.map(([sku, qty]) => `${sku}:${qty}`).join(","))}&source=${encodeURIComponent(po.number)}`;
+  })();
   const createdBy = members.find((m) => m.id === po.createdBy)?.name;
   const open = poIsOpen(po);
   const editable = open && poReceivedUnits(po) === 0;
@@ -61,7 +77,7 @@ function Detail({ po, onClose, canWrite, busy, onSend, onReceive, onEdit, onCanc
     <Modal
       open
       onClose={onClose}
-      size="lg"
+      size={features.largeOrderForms ? "full" : "lg"}
       title={
         <span className="inline-flex flex-wrap items-center gap-2">
           <span className="font-mono">{po.number}</span>
@@ -79,6 +95,16 @@ function Detail({ po, onClose, canWrite, busy, onSend, onReceive, onEdit, onCanc
             {open && (
               <Button variant="plain" icon={<ClipboardCheck />} onClick={printChecklist}>
                 Receiving checklist
+              </Button>
+            )}
+            {features.documentEmail && po.status !== "cancelled" && po.status !== "merged" && (
+              <Button variant="plain" icon={<Mail />} onClick={() => setEmailing(true)}>
+                Email
+              </Button>
+            )}
+            {features.receiptLabels && labelsHref && (
+              <Button variant="plain" icon={<QrCode />} href={labelsHref}>
+                Labels
               </Button>
             )}
           </div>
@@ -230,6 +256,7 @@ function Detail({ po, onClose, canWrite, busy, onSend, onReceive, onEdit, onCanc
           </div>
         )}
       </div>
+      <EmailDocumentModal target={emailing ? { kind: "purchaseOrder", doc: po } : null} onClose={() => setEmailing(false)} />
     </Modal>
   );
 }

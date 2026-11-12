@@ -14,3 +14,6 @@ export * from "./CatalogSection";
 export * from "./StockAlertsForm";
 export * from "./TimeMachineSection";
 export * from "./LabsSection";
+export * from "./TerminologySection";
+export * from "./CategoriesSection";
+export * from "./PeriodCloseSection";

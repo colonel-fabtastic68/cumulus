@@ -11,6 +11,9 @@ import { clamp, cn } from "@/lib/utils";
 import { Badge, StatusBadge, type Column } from "@/components/ui";
 import { useSettings } from "@/lib/store/provider";
 import { customFieldsFor } from "@/lib/catalog";
+import { isOverstock, overstockQty } from "@/lib/overstock";
+import { useFeatures } from "@/lib/useFeature";
+import { useTerms } from "@/lib/useTerms";
 
 /** On-hand quantity with a "Low" flag and a tiny min/max level bar. */
 /** Red below the low line (workspace rule), amber within the early-warning band or between min and max, green at max or above. */
@@ -23,8 +26,9 @@ export function stockLevelTone(item: Item, rule: StockAlertRule = DEFAULT_STOCK_
   return "success";
 }
 
-export function StockLevelCell({ item, rule = DEFAULT_STOCK_ALERTS }: { item: Item; rule?: StockAlertRule }) {
+export function StockLevelCell({ item, rule = DEFAULT_STOCK_ALERTS, flagOverstock = false }: { item: Item; rule?: StockAlertRule; flagOverstock?: boolean }) {
   const low = isLowStock(item, rule);
+  const over = flagOverstock && isOverstock(item);
   const tone = stockLevelTone(item, rule);
   const hasMin = item.minQty !== undefined;
   const cap = item.maxQty !== undefined && item.maxQty > 0 ? item.maxQty : hasMin ? Math.max(1, item.minQty! * 2) : 0;
@@ -36,6 +40,11 @@ export function StockLevelCell({ item, rule = DEFAULT_STOCK_ALERTS }: { item: It
     <div className="flex flex-col items-end gap-1">
       <div className="flex items-center justify-end gap-1.5">
         {low && <Badge tone="warning">Low</Badge>}
+        {over && (
+          <span title={`${formatQty(overstockQty(item), item.unit)} above the max of ${formatNumber(item.maxQty!)}`}>
+            <Badge tone="attention">Over</Badge>
+          </span>
+        )}
         <span className={cn("font-medium", text)}>{formatQty(item.onHand, item.unit)}</span>
       </div>
       {(hasMin || item.maxQty !== undefined) && (
@@ -74,8 +83,13 @@ function optionalNumber(n?: number): string {
   return n === undefined ? "—" : formatNumber(n, Number.isInteger(n) ? 0 : 2);
 }
 
-export function useInventoryColumns({ currency, supplierName, location }: { currency: string; supplierName: (id?: string) => string | undefined; location?: ColumnLocation }): Column<Item>[] {
+export function useInventoryColumns({ currency, supplierName, location, onOrder }: { currency: string; supplierName: (id?: string) => string | undefined; location?: ColumnLocation; /** Units still due on open purchase orders, by item id. */ onOrder?: Map<string, number> }): Column<Item>[] {
   const settings = useSettings();
+  const features = useFeatures();
+  const terms = useTerms();
+  const showOnOrder = features.onOrderColumn && !!onOrder;
+  const showMap = features.mapPricing;
+  const flagOverstock = features.overstock;
   const customTypes = settings.catalog?.itemTypes;
   const customFields = customFieldsFor(settings, "items");
   const rule = settings.stockAlerts ?? DEFAULT_STOCK_ALERTS;
@@ -83,7 +97,7 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
     () => [
       {
         key: "sku",
-        header: "SKU",
+        header: terms.itemCodeShort,
         flex: true,
         minWidth: 140,
         sortValue: (i) => i.sku,
@@ -137,8 +151,30 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
         maxWidth: location ? 150 : 132,
         align: "right",
         sortValue: (i) => (location ? qtyAt(i, location.id, location.homeId) : i.onHand),
-        render: (i) => (location ? <AtLocationCell item={i} location={location} /> : <StockLevelCell item={i} rule={rule} />),
+        render: (i) => (location ? <AtLocationCell item={i} location={location} /> : <StockLevelCell item={i} rule={rule} flagOverstock={flagOverstock} />),
       },
+      ...(showOnOrder
+        ? [
+            {
+              key: "onOrder",
+              header: "On order",
+              minWidth: 84,
+              maxWidth: 100,
+              priority: 8,
+              align: "right",
+              sortValue: (i) => onOrder!.get(i.id) ?? 0,
+              render: (i) => {
+                const qty = onOrder!.get(i.id) ?? 0;
+                if (qty <= 0) return <span className="text-text-tertiary">—</span>;
+                return (
+                  <Link href={`/orders/purchase?q=${encodeURIComponent(i.sku)}`} onClick={(e) => e.stopPropagation()} className="font-medium text-text hover:text-accent" title="Open purchase orders for this item">
+                    {formatQty(qty, i.unit)}
+                  </Link>
+                );
+              },
+            } satisfies Column<Item>,
+          ]
+        : []),
       {
         key: "minMax",
         header: "Min / Max",
@@ -172,6 +208,28 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
         sortValue: (i) => i.price,
         render: (i) => formatMoney(i.price, currency),
       },
+      ...(showMap
+        ? [
+            {
+              key: "mapPrice",
+              header: "MAP",
+              minWidth: 78,
+              maxWidth: 96,
+              priority: 5,
+              align: "right",
+              sortValue: (i) => i.mapPrice ?? null,
+              render: (i) => {
+                if (i.mapPrice === undefined) return <span className="text-text-tertiary">—</span>;
+                const under = Math.min(i.price, i.salePrice ?? i.price) < i.mapPrice;
+                return (
+                  <span className={under ? "font-medium text-critical" : undefined} title={under ? "The price is below the minimum advertised price" : undefined}>
+                    {formatMoney(i.mapPrice, currency)}
+                  </span>
+                );
+              },
+            } satisfies Column<Item>,
+          ]
+        : []),
       {
         key: "value",
         header: "Value",
@@ -239,6 +297,6 @@ export function useInventoryColumns({ currency, supplierName, location }: { curr
         render: (i) => (i.attributes?.[f.key] ? <span className="block truncate">{i.attributes[f.key]}</span> : <span className="text-text-tertiary">—</span>),
       })),
     ],
-    [currency, supplierName, location, customTypes, customFields, rule],
+    [currency, supplierName, location, customTypes, customFields, rule, terms.itemCodeShort, showOnOrder, onOrder, showMap, flagOverstock],
   );
 }

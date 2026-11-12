@@ -13,6 +13,9 @@ import { Button, Checkbox, Combobox, FormGrid, IconButton, Menu, Modal, TextArea
 import { ItemPicker } from "@/components/inventory";
 import { useReplenishmentPlan } from "@/components/replenishment/useReplenishmentPlan";
 import { currencySymbol } from "./poUtils";
+import { QuickLineEntry } from "@/components/orders/QuickLineEntry";
+import { useFeatures } from "@/lib/useFeature";
+import { useTerms } from "@/lib/useTerms";
 
 interface Props {
   open: boolean;
@@ -50,6 +53,10 @@ function PurchaseOrderForm({ open, onClose, onCreated, template, editing }: Prop
   const plan = useReplenishmentPlan();
   const { currency } = useSettings();
   const symbol = currencySymbol(currency);
+  const features = useFeatures();
+  const itemTerms = useTerms();
+  // With keyboard entry the form has no blank starter line: typing begins in the entry row under the lines.
+  const blank = (): LineState[] => (features.fastLineEntry ? [] : [newLine()]);
 
   const initialSupplier = editing?.supplier ?? template?.supplier ?? "";
   const [supplier, setSupplier] = useState(initialSupplier);
@@ -69,7 +76,7 @@ function PurchaseOrderForm({ open, onClose, onCreated, template, editing }: Prop
       const cost = l.unitCost ?? unitCostFor(item, supplierId);
       return [{ key: newId("ln"), item, qty: String(l.qty), unitCost: String(cost), costTouched: l.unitCost !== undefined }];
     });
-    return built.length ? built : [newLine()];
+    return built.length ? built : blank();
   });
   const [templateModal, setTemplateModal] = useState(false);
   const [templateName, setTemplateName] = useState(template?.name ?? "");
@@ -115,10 +122,17 @@ function PurchaseOrderForm({ open, onClose, onCreated, template, editing }: Prop
           added++;
         }
       }
-      return next.length ? next : [newLine()];
+      return next.length ? next : blank();
     });
     toast(`${from}: ${pluralize(added, "line")} added${merged ? `, ${merged} merged into existing lines` : ""}`, "success");
   };
+  /** Keyboard entry: a part already on the order gets the quantity added to its line. */
+  const addQuick = (item: Item, qty: number) =>
+    setLines((prev) => {
+      const existing = prev.find((l) => l.item?.id === item.id);
+      if (existing) return prev.map((l) => (l === existing ? { ...l, qty: String(round((Number(l.qty) || 0) + qty, 4)) } : l));
+      return [...prev.filter((l) => l.item), { key: newId("ln"), item, qty: String(qty), unitCost: String(unitCostFor(item, supplierRecord?.id)), costTouched: false }];
+    });
   const sortedTemplates = useMemo(() => [...templates].sort((a, b) => a.name.localeCompare(b.name)), [templates]);
   const lowForSupplier = useMemo(() => plan.filter((r) => r.status === "order" && r.route === "buy" && (supplierRecord ? r.supplier?.id === supplierRecord.id : !r.supplier)), [plan, supplierRecord]);
 
@@ -183,7 +197,7 @@ function PurchaseOrderForm({ open, onClose, onCreated, template, editing }: Prop
       onClose={onClose}
       title={editing ? `Edit ${editing.number}` : "New purchase order"}
       subtitle={editing ? "Nothing has been received yet, so the lines can still change." : template ? `From template “${template.name}”. Check quantities and costs, then create.` : "Stock lands when the delivery is received against the order."}
-      size="lg"
+      size={features.largeOrderForms ? "full" : "lg"}
       footer={
         <>
           <Button variant="plain" icon={<BookmarkPlus />} onClick={() => setTemplateModal(true)} disabled={validLines.length === 0} className="mr-auto">
@@ -251,9 +265,11 @@ function PurchaseOrderForm({ open, onClose, onCreated, template, editing }: Prop
                     : [{ label: <span className="text-text-tertiary">No saved templates</span>, disabled: true }]),
                 ]}
               />
-              <Button size="sm" variant="plain" icon={<Plus />} onClick={() => setLines((prev) => [...prev, newLine()])}>
-                Add line
-              </Button>
+              {!features.fastLineEntry && (
+                <Button size="sm" variant="plain" icon={<Plus />} onClick={() => setLines((prev) => [...prev, newLine()])}>
+                  Add line
+                </Button>
+              )}
             </div>
           </div>
           <div className="rounded-[var(--radius)] border border-border">
@@ -269,7 +285,7 @@ function PurchaseOrderForm({ open, onClose, onCreated, template, editing }: Prop
               return (
                 <div key={l.key} className="grid grid-cols-1 gap-2 border-b border-border px-3 py-2 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_84px_120px_100px_32px] sm:items-start">
                   <div className="min-w-0">
-                    <ItemPicker value={l.item} onChange={(item) => setItem(l.key, item)} filter={(i) => i.status === "active"} placeholder="Search SKU or name" />
+                    <ItemPicker value={l.item} onChange={(item) => setItem(l.key, item)} filter={(i) => i.status === "active"} placeholder={`Search ${itemTerms.itemCodeShort} or name`} />
                     {l.item && (
                       <p className="mt-1 text-[12px] text-text-tertiary">
                         {l.item.onHand} on hand{l.item.minQty !== undefined ? ` · min ${l.item.minQty}` : ""}
@@ -290,6 +306,8 @@ function PurchaseOrderForm({ open, onClose, onCreated, template, editing }: Prop
                 </div>
               );
             })}
+            {features.fastLineEntry && lines.length === 0 && <div className="px-3 py-6 text-center text-[12.5px] text-text-tertiary">No lines yet. Type a {itemTerms.itemCodeShort} below, or use “Add lines from”.</div>}
+            {features.fastLineEntry && <QuickLineEntry onAdd={addQuick} codeLabel={itemTerms.itemCodeShort} autoFocus={!!supplier} />}
             <div className="flex items-center justify-between border-t border-border bg-surface-subdued px-3 py-2 text-[13px]">
               <span className="text-text-secondary">
                 {validLines.length} {validLines.length === 1 ? "line" : "lines"}

@@ -1,7 +1,7 @@
 import type { Item, Location, Lot, Supplier } from "@/lib/types";
 import { findItemByCode, normalizeCode, type CodeMatch } from "@/lib/scan";
 import { locationKindLabel } from "@/lib/locations";
-import type { EncodeMode, LabelKind, LabelSpec, Symbology } from "./spec";
+import { DEFAULT_ITEM_DETAILS, type EncodeMode, type ItemDetailPart, type LabelKind, type LabelSpec, type Symbology } from "./spec";
 
 /** One label's worth of data, whatever the record behind it. */
 export interface LabelEntry {
@@ -29,8 +29,32 @@ export interface LabelData {
 /** The prefix a scan carries so the app knows which kind of record to look up. */
 const PREFIX: Record<LabelKind, string> = { item: "sku", assembly: "sku", location: "loc", supplier: "sup", lot: "lot" };
 
-export function itemEntry(item: Item, kind: LabelKind = item.type === "assembly" ? "assembly" : "item"): LabelEntry {
-  const detail = [item.category, item.location ? `Bin ${item.location}` : null].filter(Boolean).join(" · ");
+/** The fitment text on an item: a custom field whose name mentions fitment ("Fitment", "Fits"). */
+export function itemFitment(item: Pick<Item, "attributes">): string | undefined {
+  const entry = Object.entries(item.attributes ?? {}).find(([k, v]) => /fitment|^fits$|vehicle/i.test(k) && v.trim());
+  return entry?.[1].trim();
+}
+
+/** The bin an item sits in: the legacy single bin, else the first location that has one. */
+function itemBin(item: Pick<Item, "location" | "stock">): string | undefined {
+  return item.location?.trim() || Object.values(item.stock ?? {}).find((s) => s.bin?.trim())?.bin?.trim() || undefined;
+}
+
+export interface ItemEntryOptions {
+  parts?: ItemDetailPart[];
+  supplierName?: (id: string) => string | undefined;
+}
+
+export function itemEntry(item: Item, kind: LabelKind = item.type === "assembly" ? "assembly" : "item", opts: ItemEntryOptions = {}): LabelEntry {
+  const bin = itemBin(item);
+  const part: Record<ItemDetailPart, string | undefined> = {
+    category: item.category,
+    bin: bin ? `Bin ${bin}` : undefined,
+    vendorPn: item.supplierSku ? `Vendor PN ${item.supplierSku}` : undefined,
+    supplier: item.supplierId ? opts.supplierName?.(item.supplierId) : undefined,
+    fitment: itemFitment(item),
+  };
+  const detail = (opts.parts ?? DEFAULT_ITEM_DETAILS).map((p) => part[p]).filter(Boolean).join(" · ");
   return { id: item.id, kind, code: item.sku, gtin: item.barcode?.replace(/\s+/g, "") || undefined, title: item.name, subtitle: item.sku, detail: detail || undefined, price: item.price, href: `/inventory/${item.id}` };
 }
 
@@ -50,13 +74,15 @@ export function lotEntry(lot: Lot, item: Item | undefined): LabelEntry {
 }
 
 /** Every entry of a kind, in a stable order, optionally narrowed to ids. */
-export function entriesFor(kind: LabelKind, data: LabelData, ids?: Set<string>): LabelEntry[] {
+export function entriesFor(kind: LabelKind, data: LabelData, ids?: Set<string>, parts?: ItemDetailPart[]): LabelEntry[] {
   const keep = (id: string) => !ids || ids.has(id);
+  const supplierNames = new Map(data.suppliers.map((s) => [s.id, s.name]));
+  const opts: ItemEntryOptions = { parts, supplierName: (id) => supplierNames.get(id) };
   switch (kind) {
     case "item":
-      return data.items.filter((i) => i.status !== "superseded" && keep(i.id)).sort((a, b) => a.sku.localeCompare(b.sku)).map((i) => itemEntry(i, "item"));
+      return data.items.filter((i) => i.status !== "superseded" && keep(i.id)).sort((a, b) => a.sku.localeCompare(b.sku)).map((i) => itemEntry(i, "item", opts));
     case "assembly":
-      return data.items.filter((i) => i.type === "assembly" && i.status !== "superseded" && keep(i.id)).sort((a, b) => a.sku.localeCompare(b.sku)).map((i) => itemEntry(i, "assembly"));
+      return data.items.filter((i) => i.type === "assembly" && i.status !== "superseded" && keep(i.id)).sort((a, b) => a.sku.localeCompare(b.sku)).map((i) => itemEntry(i, "assembly", opts));
     case "location":
       return data.locations.filter((l) => l.active && keep(l.id)).sort((a, b) => a.name.localeCompare(b.name)).map(locationEntry);
     case "supplier":

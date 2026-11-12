@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ExternalLink, RefreshCw, Truck, XCircle } from "lucide-react";
+import { ClipboardList, ExternalLink, Mail, Printer, RefreshCw, Truck, XCircle } from "lucide-react";
 import type { SalesOrder, Shipment } from "@/lib/types";
 import { isOrderOpen, openQty } from "@/lib/inventory";
 import { useCollection, useItemsById, useSettings } from "@/lib/store/provider";
@@ -11,8 +11,13 @@ import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/api-client";
 import { formatDateTime, formatMoney, formatNumber, formatQty, formatRelative, pluralize } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { Badge, Button, DescriptionList, Modal, SimpleTable, StatusBadge, useToast } from "@/components/ui";
-import { orderAvailability, orderOpenUnits, orderTotal, orderUnits, SourceBadge } from "./orderUtils";
+import { Badge, Button, DescriptionList, Menu, Modal, SimpleTable, StatusBadge, useToast } from "@/components/ui";
+import { orderAvailability, orderOpenUnits, orderTotal, orderUnits, printSalesOrder, SourceBadge } from "./orderUtils";
+import { EmailDocumentModal } from "./EmailDocumentModal";
+import { orderPickList, printPickSheet } from "@/lib/pickList";
+import { describeQty } from "@/lib/units";
+import { useFeatures } from "@/lib/useFeature";
+import { useTerms } from "@/lib/useTerms";
 import { findCustomer } from "@/lib/customers";
 
 interface OrderDetailModalProps {
@@ -34,7 +39,28 @@ function OrderDetail({ order, onClose, canWrite, busy, onFulfil, onCancel }: Ord
   const itemsById = useItemsById();
   const members = useCollection("members");
   const customerRecords = useCollection("customers");
-  const { currency } = useSettings();
+  const settings = useSettings();
+  const { currency } = settings;
+  const features = useFeatures();
+  const terms = useTerms();
+  const toast = useToast();
+  const allItems = useCollection("items");
+  const locations = useCollection("locations");
+  const locationName = useLocationName();
+  const [emailing, setEmailing] = useState(false);
+
+  const print = () => {
+    if (!printSalesOrder(order, { items: itemsById, settings, itemCodeLabel: terms.itemCodeShort })) toast("Allow pop-ups to print the order", "critical");
+  };
+  const printPick = (breakOutAssemblies: boolean) => {
+    const lines = orderPickList(order, { items: allItems, locations }, { breakOutAssemblies });
+    if (lines.length === 0) return toast("Nothing is left to pick on this order");
+    const a = order.shipTo;
+    const shipTo = a?.street1 ? [a.name ?? order.customer, a.company, a.street1, a.street2, [a.city, a.state, a.zip].filter(Boolean).join(" ")].filter((x): x is string => !!x) : undefined;
+    if (!printPickSheet({ title: `Pick list ${order.number}`, subtitle: order.customer, companyName: settings.companyName, itemCodeLabel: terms.itemCodeShort, lines, note: order.note, shipTo })) toast("Allow pop-ups to print the pick list", "critical");
+  };
+  const hasAssemblies = order.lines.some((l) => (itemsById.get(l.itemId)?.bom.length ?? 0) > 0);
+  const showFrom = order.lines.some((l) => l.locationId);
 
   const open = isOrderOpen(order);
   const availability = orderAvailability(order, itemsById);
@@ -48,7 +74,7 @@ function OrderDetail({ order, onClose, canWrite, busy, onFulfil, onCancel }: Ord
     <Modal
       open
       onClose={onClose}
-      size="lg"
+      size={features.largeOrderForms ? "full" : "lg"}
       title={
         <span className="inline-flex flex-wrap items-center gap-2">
           <span className="font-mono">{order.number}</span>
@@ -59,8 +85,44 @@ function OrderDetail({ order, onClose, canWrite, busy, onFulfil, onCancel }: Ord
       subtitle={order.customer}
       footer={
         <>
-          <div className="mr-auto text-[13px] text-text-secondary">
-            {pluralize(order.lines.length, "line")} · {pluralize(units, "unit")} · Total <span className="font-semibold text-text tabular">{formatMoney(total, currency)}</span>
+          <div className="mr-auto flex flex-wrap items-center gap-x-3 gap-y-1">
+            {(features.printDocuments || features.pickLists || features.documentEmail) && (
+              <div className="flex items-center gap-1">
+                {features.printDocuments && (
+                  <Button variant="plain" icon={<Printer />} onClick={print}>
+                    Print / PDF
+                  </Button>
+                )}
+                {features.pickLists &&
+                  open &&
+                  (hasAssemblies ? (
+                    <Menu
+                      align="left"
+                      trigger={
+                        <Button variant="plain" icon={<ClipboardList />}>
+                          Pick list
+                        </Button>
+                      }
+                      items={[
+                        { label: "Pick list", onSelect: () => printPick(false) },
+                        { label: "Pick list, assemblies as parts", onSelect: () => printPick(true) },
+                      ]}
+                    />
+                  ) : (
+                    <Button variant="plain" icon={<ClipboardList />} onClick={() => printPick(false)}>
+                      Pick list
+                    </Button>
+                  ))}
+                {features.documentEmail && order.status !== "cancelled" && (
+                  <Button variant="plain" icon={<Mail />} onClick={() => setEmailing(true)}>
+                    Email
+                  </Button>
+                )}
+              </div>
+            )}
+            <span className="text-[13px] text-text-secondary">
+              {pluralize(order.lines.length, "line")} · {pluralize(units, "unit")} · Total <span className="font-semibold text-text tabular">{formatMoney(total, currency)}</span>
+            </span>
           </div>
           <Button onClick={onClose}>Close</Button>
           {open && canWrite && (
@@ -128,8 +190,9 @@ function OrderDetail({ order, onClose, canWrite, busy, onFulfil, onCancel }: Ord
           <SimpleTable>
             <thead>
               <tr>
-                <th>SKU</th>
+                <th>{terms.itemCodeShort}</th>
                 <th>Item</th>
+                {showFrom && <th>Ships from</th>}
                 <th className="text-right">Qty</th>
                 <th className="text-right">Shipped</th>
                 <th className="text-right">On hand</th>
@@ -153,7 +216,8 @@ function OrderDetail({ order, onClose, canWrite, busy, onFulfil, onCancel }: Ord
                       )}
                     </td>
                     <td className="max-w-[240px] truncate align-top text-text-secondary">{item?.name ?? "Item no longer exists"}</td>
-                    <td className="text-right align-top tabular">{formatQty(l.qty, item?.unit)}</td>
+                    {showFrom && <td className="align-top text-text-secondary">{l.locationId ? locationName(l.locationId) : <span className="text-text-tertiary">Default</span>}</td>}
+                    <td className="text-right align-top tabular">{l.entered ? describeQty({ unit: item?.unit ?? "ea" }, l.qty, l.entered) : formatQty(l.qty, item?.unit)}</td>
                     <td className={cn("text-right align-top tabular", (l.shipped ?? 0) > 0 && openQty(l) > 0 ? "text-attention" : "text-text-secondary")}>{formatQty(l.shipped ?? (order.status === "fulfilled" ? l.qty : 0), item?.unit)}</td>
                     <td className={cn("text-right align-top tabular", short ? "font-medium text-warning" : "text-text-secondary")}>{item ? formatQty(item.onHand, item.unit) : "—"}</td>
                     <td className="text-right align-top tabular">{formatMoney(l.unitPrice, currency)}</td>
@@ -164,7 +228,7 @@ function OrderDetail({ order, onClose, canWrite, busy, onFulfil, onCancel }: Ord
             </tbody>
             <tfoot>
               <tr>
-                <td colSpan={6} className="text-right text-text-secondary">
+                <td colSpan={showFrom ? 7 : 6} className="text-right text-text-secondary">
                   Order total
                 </td>
                 <td className="text-right font-semibold tabular">{formatMoney(total, currency)}</td>
@@ -199,6 +263,7 @@ function OrderDetail({ order, onClose, canWrite, busy, onFulfil, onCancel }: Ord
 
         {open && !canWrite && <p className="text-[12px] text-text-tertiary">Viewers can see orders but can&apos;t ship or cancel them.</p>}
       </div>
+      <EmailDocumentModal target={emailing ? { kind: "order", doc: order } : null} onClose={() => setEmailing(false)} />
     </Modal>
   );
 }
