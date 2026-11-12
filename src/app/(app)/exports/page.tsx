@@ -9,6 +9,8 @@ import { FORMATS, buildTables, exportTables, type ExportFormat } from "@/lib/exp
 import { formatNumber, pluralize } from "@/lib/format";
 import { Banner, Button, Checkbox, Page, QueryParamEffect, Segmented, Select, TextArea, useToast } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { QuickBooksDesktopExport } from "@/components/workspace/QuickBooksDesktopExport";
+import { useFeature } from "@/lib/useFeature";
 
 type ScopeMode = "all" | "filter" | "skus";
 
@@ -48,6 +50,7 @@ export default function ExportsPage() {
     workOrders: useCollection("workOrders"),
     jobs: useCollection("jobs"),
   };
+  const qbDesktop = useFeature("quickbooksDesktop");
   const [selected, setSelected] = useState<Set<DatasetId>>(() => new Set<DatasetId>(["items"]));
   const [format, setFormat] = useState<ExportFormat>("csv");
   const [scopeMode, setScopeMode] = useState<ScopeMode>("all");
@@ -237,6 +240,7 @@ export default function ExportsPage() {
             </Button>
             <p className="mt-2 text-[11.5px] text-text-tertiary">Files are built in your browser from the live workspace. Nothing is uploaded anywhere.</p>
           </div>
+          {qbDesktop && <QuickBooksDesktopExport />}
           <Banner tone="info" title="Full backup">
             The complete workspace as one JSON file, including settings, lives under Settings → Data and backend. It restores on any cumulusOS install.
           </Banner>

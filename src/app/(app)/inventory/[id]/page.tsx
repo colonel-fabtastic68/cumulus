@@ -19,12 +19,15 @@ import { BatchesTab } from "@/components/item/BatchesTab";
 import { PricingTab } from "@/components/item/PricingTab";
 import { LocationsTab } from "@/components/item/LocationsTab";
 import { CrossRefsTab } from "@/components/item/CrossRefsTab";
+import { VariantsTab } from "@/components/item/VariantsTab";
+import { isVariantParent, variantsOf } from "@/lib/variants";
+import { useFeature } from "@/lib/useFeature";
 import { ItemAside } from "@/components/item/ItemAside";
 import { SupersedeModal } from "@/components/item/SupersedeModal";
 import { duplicateDefaults, errorMessage } from "@/components/item/utils";
 import { whereUsed } from "@/lib/inventory";
 
-type Tab = "overview" | "images" | "locations" | "crossRefs" | "bom" | "whereUsed" | "history" | "batches" | "pricing";
+type Tab = "overview" | "images" | "locations" | "crossRefs" | "bom" | "whereUsed" | "history" | "batches" | "pricing" | "variants";
 
 export default function ItemDetailPage() {
   const params = useParams<{ id: string }>();
@@ -56,8 +59,9 @@ export default function ItemDetailPage() {
   const usedIn = useMemo(() => (item ? whereUsed(items, item.id).length : 0), [items, item]);
   const lotsOnShelf = itemLots.filter((l) => l.qtyRemaining > 0).length;
 
+  const variantsEnabled = useFeature("variants");
   const [tab, setTab] = useState<Tab>("overview");
-  const TAB_VALUES: Tab[] = ["overview", "locations", "crossRefs", "bom", "whereUsed", "history", "batches", "pricing"];
+  const TAB_VALUES: Tab[] = ["overview", "locations", "crossRefs", "bom", "whereUsed", "history", "batches", "pricing", "variants"];
   // "?tab=locations" deep-links a tab (scan results and Strato use it).
   const onTabParam = useCallback((value: string) => {
     if ((TAB_VALUES as string[]).includes(value)) setTab(value as Tab);
@@ -121,6 +125,8 @@ export default function ItemDetailPage() {
     { value: "history", label: "Stock history", count: itemMovements.length },
     { value: "batches", label: "Batches", count: lotsOnShelf },
     { value: "pricing", label: "Pricing" },
+    // Shown while the feature is on, and always for an item that already belongs to a family.
+    ...(variantsEnabled || isVariantParent(item) || item.variantOf ? [{ value: "variants" as Tab, label: "Variants", count: variantsOf(items, item.id).length || undefined }] : []),
   ];
 
   return (
@@ -198,6 +204,7 @@ export default function ItemDetailPage() {
             <div hidden={tab !== "pricing"}>
               <PricingTab item={item} currency={settings.currency} canEdit={writable} />
             </div>
+            {tab === "variants" && <VariantsTab item={item} items={items} currency={settings.currency} canEdit={writable} />}
           </div>
         </Card>
       </PageLayout>

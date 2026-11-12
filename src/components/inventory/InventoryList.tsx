@@ -25,6 +25,7 @@ import { openPurchaseQty } from "@/lib/purchaseOrders";
 import { overstockTotal } from "@/lib/overstock";
 import { useFeatures } from "@/lib/useFeature";
 import { useTerms } from "@/lib/useTerms";
+import { collapseFamilies } from "@/lib/variants";
 import { downloadCsv, itemsToCsv } from "./exportItemsCsv";
 
 type Dialog = "new" | "adjust" | "build" | "bulk" | "routing" | "deactivate" | "delete" | null;
@@ -49,7 +50,7 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
   const { open: openAgent, setPageContext } = useAgent();
   const settings = useSettings();
   const currency = settings.currency;
-  const items = useItems();
+  const allItems = useItems();
   const byId = useItemsById();
   const { preview } = usePreview();
   const suppliers = useCollection("suppliers");
@@ -60,6 +61,9 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
   const onOrder = useMemo(() => openPurchaseQty(purchaseOrders), [purchaseOrders]);
 
   const [q, setQ] = useState(initialQuery);
+  // Variants (src/lib/variants.ts): a family shows as one row, the parent carrying the family's stock.
+  // A search looks through the variants themselves, so a specific size or color can still be found.
+  const items = useMemo(() => (features.variants && !q.trim() ? collapseFamilies(allItems) : allItems), [features.variants, q, allItems]);
   const [view, setView] = useState<InventoryView>(initialView);
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [category, setCategory] = useState("");
@@ -102,9 +106,10 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
   }, [base, settings.stockAlerts]);
   const rows = useMemo(() => base.filter((i) => matchesView(i, view, settings.stockAlerts)), [base, view, settings.stockAlerts]);
 
-  const lowCount = useMemo(() => items.filter((i) => isLowStock(i, settings.stockAlerts)).length, [items, settings.stockAlerts]);
-  const totalValue = useMemo(() => inventoryValue(items), [items]);
-  const overValue = useMemo(() => (features.overstock ? overstockTotal(items) : 0), [items, features.overstock]);
+  // Workspace totals count every stock-keeping item, variants included, whatever the list is showing.
+  const lowCount = useMemo(() => allItems.filter((i) => isLowStock(i, settings.stockAlerts)).length, [allItems, settings.stockAlerts]);
+  const totalValue = useMemo(() => inventoryValue(allItems), [allItems]);
+  const overValue = useMemo(() => (features.overstock ? overstockTotal(allItems) : 0), [allItems, features.overstock]);
   const viewValue = useMemo(() => inventoryValue(rows), [rows]);
   const filtersActive = q.trim() !== "" || view !== "all" || category !== "" || supplierId !== "" || locationId !== "";
 

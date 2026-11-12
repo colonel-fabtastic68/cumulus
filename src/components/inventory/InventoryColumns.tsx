@@ -108,6 +108,7 @@ export function useInventoryColumns({ currency, supplierName, location, onOrder 
             </Link>
             <div className="truncate text-[12.5px] text-text-secondary" title={i.name}>
               {i.name}
+              {i.variantAxes?.length ? <span className="ml-1.5 rounded-full bg-surface-hover px-1.5 text-[11px] text-text-secondary">{i.variantAxes.map((a) => a.name).join(" × ")}</span> : null}
             </div>
           </div>
         ),
