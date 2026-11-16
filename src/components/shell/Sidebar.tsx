@@ -34,8 +34,11 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const features = useFeatures();
   const workOrders = useCollection("workOrders");
   const openRuns = features.workOrders ? workOrders.filter((w) => w.status === "released" || w.status === "in_progress").length : 0;
-  const mainNav = navWithFeatures(hasFeature(instance, "ranch") ? navWithRanch(NAV) : NAV, { workOrders: features.workOrders, jobs: features.jobs });
+  const intake = useCollection("intakeMessages");
+  const waiting = features.connectors ? intake.filter((m) => m.status === "new").length : 0;
+  const mainNav = navWithFeatures(hasFeature(instance, "ranch") ? navWithRanch(NAV) : NAV, { workOrders: features.workOrders, jobs: features.jobs, connectors: features.connectors });
   const counts: Record<string, number> = {
+    "/orders/connectors": waiting,
     "/builds/work-orders": openRuns, "/inventory": lowCount, "/orders": openOrders, "/orders/purchase": openPos, "/rmas": openRmas };
 
   // Keep the active entry visible when the page changes from the keyboard (Shift+↑/↓) on short windows.

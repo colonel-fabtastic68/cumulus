@@ -77,6 +77,7 @@ Status: **Built** = working on staging behind its flag. **Framework** = data mod
 | 70 | Rename / merge categories | `categoryTools` | Built | Settings → Catalog → Categories. |
 | 71 | On order column | `onOrderColumn` | Built | Inventory; links to the open purchase orders for the part. |
 | 72 | Labels from a PO or packing slip | `receiptLabels` | Built (PO) | Purchase order → Labels: one per unit received. From a receipt is the next step. |
+| none | Order connectors (email, phone, text) | `connectors` | Framework | Orders → Connectors. Channels: any number of inboxes, one phone line (ElevenLabs voice, Gemini understanding) and one text line, each saved with what it is read for and how it replies. Intake: messages added by hand are read into order lines against the catalog (`src/lib/intake.ts`) and open the new-order form filled in. Nothing reads a mailbox, answers a call or sends a text yet: channels save as "Not live yet". `src/lib/connectors.ts`. |
 
 ## Decisions that are still open
 
@@ -89,6 +90,7 @@ Status: **Built** = working on staging behind its flag. **Framework** = data mod
 
 ## Known gaps before release
 
+- Connectors has no server side: no mailbox sign-in, no phone number or voice agent, no text gateway, and Strato has no tool for the intake queue ("Hand to Strato" pastes the message into the chat). The handling rules are saved but nothing acts on them yet.
 - Strato covers work orders, jobs, variants and modular BOMs (see below). It has no tools yet for unit conversions on order lines, period close, pick lists, document email or the QuickBooks Desktop export.
 - The data exports (Exports → Data) do not include work orders or jobs.
 - Purchase orders are not unit-aware; receiving in a case and stocking in eaches still needs the conversion by hand.

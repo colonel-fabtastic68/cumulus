@@ -1,6 +1,8 @@
 import type {
   ActivityEvent,
   Build,
+  Connector,
+  IntakeMessage,
   Item,
   Lot,
   Member,
@@ -12,6 +14,7 @@ import type {
   WorkspaceSettings,
   WorkspaceSnapshot,
 } from "@/lib/types";
+import { readMessage } from "@/lib/intake";
 
 /**
  * Demo workspace: "Halcyon Audio", a small guitar-pedal maker that sells on
@@ -570,8 +573,145 @@ function generate(overrides: Map<string, { min: number; max: number }>, behind: 
     shipments: [],
     quotes: [],
     channelTombstones: [],
-    quoteTemplates: [], orderTemplates: [], customers: [], events: [], purchaseOrders: [], purchaseOrderTemplates: [], cycleCounts: [], documents: [], packs: [], workOrders: [], jobs: [],
+    quoteTemplates: [], orderTemplates: [], customers: [], events: [], purchaseOrders: [], purchaseOrderTemplates: [], cycleCounts: [], documents: [], packs: [], workOrders: [], jobs: [], connectors: seedConnectors(now), intakeMessages: seedIntake(items, orders, now),
   };
+}
+
+/** The sample company's channels: two inboxes, a phone line and a text line, shown the way they look once live. */
+function seedConnectors(now: number): Connector[] {
+  const at = iso(21, 9, now);
+  const base = { status: "live" as const, createdAt: at, updatedAt: at, createdBy: "u_maya" };
+  return [
+    { ...base, id: "con_orders", kind: "email", name: "Orders", address: "orders@halcyonaudio.example", mail: "google", topics: ["orders", "status", "stock"], replies: "draft" },
+    { ...base, id: "con_purchasing", kind: "email", name: "Purchasing", address: "purchasing@halcyonaudio.example", mail: "google", topics: ["supplier"], replies: "draft" },
+    {
+      ...base,
+      id: "con_phone",
+      kind: "phone",
+      name: "Main line",
+      address: "+1 312 555 0142",
+      topics: ["orders", "status", "message"],
+      voice: {
+        answer: "after_hours",
+        hours: { open: "09:00", close: "17:00", days: "weekdays" },
+        greeting: "Thanks for calling Halcyon Audio. This is Strato, the assistant for the team. I can take an order, check on one, or get you to a person.",
+        transferTo: "+1 312 555 0117",
+        keepTranscripts: true,
+      },
+    },
+    { ...base, id: "con_sms", kind: "sms", name: "Main line", address: "+1 312 555 0142", topics: ["orders", "status", "stock"], replies: "send", unknownSenders: "review" },
+  ];
+}
+
+/**
+ * What came in through those channels. Each message is read by the same
+ * function that reads a real one (src/lib/intake.ts), against the sample
+ * catalog and orders, so the lines and the order links are what a person
+ * adding the same text by hand would get.
+ */
+function seedIntake(items: Item[], orders: SalesOrder[], now: number): IntakeMessage[] {
+  const ago = (minutes: number) => new Date(now - minutes * 60_000).toISOString();
+  const skuOf = new Map(items.map((i) => [i.id, i.sku]));
+  const wholesale = [...orders].reverse().filter((o) => o.source === "manual" && !o.customer.startsWith("Reverb"));
+  const asked = wholesale.find((o) => o.status === "open") ?? wholesale[0];
+  // An order already on the books for an hour or more, so the message that led to it sits in the past.
+  const entered = wholesale.find((o) => o !== asked && o.customer !== asked?.customer && Date.parse(o.createdAt) < now - 60 * 60_000);
+  const ridgePhone = "+1 615 555 0188";
+
+  type Draft = Pick<IntakeMessage, "id" | "channel" | "connectorId" | "from" | "fromAddress" | "subject" | "body" | "receivedAt"> & Partial<Pick<IntakeMessage, "outcome" | "handledBy" | "handledAt">>;
+  const drafts: Draft[] = [
+    {
+      id: "msg_cme_po",
+      channel: "email",
+      connectorId: "con_orders",
+      from: "Chicago Music Exchange",
+      fromAddress: "purchasing@chicagomusicexchange.example",
+      subject: "PO 88214",
+      body: "Hi Maya,\n\nPlease enter PO 88214:\n\n12 x FG-OD1-BLK\n6 x FG-FZ1-RAW\n4 x FG-OD1-WHT\n\nSame ship-to as last time.\n\nThanks,\nDana",
+      receivedAt: ago(25),
+    },
+    {
+      id: "msg_ridge_text",
+      channel: "sms",
+      connectorId: "con_sms",
+      from: "Ridge Sound Studio",
+      fromAddress: ridgePhone,
+      body: "Hey, can we get 2 more of the white Overdrive and 3 fuzz pedals on Friday's truck?",
+      receivedAt: ago(70),
+    },
+    {
+      id: "msg_hammond_price",
+      channel: "email",
+      connectorId: "con_purchasing",
+      from: "Hammond Manufacturing",
+      fromAddress: "orders@hammond.example",
+      subject: "Price change effective January 1",
+      body: "Effective January 1, list prices on the 1590 series die-cast enclosures go up 4%. Orders received before then ship at current pricing.\n\nYour open orders are not affected.",
+      receivedAt: ago(5 * 60),
+    },
+    {
+      id: "msg_stock_text",
+      channel: "sms",
+      connectorId: "con_sms",
+      from: "(414) 555-0126",
+      fromAddress: "+1 414 555 0126",
+      body: "Do you have 20 of the delay pcb in stock?",
+      receivedAt: ago(7 * 60),
+    },
+    {
+      id: "msg_gcp_quote",
+      channel: "email",
+      connectorId: "con_orders",
+      from: "Guitar Center Pro",
+      fromAddress: "buyer@guitarcenterpro.example",
+      subject: "Quote for spring reset",
+      body: "Can you send a quote for 40 Overdrive black for our spring reset? We would want the 20+ price.",
+      receivedAt: ago(26 * 60),
+    },
+  ];
+  if (asked) {
+    drafts.push({
+      id: "msg_status_call",
+      channel: "phone",
+      connectorId: "con_phone",
+      from: asked.customer,
+      fromAddress: asked.customer === "Ridge Sound Studio" ? ridgePhone : "+1 260 555 0164",
+      body: `Asked whether ${asked.number} has shipped, and for the tracking number once it does.`,
+      receivedAt: ago(3 * 60),
+      outcome: asked.status === "open" ? "Told the caller the order is open and nothing has shipped. Left a note for Luis to send tracking." : "Told the caller where the order stands.",
+      handledBy: "Strato",
+      handledAt: ago(3 * 60 - 2),
+    });
+  }
+  if (entered) {
+    drafts.push({
+      id: "msg_entered_po",
+      channel: "email",
+      connectorId: "con_orders",
+      from: entered.customer,
+      fromAddress: "orders@" + entered.customer.toLowerCase().replace(/[^a-z0-9]+/g, "") + ".example",
+      subject: "Order",
+      body: "Please send:\n" + entered.lines.map((l) => `${l.qty} x ${skuOf.get(l.itemId)}`).join("\n"),
+      receivedAt: new Date(Date.parse(entered.createdAt) - 20 * 60_000).toISOString(),
+      outcome: `Entered as ${entered.number}`,
+      handledBy: "Maya Chen",
+      handledAt: entered.createdAt,
+    });
+  }
+
+  const ctx = { items, orders, customers: [], suppliers: SUPPLIERS };
+  return drafts.map((d) => {
+    const reading = readMessage(d, ctx);
+    return {
+      ...d,
+      intent: reading.intent,
+      status: d.handledAt ? ("done" as const) : ("new" as const),
+      createdAt: d.receivedAt,
+      ...(reading.lines.length ? { lines: reading.lines } : {}),
+      ...(reading.unmatched.length ? { unmatched: reading.unmatched } : {}),
+      ...(d.id === "msg_entered_po" && entered ? { orderId: entered.id } : reading.orderId ? { orderId: reading.orderId } : {}),
+    };
+  });
 }
 
 function roundNice(n: number): number {
@@ -651,7 +791,7 @@ export function freshWorkspace(opts: { members?: Member[]; companyName?: string;
     shipments: [],
     quotes: [],
     channelTombstones: [],
-    quoteTemplates: [], orderTemplates: [], customers: [], events: [], purchaseOrders: [], purchaseOrderTemplates: [], cycleCounts: [], documents: [], packs: [], workOrders: [], jobs: [],
+    quoteTemplates: [], orderTemplates: [], customers: [], events: [], purchaseOrders: [], purchaseOrderTemplates: [], cycleCounts: [], documents: [], packs: [], workOrders: [], jobs: [], connectors: [], intakeMessages: [],
   };
 }
 

@@ -49,6 +49,8 @@ export default function ExportsPage() {
     packs: useCollection("packs"),
     workOrders: useCollection("workOrders"),
     jobs: useCollection("jobs"),
+    connectors: useCollection("connectors"),
+    intakeMessages: useCollection("intakeMessages"),
   };
   const qbDesktop = useFeature("quickbooksDesktop");
   const [selected, setSelected] = useState<Set<DatasetId>>(() => new Set<DatasetId>(["items"]));

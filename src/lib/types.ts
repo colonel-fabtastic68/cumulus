@@ -1070,6 +1070,8 @@ export type ActivityType =
   | "job.created"
   | "job.updated"
   | "job.completed"
+  | "connector.added"
+  | "connector.removed"
   | "period.closed"
   | "period.reopened"
   | "category.renamed";
@@ -1080,11 +1082,112 @@ export interface ActivityEvent {
   message: string;
   actorId: string;
   actorName: string;
-  entityType?: "item" | "receipt" | "build" | "order" | "rma" | "supplier" | "member" | "transfer" | "shipment" | "integration" | "location" | "quote" | "purchaseOrder" | "cycleCount" | "workOrder" | "job";
+  entityType?: "item" | "receipt" | "build" | "order" | "rma" | "supplier" | "member" | "transfer" | "shipment" | "integration" | "location" | "quote" | "purchaseOrder" | "cycleCount" | "workOrder" | "job" | "connector";
   entityId?: ID;
   /** Free-form details, e.g. { count: 12 } for bulk operations. */
   meta?: Record<string, unknown>;
   createdAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Connectors: where customer and supplier messages come in (src/lib/connectors.ts)
+// ---------------------------------------------------------------------------
+
+export type ConnectorKind = "email" | "phone" | "sms";
+
+/** pending = saved and waiting for live intake; live = messages arrive on their own. */
+export type ConnectorStatus = "pending" | "live";
+
+/** What a channel is read for. */
+export type ConnectorTopic = "orders" | "status" | "stock" | "supplier" | "message";
+
+/** How the phone line answers. The voice comes from ElevenLabs; Gemini works out what the caller needs. */
+export interface VoiceLine {
+  answer: "always" | "after_hours" | "no_answer";
+  /** Business hours, for "after_hours": 24-hour HH:MM in the workspace's time zone. */
+  hours?: { open: string; close: string; days: "weekdays" | "every_day" };
+  /** What the caller hears first. */
+  greeting?: string;
+  /** A voice from the workspace's own ElevenLabs library. Absent = the standard voice. */
+  voiceId?: string;
+  /** Where a caller who asks for a person is sent. */
+  transferTo?: string;
+  keepTranscripts?: boolean;
+}
+
+/** One connected inbox, phone line or text line. */
+export interface Connector {
+  id: ID;
+  kind: ConnectorKind;
+  /** What the team calls it: "Orders inbox", "Main line". */
+  name?: string;
+  /** The email address, or the phone number as typed. */
+  address: string;
+  status: ConnectorStatus;
+  /** Switched off by the team: nothing is read or answered until it is switched back on. */
+  paused?: boolean;
+  topics: ConnectorTopic[];
+  /** Email and text: answer on its own, or leave a draft for a person to send. */
+  replies?: "draft" | "send";
+  /** Email: how messages reach cumulusOS. */
+  mail?: "google" | "microsoft" | "forward";
+  /** Text: what happens when the number is not a known customer. */
+  unknownSenders?: "answer" | "review";
+  /** Phone only. */
+  voice?: VoiceLine;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+}
+
+export type IntakeChannel = ConnectorKind | "manual";
+export type IntakeIntent = "order" | "change" | "status" | "quote" | "supplier" | "other";
+export type IntakeStatus = "new" | "done" | "dismissed";
+
+/** An item and quantity read out of a message. */
+export interface IntakeLine {
+  itemId: ID;
+  qty: number;
+}
+
+/** Something that came in through a connector, or was added by hand, and what became of it. */
+export interface IntakeMessage {
+  id: ID;
+  channel: IntakeChannel;
+  connectorId?: ID;
+  /** Who it is from, as best known: the customer or supplier name, else the address. */
+  from: string;
+  /** Their email address or phone number. */
+  fromAddress?: string;
+  customerId?: ID;
+  subject?: string;
+  /** The email or text as written; for a call, what the caller asked for. */
+  body: string;
+  receivedAt: string;
+  intent: IntakeIntent;
+  status: IntakeStatus;
+  /** Order lines read from the message. */
+  lines?: IntakeLine[];
+  /** Parts of the message that read like order lines but matched no item. */
+  unmatched?: string[];
+  /** The order created from this message, or the one it asks about. */
+  orderId?: ID;
+  /** One line on what was done about it. */
+  outcome?: string;
+  /** A member's name, or "Strato". */
+  handledBy?: string;
+  handledAt?: string;
+  createdAt: string;
+}
+
+/** How messages are handled once read (Orders → Connectors). */
+export interface IntakeSettings {
+  /** draft = every order waits for a person; auto = created when the customer is known and every line matched. */
+  orders?: "draft" | "auto";
+  /** Answer order status questions from the order record without waiting for a person. */
+  answerStatus?: boolean;
+  /** The member who gets what could not be handled. */
+  escalateTo?: ID;
 }
 
 export type IntegrationId = "shopify" | "woocommerce" | "quickbooks" | "square" | "clover" | "shippo" | "easypost";
@@ -1249,6 +1352,8 @@ export interface WorkspaceSettings {
   periodLock?: PeriodLock;
   /** Account names used when documents are exported to accounting (src/lib/accounting). */
   accounting?: AccountingSettings;
+  /** How messages from the connectors are handled (src/lib/connectors.ts). */
+  intake?: IntakeSettings;
   updatedAt: string;
 }
 
@@ -1488,6 +1593,8 @@ export interface CollectionMap {
   packs: PackListing;
   workOrders: WorkOrder;
   jobs: Job;
+  connectors: Connector;
+  intakeMessages: IntakeMessage;
 }
 
 export type CollectionName = keyof CollectionMap;
@@ -1522,6 +1629,8 @@ export const COLLECTIONS: CollectionName[] = [
   "packs",
   "workOrders",
   "jobs",
+  "connectors",
+  "intakeMessages",
 ];
 
 /** A full snapshot of a workspace. Used for seed data, export and import. */

@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Beef, Boxes, BriefcaseBusiness, Factory, Layers, QrCode, CalendarDays, ClipboardList, ClipboardCheck, FolderOpen, ListChecks, Contact, Download, FileBarChart2, FileText, Hammer, Home, MessageSquare, PackageCheck, Package, Plug, Receipt, RefreshCw, Repeat, RotateCcw, Settings, ShoppingCart, Sparkles, Tags, TrendingUp, Truck, Upload, UserRound, Users, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, Beef, Boxes, BriefcaseBusiness, Cable, Factory, Layers, QrCode, CalendarDays, ClipboardList, ClipboardCheck, FolderOpen, ListChecks, Contact, Download, FileBarChart2, FileText, Hammer, Home, MessageSquare, PackageCheck, Package, Plug, Receipt, RefreshCw, Repeat, RotateCcw, Settings, ShoppingCart, Sparkles, Tags, TrendingUp, Truck, Upload, UserRound, Users, type LucideIcon } from "lucide-react";
 
 export interface NavItem {
   href: string;
@@ -95,10 +95,14 @@ export function navWithRanch(nav: NavItem[]): NavItem[] {
 
 /**
  * The main navigation with the pages of unreleased features that are switched on
- * (src/lib/features.ts): Work orders joins BOM as a group, Jobs follows Customers.
+ * (src/lib/features.ts): Work orders joins BOM as a group, Jobs follows Customers,
+ * Connectors closes the Orders group.
  */
-export function navWithFeatures(nav: NavItem[], on: { workOrders: boolean; jobs: boolean }): NavItem[] {
+export function navWithFeatures(nav: NavItem[], on: { workOrders: boolean; jobs: boolean; connectors: boolean }): NavItem[] {
   let out = nav;
+  if (on.connectors) {
+    out = out.map((n) => (n.href === "/orders" && n.children ? { ...n, children: [...n.children, { href: "/orders/connectors", label: "Connectors", icon: Cable }] } : n));
+  }
   if (on.workOrders) {
     out = out.map((n) =>
       n.href === "/builds"

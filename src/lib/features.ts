@@ -133,6 +133,13 @@ export const FEATURES = {
     area: "Orders",
     notes: [58],
   },
+  connectors: {
+    label: "Order connectors",
+    description: "Connect email inboxes, a phone line and a text line under Orders → Connectors. What comes in is read into order lines for a person or Strato to act on.",
+    status: "preview",
+    area: "Orders",
+    notes: [],
+  },
   modularBoms: {
     label: "Modular BOMs",
     description: "Mark BOM lines as a choice (pick one of a group) or optional, and decide them when the assembly is built.",

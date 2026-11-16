@@ -27,6 +27,8 @@ interface NewOrderModalProps {
   onCreated?: (order: SalesOrder) => void;
   /** Start pre-filled from a saved template. */
   template?: OrderTemplate | null;
+  /** Where the pre-filled lines came from when `template` is not a saved one, e.g. "an email from Sweetwater". */
+  draftFrom?: string;
 }
 
 /** Mounts the form only while open so every opening starts from a clean state. */
@@ -67,7 +69,9 @@ const SOURCE_OPTIONS: Array<{ value: OrderSource; label: string }> = [
   { value: "woocommerce", label: "WooCommerce" },
 ];
 
-function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps) {
+function NewOrderForm({ open, onClose, onCreated, template, draftFrom }: NewOrderModalProps) {
+  // A draft read from a message is not a saved template: saving one from here makes a new template.
+  const saved = draftFrom ? null : template;
   const store = useStore();
   const user = useCurrentUser();
   const toast = useToast();
@@ -106,8 +110,8 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
   const [note, setNote] = useState(template?.note ?? "");
   const [orderNumber, setOrderNumber] = useState("");
   const [templateModal, setTemplateModal] = useState(false);
-  const [templateName, setTemplateName] = useState(template?.name ?? "");
-  const [templateNote, setTemplateNote] = useState(template?.description ?? "");
+  const [templateName, setTemplateName] = useState(saved?.name ?? "");
+  const [templateNote, setTemplateNote] = useState(saved?.description ?? "");
   const [savingTemplate, setSavingTemplate] = useState(false);
 
   const saveTemplate = async () => {
@@ -116,7 +120,7 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
     setSavingTemplate(true);
     try {
       const address = shipTo.street1.trim() ? { ...shipTo, country: shipTo.country.trim().toUpperCase() || "US" } : undefined;
-      const t = await saveOrderTemplate(store, user, { name: templateName, description: templateNote, customer, customerEmail, shipTo: address, note, lines: chosen.map((l) => ({ itemId: l.item!.id, qty: stockQty(l), unitPrice: l.priceTouched && l.unitPrice !== "" ? Number(l.unitPrice) : undefined })) }, template?.id);
+      const t = await saveOrderTemplate(store, user, { name: templateName, description: templateNote, customer, customerEmail, shipTo: address, note, lines: chosen.map((l) => ({ itemId: l.item!.id, qty: stockQty(l), unitPrice: l.priceTouched && l.unitPrice !== "" ? Number(l.unitPrice) : undefined })) }, saved?.id);
       toast(`Saved template “${t.name}”`, "success");
       setTemplateModal(false);
     } catch (e) {
@@ -263,7 +267,7 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
       open={open}
       onClose={onClose}
       title="New order"
-      subtitle={template ? `From template “${template.name}”. Check quantities and prices, then create.` : "Open orders wait on the shelf; stock is relieved when the order ships."}
+      subtitle={draftFrom ? `Read from ${draftFrom}. Check the customer, quantities and prices, then create.` : saved ? `From template “${saved.name}”. Check quantities and prices, then create.` : "Open orders wait on the shelf; stock is relieved when the order ships."}
       size={features.largeOrderForms ? "full" : "lg"}
       footer={
         <>
@@ -418,13 +422,13 @@ function NewOrderForm({ open, onClose, onCreated, template }: NewOrderModalProps
         open={templateModal}
         onClose={() => setTemplateModal(false)}
         size="sm"
-        title={template ? "Update template" : "Save as template"}
+        title={saved ? "Update template" : "Save as template"}
         subtitle="Customer, lines and note are kept. Prices you typed by hand are saved; the rest follow today's prices when the template is used."
         footer={
           <>
             <Button onClick={() => setTemplateModal(false)}>Cancel</Button>
             <Button variant="primary" onClick={() => void saveTemplate()} loading={savingTemplate} disabled={!templateName.trim()}>
-              {template ? "Update template" : "Save template"}
+              {saved ? "Update template" : "Save template"}
             </Button>
           </>
         }
