@@ -110,7 +110,7 @@ function AutomationForm({ onClose, automation, onSave, onDelete }: AutomationMod
             label="Prompt"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Review all items below minimum quantity and recommend reorder quantities grouped by supplier…"
+            placeholder="Review all items below minimum quantity and recommend reorder quantities grouped by supplier"
             rows={5}
             error={promptError}
             help={promptError ? undefined : "Written as if you typed it into Strato. Be precise about scope and what to do with the result."}

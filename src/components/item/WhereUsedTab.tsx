@@ -45,12 +45,12 @@ export function WhereUsedTab({ item, items }: { item: Item; items: Item[] }) {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h4 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">Direct parents</h4>
+        <h4 className="mb-2 text-[12px] font-semibold text-text-secondary">Direct parents</h4>
         <Table rows={direct} columns={columns} rowKey={(r) => r.assembly.id} defaultSort={{ key: "sku", dir: "asc" }} dense />
       </div>
       {ancestors.length > 0 && (
         <div>
-          <h4 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">Also used further up</h4>
+          <h4 className="mb-2 text-[12px] font-semibold text-text-secondary">Also used further up</h4>
           <p className="mb-2 text-[12.5px] text-text-secondary">These assemblies include {item.sku} through a sub-assembly.</p>
           <div className="flex flex-wrap gap-1.5">
             {ancestors.map((a) => (

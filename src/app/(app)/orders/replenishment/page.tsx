@@ -126,7 +126,7 @@ export default function ReplenishmentPage() {
           <div className="flex flex-col gap-3 text-[13px]">
             {result.created.length > 0 && (
               <div>
-                <div className="mb-1 text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">Drafted</div>
+                <div className="mb-1 text-[12px] font-semibold text-text-secondary">Drafted</div>
                 <ul className="flex flex-col gap-1">
                   {result.created.map((po) => (
                     <li key={po.id}>
@@ -141,7 +141,7 @@ export default function ReplenishmentPage() {
             )}
             {result.updated.length > 0 && (
               <div>
-                <div className="mb-1 text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">Added to open drafts</div>
+                <div className="mb-1 text-[12px] font-semibold text-text-secondary">Added to open drafts</div>
                 <ul className="flex flex-col gap-1">
                   {result.updated.map((po) => (
                     <li key={po.id}>
@@ -156,7 +156,7 @@ export default function ReplenishmentPage() {
             )}
             {result.builds.length > 0 && (
               <div>
-                <div className="mb-1 text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">To build</div>
+                <div className="mb-1 text-[12px] font-semibold text-text-secondary">To build</div>
                 <ul className="flex flex-col gap-1">
                   {result.builds.map((b) => (
                     <li key={b.item.id} className="flex items-center justify-between gap-2">

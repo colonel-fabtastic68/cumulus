@@ -163,7 +163,7 @@ function UploadForm({ open, onClose, onSaved }: Props) {
             {result && result.matched.length > 0 && (
               <div className="max-h-56 overflow-y-auto rounded-[var(--radius)] border border-border text-[12.5px]">
                 <table className="w-full">
-                  <thead className="bg-surface-subdued text-[11.5px] uppercase tracking-wide text-text-tertiary">
+                  <thead className="bg-surface-subdued text-[12px] font-[550] text-text-secondary">
                     <tr>
                       <th className="px-2 py-1 text-left">In file</th>
                       <th className="px-2 py-1 text-left">Item</th>

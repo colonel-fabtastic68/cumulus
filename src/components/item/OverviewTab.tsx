@@ -98,16 +98,16 @@ export function OverviewTab({ item, supplier, movements, membersById }: { item: 
         <Tile label="Margin" value={margin === null ? "—" : formatPercent(margin * 100)} hint={margin === null ? "set a price" : `${formatMoney(item.price - item.unitCost, currency)} per unit`} tone={margin === null ? "default" : margin < 0 ? "critical" : margin < 0.2 ? "warning" : "success"} />
       </div>
       <div className="min-w-0">
-        <h4 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">Details</h4>
+        <h4 className="mb-2 text-[12px] font-semibold text-text-secondary">Details</h4>
         <DescriptionList rows={rows} />
       </div>
       <div className="flex min-w-0 flex-col gap-6">
         <div>
-          <h4 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">Description</h4>
+          <h4 className="mb-2 text-[12px] font-semibold text-text-secondary">Description</h4>
           {item.description ? <p className="whitespace-pre-line text-[13px] leading-[1.5] text-text">{item.description}</p> : <p className="text-[13px] text-text-tertiary">No description yet.</p>}
         </div>
         <div>
-          <h4 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">Last 12 weeks</h4>
+          <h4 className="mb-2 text-[12px] font-semibold text-text-secondary">Last 12 weeks</h4>
           <MovementSparkline movements={movements} unit={item.unit} />
         </div>
       </div>

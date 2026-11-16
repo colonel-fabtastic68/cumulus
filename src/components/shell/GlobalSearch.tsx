@@ -131,7 +131,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
                 }
               }
             }}
-            placeholder="Search items, orders, suppliers, pages…"
+            placeholder="Search items, orders, suppliers, pages"
             aria-label="Search the workspace"
             className="h-8 flex-1 bg-transparent text-[14px] outline-none placeholder:text-text-tertiary"
           />
@@ -158,7 +158,7 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
           ) : (
             groups.map((g) => (
               <div key={g.kind} className="pb-1">
-                <div className="px-3 pt-2 pb-1 text-[11px] font-[550] uppercase tracking-[0.06em] text-text-tertiary">{SEARCH_GROUP_LABELS[g.kind]}</div>
+                <div className="px-3 pt-2 pb-1 text-[12px] font-[550] text-text-secondary">{SEARCH_GROUP_LABELS[g.kind]}</div>
                 {g.hits.map(({ hit, index }) => (
                   <button
                     key={hit.kind + hit.key}

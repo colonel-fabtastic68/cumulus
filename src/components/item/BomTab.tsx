@@ -174,7 +174,7 @@ function BomEditor({ item, items, currency, canEdit }: { item: Item; items: Item
 
       <div>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h4 className="text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">Bill of materials</h4>
+          <h4 className="text-[12px] font-semibold text-text-secondary">Bill of materials</h4>
           <div className="flex items-center gap-2">
             {canEdit && Math.abs(item.unitCost - rolled) > 0.005 && !dirty && (
               <Button size="sm" onClick={setCost}>
@@ -375,7 +375,7 @@ function BomEditor({ item, items, currency, canEdit }: { item: Item; items: Item
         <div>
           <div className="mb-2 flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h4 className="text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">Explode requirements</h4>
+              <h4 className="text-[12px] font-semibold text-text-secondary">Explode requirements</h4>
               <p className="mt-0.5 text-[12.5px] text-text-secondary">What it takes to build a quantity, through every level of the BOM.</p>
             </div>
             <div className="flex flex-wrap items-center gap-3">

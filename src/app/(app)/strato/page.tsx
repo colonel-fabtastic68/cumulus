@@ -64,7 +64,7 @@ export default function StratoChatPage() {
     <div className="flex h-full min-h-0">
       <aside className={cn("hidden shrink-0 flex-col border-r border-border bg-surface-subdued/60 transition-[width] md:flex", railOpen ? "w-[260px]" : "w-0 overflow-hidden border-r-0")}>
         <div className="flex h-12 items-center gap-2 px-3">
-          <span className="text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">Conversations</span>
+          <span className="text-[12px] font-semibold text-text-secondary">Conversations</span>
           <span className="flex-1" />
           <Button size="sm" variant="primary" icon={<Plus />} onClick={() => setNewChatNonce((n) => n + 1)}>
             New chat

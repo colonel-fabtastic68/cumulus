@@ -180,7 +180,7 @@ export function ReceiptChecklist({ receipt, lookups }: { receipt: Receipt; looku
               <li key={s.sku}>
                 <span className="font-mono text-text">{s.sku}</span> {s.checked ? "✓" : s.checked === false ? "☐" : "?"} {s.found !== null ? `found ${s.found}` : "no quantity"}
                 {s.confidence !== "high" && <span className="ml-1 text-warning">({s.confidence})</span>}
-                {s.note && <span className="ml-1 italic">“{s.note}”</span>}
+                {s.note && <span className="ml-1">“{s.note}”</span>}
               </li>
             ))}
           </ul>

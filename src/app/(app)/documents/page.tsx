@@ -120,7 +120,7 @@ export default function DocumentsPage() {
     >
       <div className="grid gap-4 lg:grid-cols-[200px_minmax(0,1fr)]">
         <aside className="lg:sticky lg:top-4 lg:self-start">
-          <div className="mb-1.5 px-2 text-[11.5px] font-semibold uppercase tracking-wide text-text-tertiary">Folders</div>
+          <div className="mb-1.5 px-2 text-[11.5px] font-semibold text-text-secondary">Folders</div>
           <ul className="flex flex-col gap-0.5">
             <li>
               <button type="button" onClick={() => setFolder("")} className={cn("flex w-full items-center justify-between rounded-[var(--radius-sm)] px-2 py-1.5 text-[13px]", folder === "" ? "bg-surface text-text shadow-[var(--shadow-100)]" : "text-text-secondary hover:bg-[rgba(0,0,0,0.04)]")}>

@@ -72,7 +72,7 @@ export function Onboarding() {
             Create workspace
           </Button>
         </form>
-        <div className="my-4 flex items-center gap-3 text-[11.5px] uppercase tracking-wide text-text-tertiary">
+        <div className="my-4 flex items-center gap-3 text-[11.5px] text-text-tertiary">
           <span className="h-px flex-1 bg-border" />
           or
           <span className="h-px flex-1 bg-border" />

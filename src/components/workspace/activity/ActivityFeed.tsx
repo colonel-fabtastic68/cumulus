@@ -44,7 +44,7 @@ function ChangeDetails({ changes, total, reason }: { changes: ChangeLine[]; tota
       {open && (
         <div className="mt-2 overflow-x-auto rounded-[var(--radius)] border border-border">
           <table className="w-full text-[12px]">
-            <thead className="bg-surface-subdued text-[11px] uppercase tracking-wide text-text-tertiary">
+            <thead className="bg-surface-subdued text-[12px] font-[550] text-text-secondary">
               <tr>
                 <th className="px-2 py-1 text-left">SKU</th>
                 <th className="px-2 py-1 text-left">Field</th>

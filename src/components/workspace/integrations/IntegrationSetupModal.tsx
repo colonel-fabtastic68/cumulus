@@ -525,7 +525,7 @@ function CsvFallback({ def }: { def: IntegrationDef }) {
           <li key={s}>{s}</li>
         ))}
       </ol>
-      <div className="mt-3 text-[11.5px] font-semibold uppercase tracking-wide text-text-tertiary">Expected header row</div>
+      <div className="mt-3 text-[11.5px] font-semibold text-text-secondary">Expected header row</div>
       <div className="mt-1.5 flex flex-wrap gap-1">
         {def.export.headers.map((h) => (
           <code key={h} className="rounded-[4px] border border-border bg-surface px-1.5 py-0.5 font-mono text-[11.5px] text-text-secondary">

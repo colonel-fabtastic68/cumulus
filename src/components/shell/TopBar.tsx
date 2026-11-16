@@ -4,7 +4,7 @@ import { useModKey } from "@/lib/platform";
 
 import { useEffect, useState } from "react";
 import { currentInstance } from "@/lib/firebase-config";
-import { Bell, ChevronDown, LogOut, Menu as MenuIcon, ScanBarcode, Search, Settings2, Sparkles, UserRound } from "lucide-react";
+import { Bell, Check, ChevronDown, LogOut, Menu as MenuIcon, ScanBarcode, Search, Settings2, Sparkles, UserRound } from "lucide-react";
 import { Avatar, AvatarStack, Button, IconButton, Kbd, Menu } from "@/components/ui";
 import { isOnline, useAuth, useCurrentUser } from "@/lib/auth";
 import { useCollection } from "@/lib/store/provider";
@@ -66,7 +66,7 @@ export function TopBar({ onMenu }: { onMenu?: () => void }) {
         <Search className="h-4 w-4 shrink-0 md:h-3.5 md:w-3.5" />
         <span className="min-w-0 flex-1 truncate text-left">
           <span className="md:hidden">Search</span>
-          <span className="hidden md:inline">{currentInstance() ? "Search…" : "Search cumulusOS…"}</span>
+          <span className="hidden md:inline">{currentInstance() ? "Search" : "Search cumulusOS"}</span>
         </span>
         <span className="hidden md:inline-flex">
           <Kbd>{mod}K</Kbd>
@@ -101,8 +101,16 @@ export function TopBar({ onMenu }: { onMenu?: () => void }) {
           "divider",
           ...(mode === "local"
             ? [
-                { label: <span className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">Switch user (demo)</span>, disabled: true },
-                ...members.map((m) => ({ label: `${m.name}${m.id === user.id ? " ✓" : ""}`, onSelect: () => switchUser(m.id) })),
+                { label: <span className="text-[11px] font-semibold text-text-secondary">Switch user (demo)</span>, disabled: true },
+                ...members.map((m) => ({
+                  label: (
+                    <span className="flex items-center justify-between gap-3">
+                      {m.name}
+                      {m.id === user.id && <Check className="h-3.5 w-3.5 text-text-secondary" aria-label="Current user" />}
+                    </span>
+                  ),
+                  onSelect: () => switchUser(m.id),
+                })),
               ]
             : [
                 ...(currentInstance() ? [] : [{ label: "Account and workspaces", href: "/account", icon: <Settings2 /> }]),

@@ -77,7 +77,7 @@ function PricingEditor({ item, currency, canEdit }: { item: Item; currency: stri
       <div>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h4 className="text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">Quantity price breaks</h4>
+            <h4 className="text-[12px] font-semibold text-text-secondary">Quantity price breaks</h4>
             <p className="mt-0.5 text-[12.5px] text-text-secondary">Orders automatically get the lowest eligible price for the quantity.</p>
           </div>
           {canEdit && (
@@ -155,7 +155,7 @@ function PricingEditor({ item, currency, canEdit }: { item: Item; currency: stri
       </div>
 
       <div className="rounded-[var(--radius)] border border-border bg-surface-subdued p-4">
-        <h4 className="text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">Quote calculator</h4>
+        <h4 className="text-[12px] font-semibold text-text-secondary">Quote calculator</h4>
         <div className="mt-2 flex flex-wrap items-end gap-4">
           <TextField label="Quantity" type="number" min={1} step={1} value={quoteQty} onChange={(e) => setQuoteQty(e.target.value)} containerClassName="w-32" />
           <div className="grid w-full grid-cols-1 gap-6 @md:w-auto @md:grid-cols-3">

@@ -108,7 +108,7 @@ function VariantsEditor({ item, items, currency, canEdit }: { item: Item; items:
       <div>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h4 className="text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">Options</h4>
+            <h4 className="text-[12px] font-semibold text-text-secondary">Options</h4>
             <p className="mt-0.5 text-[12.5px] text-text-secondary">Values separated by commas. Every combination becomes a variant.</p>
           </div>
           {canEdit && (
@@ -148,7 +148,7 @@ function VariantsEditor({ item, items, currency, canEdit }: { item: Item; items:
 
       {plan.length > 0 && (
         <div>
-          <h4 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">Variants</h4>
+          <h4 className="mb-2 text-[12px] font-semibold text-text-secondary">Variants</h4>
           <SimpleTable>
             <thead>
               <tr>

@@ -24,7 +24,7 @@ export function CustomerLogos() {
           <ul className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             {CUSTOMERS.map((c) => (
               <li key={c.name} className={cn("flex h-16 flex-col items-center justify-center rounded-[var(--radius)] px-3 text-center", c.placeholder ? "border border-dashed border-border-strong" : "bg-bg shadow-[var(--shadow-bevel)]")}>
-                <span className={cn("text-[15px] font-semibold tracking-[-0.01em]", c.placeholder ? "text-text-tertiary" : "text-text")}>{c.name}</span>
+                <span className={cn("text-[15px] font-semibold", c.placeholder ? "text-text-tertiary" : "text-text")}>{c.name}</span>
                 <span className="mt-0.5 text-[11.5px] text-text-tertiary">{c.note}</span>
               </li>
             ))}

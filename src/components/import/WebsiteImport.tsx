@@ -135,7 +135,7 @@ export function WebsiteImport({ onboarding, embedded, onImported }: { onboarding
           {result.rows.length > 0 && (
             <div className="overflow-x-auto rounded-[var(--radius)] border border-border">
               <table className="w-full text-[12.5px]">
-                <thead className="bg-surface-subdued text-left text-[11.5px] uppercase tracking-wide text-text-tertiary">
+                <thead className="bg-surface-subdued text-left text-[12px] font-[550] text-text-secondary">
                   <tr>
                     <th className="px-3 py-1.5">SKU</th>
                     <th className="px-3 py-1.5">Name</th>

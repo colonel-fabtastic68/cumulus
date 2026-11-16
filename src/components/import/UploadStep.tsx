@@ -100,7 +100,7 @@ export function UploadStep({ source, onSource, onClear, onContinue, hint }: Uplo
               {source.warnings.join(" ")}
             </Banner>
           )}
-          <div className="text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">Detected headers</div>
+          <div className="text-[12px] font-semibold text-text-secondary">Detected headers</div>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {source.headers.map((h) => (
               <Badge key={h}>{h}</Badge>

@@ -20,7 +20,7 @@ export function CardHeader({ title, subtitle, actions, className }: { title: Rea
 export function CardSection({ children, className, title }: { children: ReactNode; className?: string; title?: ReactNode }) {
   return (
     <div className={cn("border-t border-border px-4 py-3 first:border-t-0", className)}>
-      {title && <h4 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">{title}</h4>}
+      {title && <h4 className="mb-2 text-[12px] font-semibold text-text-secondary">{title}</h4>}
       {children}
     </div>
   );

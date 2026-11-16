@@ -144,7 +144,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h3 className="mb-1.5 text-[12.5px] font-semibold uppercase tracking-wide text-text-tertiary">{title}</h3>
+      <h3 className="mb-1.5 text-[12.5px] font-semibold text-text-secondary">{title}</h3>
       <div className="flex flex-col divide-y divide-border rounded-[var(--radius)] border border-border">{children}</div>
     </section>
   );

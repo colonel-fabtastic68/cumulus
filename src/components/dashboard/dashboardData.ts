@@ -8,13 +8,6 @@ import { sum } from "@/lib/utils";
 
 const DAY = 86_400_000;
 
-export function greetingFor(name: string, date: Date = new Date()): string {
-  const h = date.getHours();
-  const part = h < 5 ? "Good evening" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
-  const first = name.trim().split(/\s+/)[0] || "there";
-  return `${part}, ${first}`;
-}
-
 export function todayLabel(date: Date = new Date()): string {
   return date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 }

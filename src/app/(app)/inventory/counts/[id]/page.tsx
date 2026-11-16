@@ -175,7 +175,7 @@ function CountSheet({ count }: { count: CycleCount }) {
         <Card padded={false}>
           <div className="overflow-x-auto">
             <table className="w-full text-[13px]">
-              <thead className="bg-surface-subdued text-[11.5px] uppercase tracking-wide text-text-tertiary">
+              <thead className="bg-surface-subdued text-[12px] font-[550] text-text-secondary">
                 <tr>
                   <th className="px-3 py-2 text-left">Bin</th>
                   <th className="px-3 py-2 text-left">SKU</th>

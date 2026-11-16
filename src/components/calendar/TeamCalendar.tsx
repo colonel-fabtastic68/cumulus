@@ -52,7 +52,7 @@ export function TeamCalendar() {
       </div>
 
       <div className="card overflow-hidden">
-        <div className="grid grid-cols-7 border-b border-border bg-surface-subdued text-[11.5px] font-semibold uppercase tracking-wide text-text-tertiary">
+        <div className="grid grid-cols-7 border-b border-border bg-surface-subdued text-[12px] font-[550] text-text-secondary">
           {WEEKDAYS.map((d) => (
             <div key={d} className="px-2 py-1.5">
               {d}

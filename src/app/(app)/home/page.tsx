@@ -15,7 +15,6 @@ import {
   ShippedVsBuiltChart,
   TeamCard,
   ToShipCard,
-  greetingFor,
   todayLabel,
   useDashboardData,
 } from "@/components/dashboard";
@@ -35,7 +34,7 @@ export default function HomePage() {
 
   return (
     <Page
-      title={greetingFor(user.name)}
+      title="Home"
       subtitle={`${data.settings.companyName} · ${todayLabel()}`}
       primaryAction={
         <Button variant="primary" icon={<Sparkles />} onClick={() => openAgent()}>

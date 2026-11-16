@@ -229,7 +229,7 @@ function Detail({ po, onClose, canWrite, busy, onSend, onReceive, onEdit, onCanc
         </SimpleTable>
         {receipts.length > 0 && (
           <div>
-            <h4 className="mb-1.5 text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">Receipts</h4>
+            <h4 className="mb-1.5 text-[12px] font-semibold text-text-secondary">Receipts</h4>
             <ul className="flex flex-col gap-1 text-[13px]">
               {receipts
                 .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))
@@ -251,7 +251,7 @@ function Detail({ po, onClose, canWrite, busy, onSend, onReceive, onEdit, onCanc
         )}
         {po.note && (
           <div>
-            <h4 className="mb-1.5 text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">Note</h4>
+            <h4 className="mb-1.5 text-[12px] font-semibold text-text-secondary">Note</h4>
             <p className="whitespace-pre-line text-[13px] text-text">{po.note}</p>
           </div>
         )}

@@ -439,7 +439,7 @@ export function AgentChat({ onClose, pending, consumePending, pendingSession, co
               }
             }}
             rows={Math.min(6, Math.max(1, input.split("\n").length))}
-            placeholder="Ask, or tell me what to change…"
+            placeholder="Ask, or tell me what to change"
             className="max-h-40 flex-1 resize-none bg-transparent px-1.5 py-1 text-[13px] outline-none placeholder:text-text-tertiary"
           />
           {busy ? (

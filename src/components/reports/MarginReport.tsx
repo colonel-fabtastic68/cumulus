@@ -93,7 +93,7 @@ export function MarginReport() {
               <ReportSubheader title="By category" />
               <div className="overflow-x-auto rounded-[var(--radius)] border border-border">
                 <table className="w-full text-[13px]">
-                  <thead className="bg-surface-subdued text-[11.5px] uppercase tracking-wide text-text-tertiary">
+                  <thead className="bg-surface-subdued text-[12px] font-[550] text-text-secondary">
                     <tr>
                       <th className="px-3 py-1.5 text-left">Category</th>
                       <th className="px-3 py-1.5 text-right">Parts</th>
