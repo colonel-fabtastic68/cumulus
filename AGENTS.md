@@ -24,7 +24,15 @@ With no `.env.local` the app runs in **local mode**: no accounts, no database, d
 - Strato (the chat) needs `GOOGLE_GENERATIVE_AI_API_KEY` in `.env.local` (your own key from https://aistudio.google.com/apikey). Everything else works without it.
 - Do not set the `FIREBASE_*` variables. They point the app at the live database; local mode is the right place to try things.
 - Next allows one `next dev` per folder. Stop the running one before starting another.
-- `.claude/launch.json` has `cumulus-local` (all unreleased features on), `cumulus-local-staging`, and `cumulus-local-production` (what customers see today).
+- Needs Node.js 20.9 or newer.
+- `.claude/launch.json` has `cumulus-local` (all unreleased features on), `cumulus-local-staging`, and `cumulus-local-production` (what customers see today). Those three start through the Unix `env` command, so they work on macOS and Linux only.
+
+### On Windows
+
+- Use the `cumulus-dev` launch configuration, or run `npx next dev -p 3001` yourself. With no `.env.local` both give local mode with every unreleased feature on.
+- To see what customers see today, set the stage for one PowerShell session and start the server from it: `$env:CUMULUS_STAGE = "production"; npx next dev -p 3001`. Use `"staging"` for the staging view. Close that window, or run `Remove-Item Env:CUMULUS_STAGE`, to go back.
+- Leave Git's line-ending conversion at its Windows default (`core.autocrlf true`), so files are committed with the line endings the project already uses.
+- Nothing in the project needs WSL, bash or make.
 
 ## Branches: where your work goes
 
@@ -93,4 +101,4 @@ Flat white and off-white, quiet borders, small radii, Inter. Use the components 
 
 ## Checking your work
 
-Run the app and use the feature the way a customer would: create the record, edit it, look at stock before and after, reload the page. Then start `cumulus-local-production` and confirm the feature is invisible there. Say in the pull request what you checked and what you did not.
+Run the app and use the feature the way a customer would: create the record, edit it, look at stock before and after, reload the page. Then start the app as production (`cumulus-local-production`, or the Windows command above) and confirm the feature is invisible there. Say in the pull request what you checked and what you did not.
