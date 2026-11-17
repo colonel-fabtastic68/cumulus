@@ -11,9 +11,15 @@ import { ReviewStep } from "./ReviewStep";
 import { Stepper } from "./Stepper";
 import type { Overrides } from "./StratoFill";
 import { UploadStep } from "./UploadStep";
-import type { ColumnMapping, ParsedSource, WizardStep } from "./types";
+import type { ColumnMapping, ParsedSource, RowChanges, RowEdits, WizardStep } from "./types";
+
+const NO_ROW_CHANGES: RowChanges = { added: 0, removed: new Set() };
 
 interface WizardState {
+  /** Rows changed by hand on the review step, by line. Kept across Back and mapping changes; a new file starts clean. */
+  edits: RowEdits;
+  /** Rows added or left out on the review step. */
+  rowChanges: RowChanges;
   step: WizardStep;
   source: ParsedSource | null;
   mapping: ColumnMapping;
@@ -30,6 +36,8 @@ const INITIAL: WizardState = {
   mapping: {},
   fillSkus: false,
   overrides: new Map(),
+  edits: new Map(),
+  rowChanges: NO_ROW_CHANGES,
   result: null,
 };
 
@@ -38,7 +46,7 @@ function withSource(
   src: ParsedSource,
 ): Pick<
   WizardState,
-  "source" | "mapping" | "fillSkus" | "overrides" | "result"
+  "source" | "mapping" | "fillSkus" | "overrides" | "edits" | "rowChanges" | "result"
 > {
   const guessed = guessMapping(src.headers).mapping;
   return {
@@ -46,6 +54,8 @@ function withSource(
     mapping: guessed,
     fillSkus: !Object.values(guessed).includes("sku"),
     overrides: new Map(),
+    edits: new Map(),
+    rowChanges: NO_ROW_CHANGES,
     result: null,
   };
 }
@@ -74,7 +84,7 @@ export function ImportWizard({
       ? { ...INITIAL, step: 2, ...withSource(initialSource) }
       : INITIAL,
   );
-  const { step, source, mapping, fillSkus, overrides, result } = state;
+  const { step, source, mapping, fillSkus, overrides, edits, rowChanges, result } = state;
   const hint = describeAnswers(settings.onboarding);
 
   const notify = useRef(onStepChange);
@@ -103,6 +113,8 @@ export function ImportWizard({
                 source: null,
                 mapping: {},
                 overrides: new Map(),
+                edits: new Map(),
+                rowChanges: NO_ROW_CHANGES,
               }))
             }
             onContinue={() => goTo(2)}
@@ -128,6 +140,10 @@ export function ImportWizard({
             fillSkus={fillSkus}
             overrides={overrides}
             onOverrides={(next) => setState((s) => ({ ...s, overrides: next }))}
+            edits={edits}
+            onEdits={(next) => setState((s) => ({ ...s, edits: next }))}
+            rowChanges={rowChanges}
+            onRowChanges={(next) => setState((s) => ({ ...s, rowChanges: next }))}
             onBack={() => goTo(2)}
             onDone={(res, attempted) => {
               setState((s) => ({

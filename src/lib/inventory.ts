@@ -38,6 +38,7 @@ import type { Store, WriteOp } from "@/lib/store/types";
 import { daysBetween, newId, nowIso, round, sum } from "@/lib/utils";
 import { seedSettings } from "@/lib/seed";
 import { bomSelectionError, resolveBom } from "@/lib/bomOptions";
+import { resolveImportBoms, type ImportBomLine, type PendingBom } from "@/lib/importBoms";
 import { toDateInput } from "@/lib/format";
 
 export type Actor = Pick<Member, "id" | "name">;
@@ -1710,6 +1711,8 @@ export interface ImportRow {
   published?: boolean;
   /** Custom fields mapped on import. */
   attributes?: Record<string, string>;
+  /** Parts list set on the review step (feature `importEditing`). Components are named by SKU and may be new in the same file; the row becomes an assembly. */
+  bom?: ImportBomLine[];
 }
 
 export interface ImportResult {
@@ -1717,6 +1720,8 @@ export interface ImportResult {
   updated: number;
   skipped: number;
   errors: Array<{ row: number; message: string }>;
+  /** Assemblies whose parts list was set by this import. */
+  bomsSet?: number;
 }
 
 /** Upsert items by SKU. Quantities flow through the ledger as "import" movements. */
@@ -1728,6 +1733,9 @@ export async function importItems(store: Store, actor: Actor, rows: ImportRow[],
   const result: ImportResult = { created: 0, updated: 0, skipped: 0, errors: [] };
   const ops: WriteOp[] = [];
   const qtyTargets: Array<{ itemId: string; newQty: number }> = [];
+  // Parts lists wait until every row has an item, since a component may come later in the file.
+  const pendingBoms: PendingBom[] = [];
+  const itemOps = new Map<string, WriteOp<"items">>();
 
   rows.forEach((row, idx) => {
     const sku = (row.sku ?? "").trim().toUpperCase();
@@ -1771,6 +1779,10 @@ export async function importItems(store: Store, actor: Actor, rows: ImportRow[],
     if (row.imageUrl) fields.imageUrl = row.imageUrl.split(/[,|]/)[0]!.trim();
     if (row.externalId && row.externalSource) fields.externalIds = { [row.externalSource]: row.externalId };
     if (row.published === false) fields.status = "inactive";
+    if (row.bom?.length) {
+      fields.type = "assembly";
+      pendingBoms.push({ row: idx + 1, sku, lines: row.bom });
+    }
 
     const existing = bySku.get(sku);
     // A store's images come along the first time; images curated here are never overwritten by a sync.
@@ -1781,7 +1793,9 @@ export async function importItems(store: Store, actor: Actor, rows: ImportRow[],
     }
     if (existing) {
       if (fields.externalIds) fields.externalIds = { ...(existing.externalIds ?? {}), ...fields.externalIds };
-      ops.push({ op: "patch", collection: "items", id: existing.id, patch: { ...fields, updatedAt: nowIso(), updatedBy: actor.id } });
+      const op: WriteOp<"items"> = { op: "patch", collection: "items", id: existing.id, patch: { ...fields, updatedAt: nowIso(), updatedBy: actor.id } };
+      ops.push(op);
+      itemOps.set(existing.id, op);
       result.updated++;
       if (opts.setQuantities && row.qty !== undefined && Number.isFinite(row.qty)) qtyTargets.push({ itemId: existing.id, newQty: row.qty });
     } else {
@@ -1792,11 +1806,24 @@ export async function importItems(store: Store, actor: Actor, rows: ImportRow[],
       }
       const item = itemDefaults({ ...fields, sku, name: row.name, updatedBy: actor.id });
       bySku.set(sku, item);
-      ops.push({ op: "put", collection: "items", doc: item });
+      const op: WriteOp<"items"> = { op: "put", collection: "items", doc: item };
+      ops.push(op);
+      itemOps.set(item.id, op);
       result.created++;
       if (row.qty !== undefined && Number.isFinite(row.qty) && row.qty !== 0) qtyTargets.push({ itemId: item.id, newQty: row.qty });
     }
   });
+
+  if (pendingBoms.length) {
+    const resolved = resolveImportBoms(pendingBoms, bySku);
+    result.errors.push(...resolved.errors);
+    for (const [itemId, bom] of resolved.boms) {
+      const op = itemOps.get(itemId);
+      if (op?.op === "put") op.doc.bom = bom;
+      else if (op?.op === "patch") op.patch = { ...op.patch, bom };
+    }
+    result.bomsSet = resolved.boms.size;
+  }
 
   ops.push(activityOp(actor, "import.completed", `${actor.name} imported ${result.created} new and ${result.updated} updated items`, { meta: { ...result } }));
   await store.batch(ops);

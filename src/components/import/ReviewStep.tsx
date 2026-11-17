@@ -1,18 +1,21 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowLeft, Download, FileWarning } from "lucide-react";
-import { Badge, Banner, Button, Card, EmptyState, SearchField, Segmented, Table, Toggle, useToast, type Column } from "@/components/ui";
+import { ArrowLeft, Download, FileWarning, Layers, Package, Plus, Trash2, Undo2 } from "lucide-react";
+import { Badge, Banner, Button, Card, Drawer, EmptyState, SearchField, Segmented, Table, Toggle, useToast, type Column, type ComboboxOption } from "@/components/ui";
 import { canWrite, useCurrentUser } from "@/lib/auth";
 import { formatMoney, formatQty, pluralize } from "@/lib/format";
+import type { ImportBomLine } from "@/lib/importBoms";
 import { importItems, InventoryError, type ImportResult } from "@/lib/inventory";
 import { useItemsBySku, useSettings, useStore } from "@/lib/store/provider";
+import { useFeature } from "@/lib/useFeature";
 import { describeAnswers } from "@/lib/onboarding";
 import { matches } from "@/lib/utils";
 import { buildReviewRows } from "./convert";
 import { ImportChanges } from "./ImportChanges";
+import { RowEditor } from "./RowEditor";
 import { StratoFill, type Overrides } from "./StratoFill";
-import type { ColumnMapping, ParsedSource, ReviewRow, ReviewStatus } from "./types";
+import type { ColumnMapping, ParsedSource, ReviewRow, ReviewStatus, RowChanges, RowEdit, RowEdits } from "./types";
 
 type Filter = "all" | ReviewStatus;
 
@@ -26,30 +29,112 @@ interface ReviewStepProps {
   /** Values Strato filled into blank cells, by 1-based line. Kept by the wizard so Back does not lose them. */
   overrides?: Overrides;
   onOverrides?: (next: Overrides) => void;
+  /** Rows changed by hand (feature `importEditing`). Kept by the wizard so Back does not lose them. */
+  edits?: RowEdits;
+  onEdits?: (next: RowEdits) => void;
+  /** Rows added or left out by hand (feature `importEditing`). */
+  rowChanges?: RowChanges;
+  onRowChanges?: (next: RowChanges) => void;
   onBack: () => void;
   onDone: (result: ImportResult, attempted: number) => void;
 }
 
 const NO_OVERRIDES: Overrides = new Map();
+const NO_EDITS: RowEdits = new Map();
+const NO_ROW_CHANGES: RowChanges = { added: 0, removed: new Set() };
+const TYPE_LABEL: Record<string, string> = { part: "Part", assembly: "Assembly" };
 
-export function ReviewStep({ source, mapping, fillSkus, overrides = NO_OVERRIDES, onOverrides, onBack, onDone }: ReviewStepProps) {
+export function ReviewStep({ source, mapping, fillSkus, overrides = NO_OVERRIDES, onOverrides, edits = NO_EDITS, onEdits, rowChanges = NO_ROW_CHANGES, onRowChanges, onBack, onDone }: ReviewStepProps) {
   const store = useStore();
   const user = useCurrentUser();
   const settings = useSettings();
   const itemsBySku = useItemsBySku();
   const toast = useToast();
   const writable = canWrite(user);
+  const editing = useFeature("importEditing") && !!onEdits && !!onRowChanges && writable;
 
   const [setQuantities, setSetQuantities] = useState(false);
   const [skipErrors, setSkipErrors] = useState(true);
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
   const [importing, setImporting] = useState(false);
+  const [openLine, setOpenLine] = useState<number | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
 
   const sourceKind = source.kind === "generic" ? undefined : source.kind;
+  const activeEdits = editing ? edits : NO_EDITS;
+  const { added, removed } = editing ? rowChanges : NO_ROW_CHANGES;
+  const fileLength = source.rows.length;
+  /** The file's rows plus the blank ones added here, which are filled in through edits. */
+  const sourceRows = useMemo(() => (added ? [...source.rows, ...Array.from({ length: added }, () => ({}))] : source.rows), [source.rows, added]);
+  const reshaped = added > 0 || removed.size > 0;
   /** The file on its own, for counting what Strato could fill; the rows below carry the fills. */
   const bareRows = useMemo(() => buildReviewRows(source.rows, mapping, itemsBySku, sourceKind, { fillSkus }), [source.rows, mapping, itemsBySku, sourceKind, fillSkus]);
-  const reviewRows = useMemo(() => (overrides.size ? buildReviewRows(source.rows, mapping, itemsBySku, sourceKind, { fillSkus, overrides }) : bareRows), [bareRows, source.rows, mapping, itemsBySku, sourceKind, fillSkus, overrides]);
+  /** The file with Strato's fills, added rows and removals: what a hand edit is measured against. */
+  const uneditedRows = useMemo(
+    () => (overrides.size || reshaped ? buildReviewRows(sourceRows, mapping, itemsBySku, sourceKind, { fillSkus, overrides, skip: removed }) : bareRows),
+    [bareRows, reshaped, sourceRows, mapping, itemsBySku, sourceKind, fillSkus, overrides, removed],
+  );
+  const reviewRows = useMemo(
+    () => (activeEdits.size ? buildReviewRows(sourceRows, mapping, itemsBySku, sourceKind, { fillSkus, overrides, edits: activeEdits, skip: removed }) : uneditedRows),
+    [uneditedRows, sourceRows, mapping, itemsBySku, sourceKind, fillSkus, overrides, activeEdits, removed],
+  );
+  const editedCount = useMemo(() => reviewRows.filter((r) => r.edited && r.line <= fileLength).length, [reviewRows, fileLength]);
+  const addedCount = useMemo(() => reviewRows.filter((r) => r.line > fileLength).length, [reviewRows, fileLength]);
+  /** Removed rows worth bringing back: the file's own, and added rows someone filled in. */
+  const restorable = [...removed].filter((line) => line <= fileLength || edits.has(line));
+
+  /** What a component can be: rows of this file that import cleanly, then items already in inventory. */
+  const candidates = useMemo<ComboboxOption[]>(() => {
+    if (!editing) return [];
+    const out = new Map<string, ComboboxOption>();
+    for (const r of reviewRows) if (r.sku && r.status !== "error") out.set(r.sku, { value: r.sku, label: `${r.sku} · ${r.row.name ?? r.existing?.name ?? ""}`, description: r.existing ? "In inventory, updated by this file" : "New in this file" });
+    for (const item of itemsBySku.values()) {
+      const sku = item.sku.toUpperCase();
+      if (!out.has(sku)) out.set(sku, { value: sku, label: `${item.sku} · ${item.name}`, description: "In inventory" });
+    }
+    return [...out.values()];
+  }, [editing, reviewRows, itemsBySku]);
+  const skuById = useMemo(() => new Map([...itemsBySku.values()].map((i) => [i.id, i.sku.toUpperCase()])), [itemsBySku]);
+  const existingBomOf = (r: ReviewRow): ImportBomLine[] => (r.existing?.type === "assembly" ? r.existing.bom.flatMap((l) => (skuById.has(l.itemId) ? [{ sku: skuById.get(l.itemId)!, qty: l.qty }] : [])) : []);
+
+  const saveEdit = (line: number, edit: RowEdit | null) => {
+    const next = new Map(edits);
+    if (edit) next.set(line, edit);
+    else next.delete(line);
+    onEdits?.(next);
+  };
+  const markType = (keys: Set<string>, type: "part" | "assembly") => {
+    const next = new Map(edits);
+    for (const key of keys) {
+      const line = Number(key);
+      const edit: RowEdit = { ...(next.get(line) ?? {}), type };
+      if (type === "part") delete edit.bom;
+      next.set(line, edit);
+    }
+    onEdits?.(next);
+    toast(`${pluralize(keys.size, "row")} marked as ${type === "assembly" ? "assemblies" : "parts"}`, "success");
+    setSelected(new Set());
+  };
+  const removeLines = (lines: number[], quiet = false) => {
+    if (lines.length === 0) return;
+    onRowChanges?.({ added, removed: new Set([...removed, ...lines]) });
+    setSelected(new Set());
+    if (!quiet) toast(`${pluralize(lines.length, "row")} left out of this import`, "success");
+  };
+  const restoreRemoved = () => onRowChanges?.({ added, removed: new Set([...removed].filter((line) => !restorable.includes(line))) });
+  const addRow = () => {
+    const line = fileLength + added + 1;
+    onRowChanges?.({ added: added + 1, removed });
+    setOpenLine(line);
+  };
+  /** Closing the panel on an added row that was never filled in drops the row again. */
+  const closePanel = () => {
+    if (openLine !== null && openLine > fileLength && !edits.has(openLine)) removeLines([openLine], true);
+    setOpenLine(null);
+  };
+  const openRow = openLine === null ? undefined : reviewRows.find((r) => r.line === openLine);
+  const openBase = openLine === null ? undefined : uneditedRows.find((r) => r.line === openLine);
   const counts = useMemo(() => {
     const c = { all: reviewRows.length, new: 0, update: 0, error: 0 };
     for (const r of reviewRows) c[r.status]++;
@@ -75,8 +160,40 @@ export function ReviewStep({ source, mapping, fillSkus, overrides = NO_OVERRIDES
         key: "name",
         header: "Name",
         sortValue: (r) => r.row.name ?? r.existing?.name ?? "",
-        render: (r) => <span className="block max-w-[260px] truncate">{r.row.name ?? (r.existing ? <span className="text-text-tertiary">{r.existing.name}</span> : <span className="text-text-tertiary">—</span>)}</span>,
+        render: (r) => (
+          <span className="flex max-w-[300px] items-center gap-1.5">
+            <span className="truncate">{r.row.name ?? (r.existing ? <span className="text-text-tertiary">{r.existing.name}</span> : <span className="text-text-tertiary">—</span>)}</span>
+            {r.line > fileLength ? <span className="shrink-0 text-[11.5px] text-text-tertiary">added here</span> : r.edited && <span className="shrink-0 text-[11.5px] text-text-tertiary">edited</span>}
+          </span>
+        ),
       },
+      ...(editing
+        ? ([
+            {
+              key: "type",
+              header: "Type",
+              width: "104px",
+              sortValue: (r) => r.row.type ?? r.existing?.type ?? "part",
+              render: (r) => {
+                const t = r.row.type ?? r.existing?.type ?? "part";
+                return t === "assembly" ? <Badge tone="info">{TYPE_LABEL[t]}</Badge> : <span className="text-text-secondary">{TYPE_LABEL[t] ?? t}</span>;
+              },
+            },
+            {
+              key: "parts",
+              header: "Parts",
+              width: "72px",
+              align: "right",
+              sortValue: (r) => r.row.bom?.length ?? (r.existing?.type === "assembly" ? r.existing.bom.length : null),
+              render: (r) => {
+                const t = r.row.type ?? r.existing?.type;
+                if (t !== "assembly") return <span className="text-text-tertiary">—</span>;
+                const n = r.row.bom?.length ?? r.existing?.bom.length ?? 0;
+                return n > 0 ? <span className="tabular">{n}</span> : <span className="text-[12px] text-warning">None</span>;
+              },
+            },
+          ] satisfies Column<ReviewRow>[])
+        : []),
       {
         key: "status",
         header: "Status",
@@ -99,7 +216,7 @@ export function ReviewStep({ source, mapping, fillSkus, overrides = NO_OVERRIDES
           ),
       },
     ],
-    [settings.currency],
+    [settings.currency, editing, fileLength],
   );
 
   const runImport = async () => {
@@ -112,7 +229,7 @@ export function ReviewStep({ source, mapping, fillSkus, overrides = NO_OVERRIDES
         toImport.map((r) => r.row),
         { setQuantities },
       );
-      toast(`Imported ${result.created} new and ${result.updated} updated items`, "success");
+      toast(`Imported ${result.created} new and ${result.updated} updated items${result.bomsSet ? `, with ${pluralize(result.bomsSet, "parts list")}` : ""}`, "success");
       onDone(result, toImport.length);
     } catch (err) {
       toast(err instanceof InventoryError ? err.message : err instanceof Error ? err.message : "Import failed", "critical");
@@ -137,12 +254,57 @@ export function ReviewStep({ source, mapping, fillSkus, overrides = NO_OVERRIDES
       {onOverrides && <StratoFill source={source} mapping={mapping} rows={bareRows} itemsBySku={itemsBySku} overrides={overrides} onOverrides={onOverrides} hint={describeAnswers(settings.onboarding)} />}
       <ImportChanges rows={reviewRows} />
 
+      {editing && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-text-secondary">
+          <span>Click a row to change it or give an assembly its parts list. Tick rows to mark several as assemblies, or to leave them out.</span>
+          {(editedCount > 0 || addedCount > 0 || restorable.length > 0) && (
+            <span className="text-text">
+              {[editedCount > 0 && `${pluralize(editedCount, "row")} changed`, addedCount > 0 && `${pluralize(addedCount, "row")} added`, restorable.length > 0 && `${pluralize(restorable.length, "row")} left out`].filter(Boolean).join(", ")}.
+            </span>
+          )}
+          {restorable.length > 0 && (
+            <Button size="sm" variant="plain" icon={<Undo2 />} onClick={restoreRemoved}>
+              Bring back rows left out
+            </Button>
+          )}
+        </div>
+      )}
+
       <Table
         rows={visible}
         columns={columns}
         rowKey={(r) => String(r.line)}
+        rowLabel={(r) => `row ${r.line}${r.sku ? `, ${r.sku}` : ""}`}
         pageSize={25}
         dense
+        lockHeader={editing}
+        lockToolbar={editing}
+        onRowClick={editing ? (r) => setOpenLine(r.line) : undefined}
+        selectable={editing}
+        selected={selected}
+        onSelectedChange={setSelected}
+        bulkActions={
+          editing
+            ? (sel) => (
+                <>
+                  <Button size="sm" icon={<Layers />} onClick={() => markType(sel, "assembly")}>
+                    Mark as assembly
+                  </Button>
+                  <Button size="sm" icon={<Package />} onClick={() => markType(sel, "part")}>
+                    Mark as part
+                  </Button>
+                  <Button size="sm" icon={<Trash2 />} onClick={() => removeLines([...sel].map(Number))}>
+                    Remove from import
+                  </Button>
+                  {sel.size < visible.length && (
+                    <Button size="sm" variant="plain" onClick={() => setSelected(new Set(visible.map((r) => String(r.line))))}>
+                      Select all {visible.length} shown
+                    </Button>
+                  )}
+                </>
+              )
+            : undefined
+        }
         toolbar={
           <>
             <SearchField value={query} onChange={setQuery} placeholder="Search SKU, name or error" className="w-full sm:w-64" />
@@ -156,11 +318,48 @@ export function ReviewStep({ source, mapping, fillSkus, overrides = NO_OVERRIDES
                 { value: "error", label: "Error", count: counts.error },
               ]}
             />
+            {editing && (
+              <Button size="sm" icon={<Plus />} onClick={addRow} className="ml-auto">
+                Add a part
+              </Button>
+            )}
           </>
         }
         footer={`${pluralize(visible.length, "row")} shown`}
         emptyState={<EmptyState icon={<FileWarning />} title="No rows match" description={query ? "Try a different search." : "There are no rows with this status."} />}
       />
+
+      {editing && (
+        <Drawer
+          open={!!openRow}
+          onClose={closePanel}
+          title={openRow ? (openRow.line > fileLength && !openRow.edited ? "New part" : `Row ${openRow.line}${openRow.sku ? ` · ${openRow.sku}` : ""}`) : undefined}
+          subtitle={openRow && openRow.line > fileLength ? "Added to this import only. Your file is not changed." : "Changes apply to this import only. Your file is not changed."}
+          width={620}
+        >
+          {openRow && openBase && (
+            <RowEditor
+              key={openRow.line}
+              row={openRow}
+              base={openBase.row}
+              existingBom={existingBomOf(openRow)}
+              candidates={candidates}
+              isNew={openRow.line > fileLength}
+              onSave={(edit) => {
+                // An added row saved with nothing in it is dropped rather than left as an empty error row.
+                if (!edit && openRow.line > fileLength) removeLines([openRow.line], true);
+                else saveEdit(openRow.line, edit);
+                setOpenLine(null);
+              }}
+              onRemove={() => {
+                removeLines([openRow.line], openRow.line > fileLength && !openRow.edited);
+                setOpenLine(null);
+              }}
+              onClose={closePanel}
+            />
+          )}
+        </Drawer>
+      )}
 
       <Card>
         <div className="flex flex-col gap-4">
