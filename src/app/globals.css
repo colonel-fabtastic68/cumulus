@@ -446,12 +446,6 @@ input[type="number"]::-webkit-outer-spin-button {
   --info: #8e1f0b;
   --info-soft: #fbe9e9;
 }
-.landing-wash {
-  background:
-    radial-gradient(900px 420px at 12% -10%, rgba(196, 22, 28, 0.09), transparent 70%),
-    radial-gradient(700px 360px at 95% 10%, rgba(196, 22, 28, 0.05), transparent 70%);
-}
-
 /* Marketing identity: racing red and black, one papaya hit, the display face. These never appear in app screens. */
 :root {
   --brand-red: #c4161c;
@@ -520,76 +514,52 @@ input[type="number"]::-webkit-outer-spin-button {
   line-height: 1.05;
 }
 
-/* Hero calculator sliders: a black rail filled up to a square red handle. --p is how far along the value sits, 0 to 1.
-   The rail's two colors meet in a hard stop under the middle of the handle; it is a fill, not a blend. */
-.calc-range {
-  -webkit-appearance: none;
-  appearance: none;
-  display: block;
-  width: 100%;
-  height: 28px;
-  margin: 0;
-  background: transparent;
-  cursor: pointer;
+/* Photo grounds. Four shop photographs live in /public/photos, each saved as a red duotone (-red) and a grayscale
+   (-gray). An element sets --photo to one of them and takes a class for the wash that keeps its type readable:
+   .photo-red   the red file under a deep red scrim on the text side, with a fine dot grain;
+   .photo-dark  a grayscale file fading to near-black toward the bottom, for a panel with white type at its foot;
+   .photo-deep  a grayscale file under an even dark wash, for a band with content all over it;
+   .photo-light a grayscale file ghosted into the page ground, strongest at the right, for a hero with dark type.
+   These washes are the only gradients on the site, and they are scrims over a picture, never a blend of hues. */
+.photo-ground {
+  position: relative;
+  isolation: isolate;
+  --photo-grain: radial-gradient(circle at 1.5px 1.5px, rgba(10, 10, 10, 0.16) 1px, transparent 1.6px);
 }
-.calc-range::-webkit-slider-runnable-track {
-  height: 4px;
-  background: linear-gradient(to right, var(--brand-black) calc(9px + (100% - 18px) * var(--p, 0)), var(--border-strong) 0);
+.photo-ground::before,
+.photo-ground::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
-.calc-range::-moz-range-track {
-  height: 4px;
-  background: var(--border-strong);
+.photo-ground::before {
+  z-index: -2;
+  background: var(--photo) var(--photo-pos, center) / cover no-repeat;
 }
-.calc-range::-moz-range-progress {
-  height: 4px;
-  background: var(--brand-black);
+.photo-ground::after {
+  z-index: -1;
+  background:
+    var(--photo-grain) 0 0 / 6px 6px,
+    var(--photo-wash);
 }
-.calc-range::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 18px;
-  height: 18px;
-  margin-top: -7px;
-  border: 0;
-  border-radius: 0;
-  background: var(--brand-red);
+.photo-red {
+  --photo-wash: linear-gradient(180deg, rgba(168, 17, 24, 0.86), rgba(168, 17, 24, 0.7));
 }
-.calc-range::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
-  border: 0;
-  border-radius: 0;
-  background: var(--brand-red);
+.photo-dark {
+  --photo-wash: linear-gradient(180deg, rgba(10, 10, 10, 0.3) 0%, rgba(10, 10, 10, 0.74) 52%, rgba(10, 10, 10, 0.94) 100%);
 }
-.calc-range:focus-visible {
-  outline: none;
+.photo-deep {
+  --photo-wash: linear-gradient(180deg, rgba(10, 10, 10, 0.84), rgba(10, 10, 10, 0.92));
 }
-.calc-range:focus-visible::-webkit-slider-thumb {
-  outline: 2px solid var(--brand-black);
-  outline-offset: 2px;
-}
-.calc-range:focus-visible::-moz-range-thumb {
-  outline: 2px solid var(--brand-black);
-  outline-offset: 2px;
+.photo-light {
+  --photo-grain: none;
+  --photo-wash: linear-gradient(180deg, rgba(241, 241, 241, 0) 30%, var(--bg) 78%), linear-gradient(90deg, var(--bg) 0%, rgba(241, 241, 241, 0.95) 40%, rgba(241, 241, 241, 0.62) 100%);
 }
 @media (min-width: 1024px) {
-  .calc-range {
-    height: 22px;
+  .photo-red {
+    --photo-wash: linear-gradient(90deg, rgba(168, 17, 24, 0.92) 0%, rgba(168, 17, 24, 0.78) 40%, rgba(168, 17, 24, 0.06) 72%);
   }
-}
-
-/* Race patterns: one per section, never behind body text, always aria-hidden. */
-.pat-checker {
-  background: repeating-conic-gradient(var(--brand-black) 0 25%, var(--surface) 0 50%) 0 0 / 16px 16px;
-}
-.pat-checker-band {
-  background: repeating-conic-gradient(var(--band-text) 0 25%, var(--brand-black) 0 50%) 0 0 / 16px 16px;
-}
-.pat-chevrons {
-  background: repeating-linear-gradient(-60deg, var(--brand-red) 0 12px, transparent 12px 28px);
-}
-.pat-stripe {
-  transform: skewX(-24deg);
 }
 
 /* Landing page: blocks fade up once as they scroll into view; the hero enters on load. */

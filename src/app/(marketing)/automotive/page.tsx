@@ -72,7 +72,7 @@ function ChannelCard() {
 export default function AutomotivePage() {
   return (
     <>
-      <PageHero title="Built for every channel at once." body="Aftermarket brands live or die on stock accuracy across the web store, the counter and the dealer network. cumulusOS is the one count all of them read." secondary={{ href: "/connect", label: "See integrations" }}>
+      <PageHero image="/photos/parts-room-gray.webp" imagePosition="center 45%" title="Built for every channel at once." body="Aftermarket brands live or die on stock accuracy across the web store, the counter and the dealer network. cumulusOS is the one count all of them read." secondary={{ href: "/connect", label: "See integrations" }}>
         <Reveal className="mt-14 grid gap-8 md:mt-16 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:items-center">
           <CheckList size="lg" items={["Thousands of SKUs by fitment and finish, each with a barcode.", "Web store, register and dealer orders on one count that never oversells.", "Containers received at landed cost on the day they arrived.", "Returns inspected and restocked in the same ledger as the sale."]} />
           <ChannelCard />
@@ -80,7 +80,7 @@ export default function AutomotivePage() {
       </PageHero>
 
       <section className="border-b border-border">
-        <div className={`${container} py-20 md:py-28`}>
+        <div className={`${container} py-14 md:py-20`}>
           <SectionTitle title="Four problems every brand tells us about." body="And what each one looks like once there is a single count." />
           <div className="mt-12">
             <PainPoints items={PAINS} />
@@ -89,13 +89,13 @@ export default function AutomotivePage() {
       </section>
 
       <section className="bg-surface">
-        <div className={`${container} py-20 md:py-28`}>
+        <div className={`${container} py-14 md:py-20`}>
           <SectionTitle title="What aftermarket brands lean on." />
           <FeatureGrid items={FEATURES} columns={3} className="mt-14" />
         </div>
       </section>
 
-      <CtaBand title="Bring your catalog export. We will import it live." body="Thirty minutes with the founders, from the store export to a synced count." />
+      <CtaBand image="/photos/parts-room-red.webp" title="Bring your catalog export. We will import it live." body="Thirty minutes with the founders, from the store export to a synced count." />
     </>
   );
 }

@@ -40,7 +40,7 @@ const HOW = [
 export default function ConnectPage() {
   return (
     <>
-      <PageHero title="Connects to what you already run." body="Stores, registers, accounting and carriers plug in under Integrations. Stock levels push out, orders come in, and the hours spent re-keying between systems go back to the shop." secondary={{ href: "/product", label: "See the product" }}>
+      <PageHero image="/photos/weld-gray.webp" imagePosition="center 60%" title="Connects to what you already run." body="Stores, registers, accounting and carriers plug in under Integrations. Stock levels push out, orders come in, and the hours spent re-keying between systems go back to the shop." secondary={{ href: "/product", label: "See the product" }}>
         <Reveal className="mt-12 flex flex-wrap items-center gap-x-8 gap-y-4 md:mt-14">
           {CONNECTIONS.map((c) => (
             <span key={c.id} className="inline-flex items-center gap-2.5 text-[14px] font-medium text-text">
@@ -52,7 +52,7 @@ export default function ConnectPage() {
       </PageHero>
 
       <section>
-        <div className={`${container} py-20 md:py-28`}>
+        <div className={`${container} py-14 md:py-20`}>
           <SectionTitle title="Each one does a specific job." body="No connector pretends to do everything. Each card below says what comes in, what goes out, and how often." />
           <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {CONNECTIONS.map((c, i) => (
@@ -85,7 +85,7 @@ export default function ConnectPage() {
       </section>
 
       <section id="orders" className="scroll-mt-16 border-t border-border bg-surface">
-        <div className={`${container} py-20 md:py-28`}>
+        <div className={`${container} py-14 md:py-20`}>
           <SectionTitle title="Orders that never touch a store." body="Plenty of orders still arrive as an email or a phone call, and some teams already work with an assistant of their own. Both lead into the same ledger, and Strato works the order from there." />
           <ul className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {BEYOND.map(({ icon: Icon, name, tag, preview, body }, i) => (
@@ -108,14 +108,14 @@ export default function ConnectPage() {
       </section>
 
       <section className="border-t border-border">
-        <div className={`${container} py-20 md:py-28`}>
+        <div className={`${container} py-14 md:py-20`}>
           <SectionTitle title="Connect, import, stay live, push back." body="The same six steps for every platform, so the second connection takes less time than the first." />
           <FeatureGrid items={HOW} columns={3} className="mt-14" />
         </div>
       </section>
 
       <section className="border-t border-border bg-surface">
-        <div className={`${container} grid gap-12 py-20 md:py-28 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16`}>
+        <div className={`${container} grid gap-12 py-14 md:py-20 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16`}>
           <Reveal>
             <h2 className="display">The re-keying is the expensive part.</h2>
             <p className="lede mt-4">Shops we work with spent six to ten hours a week per person typing orders from the store into the sheet, counts from the sheet into accounting, and corrections everywhere after every sale. Connecting the systems gives that time back on the first day, and the oversold orders stop with it.</p>
@@ -127,7 +127,7 @@ export default function ConnectPage() {
         </div>
       </section>
 
-      <CtaBand title="Connect your store on the demo call." body="Bring a Shopify, WooCommerce or Square login and we will import your catalog live, in thirty minutes." />
+      <CtaBand image="/photos/parts-room-red.webp" title="Connect your store on the demo call." body="Bring a Shopify, WooCommerce or Square login and we will import your catalog live, in thirty minutes." />
     </>
   );
 }

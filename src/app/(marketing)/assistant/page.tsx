@@ -4,7 +4,7 @@ import { Button } from "@/components/ui";
 import { BrandMark, type BrandId } from "@/components/marketing/IntegrationLogos";
 import { Reveal } from "@/components/marketing/Reveal";
 import { StratoOrderPreview } from "@/components/marketing/StratoOrderPreview";
-import { CheckList, CtaBand, FeatureGrid, SectionTitle, container } from "@/components/marketing/shared";
+import { CheckList, CtaBand, FeatureGrid, SectionTitle, container, photo } from "@/components/marketing/shared";
 
 export const metadata: Metadata = {
   title: "Strato · cumulusOS",
@@ -54,7 +54,7 @@ const MCP_FACTS: Array<{ term: string; detail: string; apps?: Array<{ id: BrandI
 export default function StratoPage() {
   return (
     <>
-      <section className="border-b border-border">
+      <section className="photo-ground photo-light overflow-hidden border-b border-border" style={photo("/photos/parts-room-gray.webp", "center 45%")}>
         <div className={`${container} grid items-center gap-10 py-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,460px)] lg:gap-16 lg:py-14`}>
           <div>
             <h1 className="hero hero-compact hero-in">
@@ -150,7 +150,7 @@ export default function StratoPage() {
         </div>
       </section>
 
-      <CtaBand title="Bring a real order to the demo." body="We enter it, check stock, draft the purchase order and ship it, in a workspace with your own parts. Thirty minutes, no slides." />
+      <CtaBand image="/photos/late-models-red.webp" imagePosition="center 45%" title="Bring a real order to the demo." body="We enter it, check stock, draft the purchase order and ship it, in a workspace with your own parts. Thirty minutes, no slides." />
     </>
   );
 }

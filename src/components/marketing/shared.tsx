@@ -1,4 +1,4 @@
-import type { ComponentType, ReactNode } from "react";
+import type { ComponentType, CSSProperties, ReactNode } from "react";
 import { ArrowRight, Check } from "lucide-react";
 import { Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -6,6 +6,11 @@ import { Reveal } from "./Reveal";
 
 /** Shared width for every marketing section. */
 export const container = "mx-auto w-full max-w-[1120px] px-6";
+
+/** Sets the photograph a .photo-ground element shows (see globals.css), and where the picture is anchored. */
+export function photo(src: string, position?: string): CSSProperties {
+  return { "--photo": `url(${src})`, ...(position ? { "--photo-pos": position } : {}) } as CSSProperties;
+}
 
 export function SectionTitle({ title, body, className, align = "left" }: { title: ReactNode; body?: ReactNode; className?: string; align?: "left" | "center" }) {
   return (
@@ -16,10 +21,10 @@ export function SectionTitle({ title, body, className, align = "left" }: { title
   );
 }
 
-/** The opening block of every page other than home: rule, headline, lede and the two calls to action. */
-export function PageHero({ title, body, primary = { href: "/#demo", label: "Book a demo" }, secondary, children }: { title: ReactNode; body: ReactNode; primary?: { href: string; label: string }; secondary?: { href: string; label: string }; children?: ReactNode }) {
+/** The opening block of every page other than home: headline, lede and the two calls to action, over a grayscale photograph ghosted into the page ground. */
+export function PageHero({ title, body, primary = { href: "/#demo", label: "Book a demo" }, secondary, image, imagePosition, children }: { title: ReactNode; body: ReactNode; primary?: { href: string; label: string }; secondary?: { href: string; label: string }; image?: string; imagePosition?: string; children?: ReactNode }) {
   return (
-    <section className="landing-wash border-b border-border">
+    <section className={cn("border-b border-border", image && "photo-ground photo-light overflow-hidden")} style={image ? photo(image, imagePosition) : undefined}>
       <div className={`${container} pt-14 pb-12 md:pt-20 md:pb-16`}>
         <div className="max-w-[800px]">
           <h1 className="hero hero-in" style={{ animationDelay: "60ms" }}>
@@ -45,13 +50,13 @@ export function PageHero({ title, body, primary = { href: "/#demo", label: "Book
   );
 }
 
-/** A list of short wins with red checks. */
-export function CheckList({ items, className, size = "md" }: { items: ReactNode[]; className?: string; size?: "md" | "lg" }) {
+/** A list of short wins with red checks. The inverse tone is for red and dark photo grounds. */
+export function CheckList({ items, className, size = "md", tone = "default" }: { items: ReactNode[]; className?: string; size?: "md" | "lg"; tone?: "default" | "inverse" }) {
   return (
-    <ul className={cn("flex flex-col gap-3", size === "lg" ? "text-[15.5px] leading-6" : "text-[14px] leading-6", "text-text-secondary", className)}>
+    <ul className={cn("flex flex-col gap-3", size === "lg" ? "text-[15.5px] leading-6" : "text-[14px] leading-6", tone === "inverse" ? "text-white/90" : "text-text-secondary", className)}>
       {items.map((item, i) => (
         <li key={i} className="flex gap-3">
-          <span className="mt-1 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-accent-soft text-brand-red">
+          <span className={cn("mt-1 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full text-brand-red", tone === "inverse" ? "bg-white" : "bg-accent-soft")}>
             <Check className="h-3 w-3" strokeWidth={3} />
           </span>
           <span>{item}</span>
@@ -111,26 +116,24 @@ export function PainPoints({ items }: { items: Array<{ pain: string; fix: string
   );
 }
 
-/** Closing band: brand black with a red edge, one line and one button. */
-export function CtaBand({ title, body, label = "Book a demo", href = "/#demo", secondary }: { title: ReactNode; body?: ReactNode; label?: string; href?: string; secondary?: { href: string; label: string } }) {
+/** Closing band: a photograph in red, one line, a white button and at most one black one. */
+export function CtaBand({ title, body, label = "Book a demo", href = "/#demo", secondary, image = "/photos/weld-red.webp", imagePosition }: { title: ReactNode; body?: ReactNode; label?: string; href?: string; secondary?: { href: string; label: string }; image?: string; imagePosition?: string }) {
   return (
     <section className="border-t border-border">
-      <div className={`${container} py-16 md:py-20`}>
+      <div className={`${container} py-14 md:py-20`}>
         <Reveal>
-          <div className="relative overflow-hidden rounded-[var(--radius-lg)] bg-brand-black px-6 py-10 text-band-text md:px-12 md:py-14">
-            <span aria-hidden className="absolute inset-y-0 left-0 w-1.5 bg-brand-red" />
-            <span aria-hidden className="pat-chevrons absolute -right-6 -bottom-4 h-40 w-40 opacity-90" />
-            <div className="relative grid items-center gap-6 md:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="photo-ground photo-red overflow-hidden rounded-[var(--radius-lg)] bg-brand-red px-6 py-10 text-white md:px-12 md:py-14" style={photo(image, imagePosition)}>
+            <div className="grid items-center gap-6 md:grid-cols-[minmax(0,1fr)_auto]">
               <div>
-                <h2 className="display-sm text-band-text">{title}</h2>
-                {body && <p className="mt-3 max-w-[34em] text-[15px] leading-6 text-band-text-secondary">{body}</p>}
+                <h2 className="display-sm text-white">{title}</h2>
+                {body && <p className="mt-3 max-w-[34em] text-[15px] leading-6 text-white/90">{body}</p>}
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button size="lg" href={href} iconRight={<ArrowRight />} className="bg-white text-text hover:bg-white/90">
+                <Button size="lg" href={href} iconRight={<ArrowRight />} className="bg-white! text-text! shadow-none! hover:bg-white/90!">
                   {label}
                 </Button>
                 {secondary && (
-                  <Button size="lg" variant="tertiary" href={secondary.href} className="text-band-text hover:bg-white/10">
+                  <Button size="lg" variant="primary" href={secondary.href}>
                     {secondary.label}
                   </Button>
                 )}

@@ -9,14 +9,14 @@ import { CheckList, container } from "./shared";
 export function DemoSection({ calendlyUrl }: { calendlyUrl?: string }) {
   return (
     <section id="demo" className="scroll-mt-16 border-t border-border bg-surface">
-      <span aria-hidden className="pat-checker block h-4" />
-      <div className={`${container} grid gap-10 py-14 md:py-20 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-12`}>
+      {/* Even columns: the copy side needs the width to set its three facts in one row. */}
+      <div className={`${container} grid gap-10 py-14 md:py-20 lg:grid-cols-2 lg:gap-14`}>
         <Reveal>
           <h2 className="display">Thirty minutes on your own parts.</h2>
           <p className="lede mt-4">Bring a spreadsheet or a few part numbers. We walk through receiving, builds, orders and Strato on your data, with the people who build cumulusOS.</p>
           <CheckList className="mt-6" items={["No slides. The demo runs in a real workspace with your numbers.", "Leave with a plan for what to import first and what to connect.", "If it is not a fit, we will say so and point you somewhere better."]} />
-          {/* Two columns beside the form: three were narrower than the email address, which ran out of its cell and up against the form. */}
-          <dl className="mt-6 grid gap-x-6 gap-y-4 text-[13.5px] text-text-secondary sm:grid-cols-3 lg:grid-cols-2">
+          {/* Three in a row. The email column is as wide as the address, so it never runs out of its cell toward the form; the other two share what is left. */}
+          <dl className="mt-6 grid gap-x-5 gap-y-4 text-[13.5px] text-text-secondary sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto]">
             <div className="flex items-start gap-2.5">
               <Clock className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
               <div>
@@ -33,10 +33,10 @@ export function DemoSection({ calendlyUrl }: { calendlyUrl?: string }) {
             </div>
             <div className="flex items-start gap-2.5">
               <Mail className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-              <div className="min-w-0">
+              <div>
                 <dt className="font-medium text-text">Prefer email?</dt>
                 <dd>
-                  <a href={`mailto:${CONTACT_EMAIL}`} className="text-text [overflow-wrap:anywhere] hover:text-accent">
+                  <a href={`mailto:${CONTACT_EMAIL}`} className="whitespace-nowrap text-text hover:text-accent">
                     {CONTACT_EMAIL}
                   </a>
                 </dd>

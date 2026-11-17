@@ -1,7 +1,6 @@
 "use client";
 
-import { useId, useState, type CSSProperties } from "react";
-import Link from "next/link";
+import { useId, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui";
 
@@ -20,18 +19,15 @@ const WEEKS_A_YEAR = 50;
 
 const STOCK_STEPS = [10_000, 25_000, 50_000, 75_000, 100_000, 150_000, 250_000, 400_000, 600_000, 800_000, 1_000_000, 1_500_000, 2_000_000];
 
-const row = "px-4 py-3 sm:px-5";
-
 /**
  * The hero's calculator: a rough yearly cost of running stock by hand, split
  * into inventory waste and the wages of the people who handle it, at a full
  * 40-hour week. Every input is on screen and the assumptions are printed under
  * the result, so the figure is only as bold as the visitor makes it.
  *
- * Drawn in three flat colors and nothing else: a black frame and title bar,
- * white rows split by black rules, a solid red block that holds the answer,
- * and a black strip for the two parts of it. Red marks only what moves or
- * matters: the slider handles and the answer.
+ * It is the same card as SavingsCalculator on the Integrations page: an
+ * off-white surface with the kit's bevel, sliders in the accent color, white
+ * tiles for the parts and one soft red tile for the total.
  */
 export function WasteCalculator() {
   const [tracking, setTracking] = useState<(typeof TRACKING)[number]["id"]>("sheets");
@@ -46,77 +42,59 @@ export function WasteCalculator() {
   const total = inventoryWaste + wages;
 
   return (
-    <div className="overflow-hidden rounded-[var(--radius-sm)] border-2 border-brand-black bg-surface">
-      <div className="flex items-center gap-3 bg-brand-black px-4 py-3.5 sm:px-5">
-        <span aria-hidden className="h-2.5 w-2.5 shrink-0 bg-brand-red" />
-        <h2 className="display-sm text-[16px]! leading-6! text-white sm:text-[18px]!">What is stock costing you?</h2>
-      </div>
+    <div className="rounded-[var(--radius-lg)] bg-bg p-5 text-text shadow-[var(--shadow-bevel),var(--shadow-card)] sm:p-6">
+      <h2 className="display-sm text-[20px]! leading-6!">What is stock costing you?</h2>
 
-      <div className="divide-y divide-brand-black">
-        <div className={row}>
-          <Choice legend="How do you track stock today?" name="track" value={tracking} options={TRACKING} onChange={setTracking} />
-        </div>
-        <div className={row}>
-          <Slider label="Stock on hand" value={stockStep} min={0} max={STOCK_STEPS.length - 1} onChange={setStockStep} display={money(stock)} />
-        </div>
-        <div className="grid divide-y divide-brand-black sm:grid-cols-2 sm:divide-x sm:divide-y-0">
-          <div className={row}>
-            <Slider label="Inventory staff" value={people} min={1} max={20} onChange={setPeople} display={String(people)} />
-          </div>
-          <div className={row}>
-            <Slider label="Hourly wage" value={wage} min={15} max={75} onChange={setWage} display={`$${wage}`} />
-          </div>
+      <div className="mt-4 grid gap-4">
+        <Choice legend="How do you track stock today?" name="track" value={tracking} options={TRACKING} onChange={setTracking} />
+        <Slider label="Stock on hand" value={stockStep} min={0} max={STOCK_STEPS.length - 1} onChange={setStockStep} display={money(stock)} />
+        <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
+          <Slider label="Inventory staff" value={people} min={1} max={20} onChange={setPeople} display={String(people)} />
+          <Slider label="Hourly wage" value={wage} min={15} max={75} onChange={setWage} display={`$${wage}`} />
         </div>
       </div>
 
-      <div aria-live="polite">
-        <div className="bg-brand-red px-4 pb-5 pt-4 text-white sm:px-5">
-          {/* The figure scales to the card: a glyph of the expanded face runs just under 0.7em wide, so the size is the width divided by the character count at 0.74em each, capped at 56px. */}
-          <div className="[container-type:inline-size]">
-            <div className="text-[13px] font-semibold leading-5">Estimated cost a year</div>
-            {/* The line keeps one height, so a longer figure set in smaller type never resizes the card. */}
-            <div className="mt-1 flex h-[52px] items-end">
-              <div className="race-number whitespace-nowrap" style={{ fontSize: `min(56px, ${(100 / (money(total).length * 0.74)).toFixed(2)}cqw)` }}>
-                {money(total)}
-              </div>
-            </div>
+      <div className="mt-5 grid gap-3" aria-live="polite">
+        <dl className="grid grid-cols-2 gap-3">
+          <div className="rounded-[var(--radius)] bg-surface px-3 py-2.5 shadow-[var(--shadow-bevel)] sm:px-4 sm:py-3">
+            <dt className="text-[12.5px] font-medium text-text-secondary">Inventory waste</dt>
+            <dd className="mt-0.5 text-[18px] font-semibold tabular text-text sm:text-[20px]">{money(inventoryWaste)}</dd>
           </div>
-          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-            <Button size="lg" href="/product" iconRight={<ArrowRight />} className="h-10! rounded-[4px]! bg-white! px-4! text-[14px]! text-brand-black! shadow-none! hover:bg-[#ececec]!">
-              See how cumulusOS cuts this
-            </Button>
-            <Link href="/#demo" className="text-[13px] font-semibold text-white underline underline-offset-4 hover:no-underline">
-              Or book a demo
-            </Link>
-          </div>
-        </div>
-        <dl className="grid grid-cols-2 divide-x divide-white/25 bg-brand-black text-white">
-          <div className="px-4 py-3 sm:px-5">
-            <dt className="text-[12px] leading-4 text-white/75">Inventory waste</dt>
-            <dd className="race-number mt-1.5 text-[17px]! leading-5!">{money(inventoryWaste)}</dd>
-          </div>
-          <div className="px-4 py-3 sm:px-5">
-            <dt className="text-[12px] leading-4 text-white/75">Inventory wages</dt>
-            <dd className="race-number mt-1.5 text-[17px]! leading-5!">{money(wages)}</dd>
+          <div className="rounded-[var(--radius)] bg-surface px-3 py-2.5 shadow-[var(--shadow-bevel)] sm:px-4 sm:py-3">
+            <dt className="text-[12.5px] font-medium text-text-secondary">Inventory wages</dt>
+            <dd className="mt-0.5 text-[18px] font-semibold tabular text-text sm:text-[20px]">{money(wages)}</dd>
           </div>
         </dl>
+        <div className="flex flex-col rounded-[var(--radius)] bg-accent-soft px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
+          <div className="text-[12.5px] font-medium text-accent">Estimated cost a year</div>
+          <div className="text-[24px] font-semibold leading-8 tabular text-accent">{money(total)}</div>
+        </div>
       </div>
 
-      <p className="px-4 py-3 text-[12px] leading-4 text-text-secondary sm:px-5">
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <Button variant="primary" size="lg" href="/product" iconRight={<ArrowRight />}>
+          See how cumulusOS cuts this
+        </Button>
+        <Button variant="plain" size="lg" href="/#demo">
+          Or book a demo
+        </Button>
+      </div>
+
+      <p className="mt-4 text-[12px] leading-4 text-text-tertiary">
         An estimate, not a quote. Assumes {Math.round(rate * 1000) / 10}% of stock value lost a year to miscounts, dead stock and rush orders for this setup, and a {HOURS_A_WEEK}-hour week over {WEEKS_A_YEAR} weeks for each person on inventory staff.
       </p>
     </div>
   );
 }
 
-/** A strip of cells split by black rules; the picked cell fills black. */
+/** Radios drawn as the kit's Segmented control: a grey track with the picked option on a white chip. */
 function Choice<T extends string>({ legend, name, value, options, onChange }: { legend: string; name: string; value: T; options: ReadonlyArray<{ id: T; label: string }>; onChange: (v: T) => void }) {
   return (
     <fieldset>
-      <legend className="text-[13px] font-semibold leading-5 text-brand-black">{legend}</legend>
-      <div className="mt-2 grid grid-cols-3 divide-x divide-brand-black overflow-hidden rounded-[4px] border border-brand-black">
+      <legend className="text-[13.5px] text-text">{legend}</legend>
+      <div className="mt-2 grid grid-cols-3 gap-0.5 rounded-[var(--radius-sm)] bg-fill-tertiary p-0.5">
         {options.map((o) => (
-          <label key={o.id} className="flex min-h-10 cursor-pointer items-center justify-center px-1.5 text-center text-[12.5px] font-semibold leading-4 text-brand-black transition-colors duration-100 hover:bg-surface-active has-[:checked]:bg-brand-black has-[:checked]:text-white has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-4 has-[:focus-visible]:outline-brand-red lg:min-h-9">
+          <label key={o.id} className="flex min-h-9 cursor-pointer items-center justify-center rounded-[6px] px-1.5 text-center text-[12px] font-[550] leading-4 text-text-secondary transition-colors hover:bg-[rgba(0,0,0,0.04)] hover:text-text has-[:checked]:bg-surface has-[:checked]:text-text has-[:checked]:shadow-[var(--shadow-100),0_0_0_1px_rgba(26,26,26,0.07)] has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-1 has-[:focus-visible]:outline-accent lg:min-h-8">
             <input type="radio" name={name} value={o.id} checked={value === o.id} onChange={() => onChange(o.id)} className="sr-only" />
             {o.label}
           </label>
@@ -126,20 +104,20 @@ function Choice<T extends string>({ legend, name, value, options, onChange }: { 
   );
 }
 
-/** A black rail filled to a square red handle (.calc-range in globals.css), with the value set large beside its label. */
+/** The same slider as SavingsCalculator: label and value on one line, the browser's own range control in the accent color. */
 function Slider({ label, value, min, max, onChange, display }: { label: string; value: number; min: number; max: number; onChange: (v: number) => void; display: string }) {
   const id = useId();
   return (
     <div>
-      <div className="flex items-baseline justify-between gap-3">
-        <label htmlFor={id} className="text-[13px] font-semibold leading-5 text-brand-black">
+      <div className="flex items-baseline justify-between gap-3 text-[13.5px]">
+        <label htmlFor={id} className="text-text">
           {label}
         </label>
-        <output htmlFor={id} className="race-number shrink-0 text-[16px]! leading-5! text-brand-black">
+        <output htmlFor={id} className="shrink-0 font-semibold tabular text-text">
           {display}
         </output>
       </div>
-      <input id={id} type="range" min={min} max={max} step={1} value={value} onChange={(e) => onChange(Number(e.target.value))} aria-valuetext={display} className="calc-range mt-0.5" style={{ "--p": (value - min) / (max - min) } as CSSProperties} />
+      <input id={id} type="range" min={min} max={max} step={1} value={value} onChange={(e) => onChange(Number(e.target.value))} aria-valuetext={display} className="mt-2 block w-full accent-[var(--accent)]" />
     </div>
   );
 }
