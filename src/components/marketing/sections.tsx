@@ -7,28 +7,25 @@ import { SessionCta } from "./SessionCta";
 import { WasteCalculator } from "./WasteCalculator";
 import { CheckList, FeatureGrid, SectionTitle, container } from "./shared";
 
-/** The hero: copy on the left, the waste calculator on a red slab on the right (a red band under the copy on phones). */
+/** The hero: copy on the left, the waste calculator as a compact card on the right (under the copy on phones). The ground stays plain so the card is the one busy thing. */
 export function Hero({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
   return (
-    <section className="hero-ground relative overflow-hidden border-b border-border">
-      <span aria-hidden className="hero-slab absolute inset-y-0 hidden lg:block" />
-      <div className={`${container} relative grid items-center gap-10 pt-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-14 lg:py-16`}>
+    <section className="border-b border-border">
+      <div className={`${container} grid items-center gap-10 py-10 lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-16 lg:py-12`}>
         <div>
-          <h1 className="hero hero-in">
+          <h1 className="hero hero-compact hero-in">
             Built for the people who <span className="text-brand-red">build the cars.</span>
           </h1>
-          <p className="lede hero-in mt-5" style={{ animationDelay: "80ms" }}>
+          <p className="lede hero-in mt-4" style={{ animationDelay: "80ms" }}>
             cumulusOS runs parts, BOMs, builds, receiving and orders for chassis shops, race teams and aftermarket brands, with Strato drafting the bulk work for your approval.
           </p>
-          <CheckList className="hero-in mt-6" size="lg" items={[<><strong className="font-semibold text-text">Every part traced</strong> to its lot, heat number and build.</>, <><strong className="font-semibold text-text">Store, counter and accounting in sync</strong>, so stock is never oversold.</>, <><strong className="font-semibold text-text">Live for the whole shop in an afternoon</strong>, from the spreadsheet you have.</>]} />
-          <div className="hero-in mt-7" style={{ animationDelay: "160ms" }}>
+          <CheckList className="hero-in mt-5" items={[<><strong className="font-semibold text-text">Every part traced</strong> to its lot, heat number and build.</>, <><strong className="font-semibold text-text">Store, counter and accounting in sync</strong>, so stock is never oversold.</>, <><strong className="font-semibold text-text">Live for the whole shop in an afternoon</strong>, from the spreadsheet you have.</>]} />
+          <div className="hero-in mt-6" style={{ animationDelay: "160ms" }}>
             <SessionCta runtimeConfig={runtimeConfig} placement="hero" />
           </div>
         </div>
-        <div className="-mx-6 bg-brand-red px-4 py-8 sm:px-6 lg:mx-0 lg:bg-transparent lg:p-0">
-          <div className="mx-auto max-w-[480px] lg:max-w-none">
-            <WasteCalculator />
-          </div>
+        <div className="mx-auto w-full max-w-[480px] lg:max-w-none">
+          <WasteCalculator />
         </div>
       </div>
     </section>
@@ -45,7 +42,7 @@ const MOTORSPORT = [
 export function MotorsportSection() {
   return (
     <section id="motorsport" className="scroll-mt-16 border-t border-border bg-surface">
-      <div className={`${container} grid gap-12 py-20 md:py-28 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16`}>
+      <div className={`${container} grid gap-10 py-14 md:py-20 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-12`}>
         <SectionTitle title="From tube rack to finish line." body="Chassis builders, race teams and performance parts makers run on tight timelines and tighter traceability. cumulusOS keeps the count honest while the shop keeps moving." />
         <div>
           <FeatureGrid items={MOTORSPORT} />
@@ -68,7 +65,7 @@ const AUTOMOTIVE = [
 export function AutomotiveSection() {
   return (
     <section id="automotive" className="scroll-mt-16 border-t border-border">
-      <div className={`${container} grid gap-12 py-20 md:py-28 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16`}>
+      <div className={`${container} grid gap-10 py-14 md:py-20 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-12`}>
         <SectionTitle title="One count for every channel." body="Aftermarket brands live or die on stock accuracy across the web store, the counter and the dealer network. cumulusOS is the one count all of them read." />
         <div>
           <FeatureGrid items={AUTOMOTIVE} />
@@ -84,11 +81,11 @@ export function AutomotiveSection() {
 export function OtherIndustries() {
   return (
     <section id="contact" className="scroll-mt-16 border-t border-border bg-surface">
-      <div className={`${container} grid gap-12 py-20 md:py-24 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16`}>
+      <div className={`${container} grid gap-10 py-14 md:py-20 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-12`}>
         <Reveal>
           <h2 className="display">Not in vehicles? Let us have a look.</h2>
           <p className="lede mt-4">cumulusOS already runs a ranch store, an audio builder and a few shops that have nothing to do with cars. Tell us what you stock and what breaks, and we will tell you honestly whether it fits.</p>
-          <CheckList className="mt-8" items={["Any product business with parts, assemblies, lots or multiple sales channels.", "A reply from a founder, usually the same business day.", "If it is a fit, a call to see it on your own data."]} />
+          <CheckList className="mt-6" items={["Any product business with parts, assemblies, lots or multiple sales channels.", "A reply from a founder, usually the same business day.", "If it is a fit, a call to see it on your own data."]} />
         </Reveal>
         <Reveal delay={100}>
           <div className="rounded-[var(--radius-lg)] bg-bg p-6 shadow-[var(--shadow-bevel),var(--shadow-card)] md:p-8">
@@ -111,30 +108,29 @@ const STEPS = [
   { title: "Invite the shop and hand Strato the bulk work", body: "Teammates sign in with an emailed link and see the same numbers live. Price updates, counts and reorders become one request and one approval." },
 ];
 
-/** The page's one dark band: brand black with a red edge, four numbered steps. */
+/** The page's one dark band: brand black, four numbered steps. */
 export function Steps() {
   return (
-    <section id="steps" className="relative scroll-mt-16 overflow-hidden bg-brand-black text-band-text">
-      <span aria-hidden className="absolute inset-y-0 left-0 w-1.5 bg-brand-red" />
-      <div className={`${container} py-20 md:py-28`}>
+    <section id="steps" className="scroll-mt-16 bg-brand-black text-band-text">
+      <div className={`${container} py-14 md:py-20`}>
         <Reveal className="mx-auto flex max-w-[720px] flex-col items-center text-center">
           <h2 className="display text-band-text">Spreadsheet to live shop floor in an afternoon.</h2>
           <p className="mt-4 max-w-[34em] text-[15px] leading-6 text-band-text-secondary">Onboarding starts with your own data, not a tutorial, and we do the first import with you.</p>
         </Reveal>
-        <ol className="mt-14 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <ol className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {STEPS.map(({ title, body }, i) => (
             <Reveal key={title} delay={i * 70}>
-              <li className="flex h-full flex-col rounded-[var(--radius-lg)] border border-band-border bg-white/[0.04] p-6">
-                <span aria-hidden className="race-number text-[44px] text-brand-red">
+              <li className="flex h-full flex-col rounded-[var(--radius-lg)] border border-band-border bg-white/[0.04] p-5">
+                <span aria-hidden className="race-number text-[36px] text-brand-red">
                   0{i + 1}
                 </span>
-                <h3 className="mt-5 text-[16.5px] font-semibold leading-6 text-band-text">{title}</h3>
+                <h3 className="mt-4 text-[16px] font-semibold leading-6 text-band-text">{title}</h3>
                 <p className="mt-2 text-[14px] leading-6 text-band-text-secondary">{body}</p>
               </li>
             </Reveal>
           ))}
         </ol>
-        <div className="mt-10 flex flex-wrap items-center justify-center gap-2">
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
           <Button size="lg" href="/#demo" iconRight={<ArrowRight />} className="bg-white text-text hover:bg-white/90">
             Book a demo
           </Button>

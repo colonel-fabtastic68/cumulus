@@ -70,24 +70,24 @@ export function Comparison() {
   const rival = RIVALS.find((r) => r.id === picked)!;
   return (
     <section id="compare" className="scroll-mt-16 border-t border-border">
-      <div className={`${container} py-20 md:py-28`}>
+      <div className={`${container} py-14 md:py-20`}>
         <SectionTitle title="Everything an ERP does, without the project." body="The usual choice is a heavy system that takes months to set up, desktop software tied to one counter, or a spreadsheet that quietly drifts from the shelf. cumulusOS starts from the sheet you already have and is live the same afternoon, with an agent for the bulk work and the people who build it on the call." />
 
         {/* Wide screens: every product side by side. */}
-        <Reveal className="mt-12 hidden lg:block">
+        <Reveal className="mt-8 hidden lg:block">
           <div className="overflow-hidden rounded-[var(--radius-lg)] bg-surface shadow-[var(--shadow-bevel),var(--shadow-card)]">
             <table className="w-full table-fixed border-collapse text-left">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="w-[24%] px-5 py-4 align-bottom text-[13px] font-[550] text-text-secondary">What matters</th>
-                  <th className="bg-accent-soft/60 px-4 py-4 align-bottom text-[13.5px] font-semibold text-brand-red">
+                  <th className="w-[24%] px-5 py-3 align-bottom text-[13px] font-[550] text-text-secondary">What matters</th>
+                  <th className="bg-accent-soft/60 px-4 py-3 align-bottom text-[13.5px] font-semibold text-brand-red">
                     <span className="flex flex-col items-start gap-2">
                       <AppIcon size={22} />
                       cumulusOS
                     </span>
                   </th>
                   {RIVALS.map((r) => (
-                    <th key={r.id} className="px-4 py-4 align-bottom text-[13.5px] font-semibold text-text">
+                    <th key={r.id} className="px-4 py-3 align-bottom text-[13.5px] font-semibold text-text">
                       <span className="flex flex-col items-start gap-2">
                         <RivalMark id={r.id} size={22} />
                         <span className="min-w-0">{r.name}</span>
@@ -99,14 +99,14 @@ export function Comparison() {
               <tbody>
                 {ROWS.map((r) => (
                   <tr key={r.label} className="border-b border-border last:border-b-0">
-                    <th scope="row" className="px-5 py-3.5 text-[13.5px] font-medium leading-5 text-text">
+                    <th scope="row" className="px-5 py-2.5 text-[13.5px] font-medium leading-5 text-text">
                       {r.label}
                     </th>
-                    <td className="bg-accent-soft/60 px-4 py-3.5 align-middle">
+                    <td className="bg-accent-soft/60 px-4 py-2.5 align-middle">
                       <CellView value={r.ours} lead />
                     </td>
                     {RIVALS.map((c) => (
-                      <td key={c.id} className="px-4 py-3.5 align-middle">
+                      <td key={c.id} className="px-4 py-2.5 align-middle">
                         <CellView value={r.theirs[c.id]} lead={false} />
                       </td>
                     ))}
@@ -118,7 +118,7 @@ export function Comparison() {
         </Reveal>
 
         {/* Phones and tablets: pick one product and read it against cumulusOS. */}
-        <Reveal className="mt-10 lg:hidden">
+        <Reveal className="mt-8 lg:hidden">
           <fieldset>
             <legend className="text-[13.5px] font-medium text-text">Compare cumulusOS with</legend>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -145,13 +145,13 @@ export function Comparison() {
               <tbody>
                 {ROWS.map((r) => (
                   <tr key={r.label} className="border-b border-border last:border-b-0">
-                    <th scope="row" className="px-4 py-3 text-[13px] font-medium leading-5 text-text">
+                    <th scope="row" className="px-4 py-2.5 text-[13px] font-medium leading-5 text-text">
                       {r.label}
                     </th>
-                    <td className="bg-accent-soft/60 px-3 py-3 align-middle">
+                    <td className="bg-accent-soft/60 px-3 py-2.5 align-middle">
                       <CellView value={r.ours} lead />
                     </td>
-                    <td className="px-3 py-3 align-middle">
+                    <td className="px-3 py-2.5 align-middle">
                       <CellView value={r.theirs[picked]} lead={false} />
                     </td>
                   </tr>
@@ -161,9 +161,9 @@ export function Comparison() {
           </div>
         </Reveal>
 
-        <p className="mt-4 text-[12.5px] leading-5 text-text-tertiary">Based on each product&apos;s public pages in November 2026 and on how teams describe their rollouts to us. Plans change; check the current ones. Product names and marks belong to their owners and appear only to identify what is being compared.</p>
+        <p className="mt-3 text-[12.5px] leading-5 text-text-tertiary">Based on each product&apos;s public pages in November 2026 and on how teams describe their rollouts to us. Plans change; check the current ones. Product names and marks belong to their owners and appear only to identify what is being compared.</p>
 
-        <ul className="mt-12 grid gap-6 md:grid-cols-3">
+        <ul className="mt-8 grid gap-6 md:grid-cols-3">
           {[
             { title: "Setup measured in hours", body: "Import your sheet, your QuickBooks or your store, and the workspace is live. We sit with you for the first import." },
             { title: "One ledger, every number", body: "Nothing edits on-hand directly. Builds, receipts, shipments and returns are movements, so what you see is what is on the shelf." },

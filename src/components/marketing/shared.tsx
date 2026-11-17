@@ -70,7 +70,7 @@ export interface FeatureItem {
 /** Icon, title and a sentence or two, in two or three columns. */
 export function FeatureGrid({ items, columns = 2, className }: { items: FeatureItem[]; columns?: 2 | 3; className?: string }) {
   return (
-    <ul className={cn("grid gap-x-10 gap-y-9", columns === 3 ? "sm:grid-cols-2 lg:grid-cols-3" : "md:grid-cols-2", className)}>
+    <ul className={cn("grid gap-x-8 gap-y-7", columns === 3 ? "sm:grid-cols-2 lg:grid-cols-3" : "md:grid-cols-2", className)}>
       {items.map(({ icon: Icon, title, body }, i) => (
         <Reveal key={title} delay={(i % columns) * 60}>
           <li className="flex gap-4">
