@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-/** Desktop page links; the current page is underlined in red. */
+/** Desktop page links, from the lg breakpoint (below it the links live in MobileMenu); the current page is underlined in red. */
 export function NavLinks({ links }: { links: Array<{ href: string; label: string }> }) {
   const pathname = usePathname();
   return (
-    <nav className="hidden items-center gap-1 md:flex" aria-label="Pages">
+    <nav className="hidden items-center gap-1 lg:flex" aria-label="Pages">
       {links.map((l) => {
         const active = pathname === l.href;
         return (

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Barcode, Boxes, CalendarRange, ClipboardList, FileSpreadsheet, FileText, Hammer, Layers, PackageCheck, Plug, RotateCcw, Scale, ShoppingCart, Timer, Truck, Users } from "lucide-react";
+import { ArrowRight, Barcode, Boxes, CalendarRange, ClipboardList, FileSpreadsheet, FileText, Hammer, Layers, PackageCheck, Plug, RotateCcw, Scale, ShoppingCart, Timer, Truck, Users } from "lucide-react";
+import { Button } from "@/components/ui";
 import { ProductPreview } from "@/components/marketing/ProductPreview";
 import { Reveal } from "@/components/marketing/Reveal";
 import { StratoPreview } from "@/components/marketing/StratoPreview";
@@ -66,6 +67,9 @@ export default function ProductPage() {
               ))}
             </ul>
             <p className="mt-8 text-[13px] text-text-tertiary">Runs on Google Gemini. Other agents can use the same tools over MCP, behind a token you set.</p>
+            <Button variant="plain" href="/assistant" iconRight={<ArrowRight />} className="mt-4">
+              How Strato works an order
+            </Button>
           </Reveal>
           <Reveal delay={100}>
             <StratoPreview />

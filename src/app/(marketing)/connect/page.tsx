@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { ArrowDownToLine, ArrowUpFromLine, FileSpreadsheet, KeyRound, Plug, RefreshCw, Webhook } from "lucide-react";
+import { ArrowDownToLine, ArrowRight, ArrowUpFromLine, FileSpreadsheet, KeyRound, Mail, Phone, Plug, RefreshCw, Webhook } from "lucide-react";
+import { Button } from "@/components/ui";
 import { BrandMark, type BrandId } from "@/components/marketing/IntegrationLogos";
 import { Reveal } from "@/components/marketing/Reveal";
 import { SavingsCalculator } from "@/components/marketing/SavingsCalculator";
@@ -7,7 +8,7 @@ import { CheckList, CtaBand, FeatureGrid, PageHero, SectionTitle, container } fr
 
 export const metadata: Metadata = {
   title: "Integrations · cumulusOS",
-  description: "How cumulusOS connects to Shopify, WooCommerce, Square, Clover, QuickBooks, Shippo and EasyPost in a few clicks, keeps stock in sync with webhooks, and what the re-keying it replaces costs a shop every week.",
+  description: "How cumulusOS connects to Shopify, WooCommerce, Square, Clover, QuickBooks, Shippo and EasyPost in a few clicks, keeps stock in sync with webhooks, takes orders that arrive by email and phone, opens the workspace to your own assistants over MCP, and what the re-keying it replaces costs a shop every week.",
 };
 
 const CONNECTIONS: Array<{ id: BrandId; name: string; direction: string; body: string }> = [
@@ -18,6 +19,13 @@ const CONNECTIONS: Array<{ id: BrandId; name: string; direction: string; body: s
   { id: "quickbooks", name: "QuickBooks Online", direction: "Books in", body: "Products and services in by SKU with sales price, purchase cost and reorder point, so the books and the shelf agree." },
   { id: "shippo", name: "Shippo", direction: "Shipping out", body: "Rates, labels and tracking for every carrier on your Shippo account when you ship an order from cumulusOS." },
   { id: "easypost", name: "EasyPost", direction: "Shipping out", body: "Rate-shop the carriers on your account, buy the label and follow the parcel to the door." },
+];
+
+/** Ways in that are not a store or a register. Email and phone sit behind the connectors preview flag: only messages added by hand are read today. */
+const BEYOND = [
+  { icon: Mail, name: "Email", tag: "In preview", preview: true, body: "Add an emailed order and Strato reads it into lines matched to your catalog, then opens it as a draft for you to check. Inboxes that connect directly are next." },
+  { icon: Phone, name: "Phone", tag: "In preview", preview: true, body: "Notes from a call are read into a draft order the same way. A phone line that takes the order itself is next." },
+  { icon: Plug, name: "MCP", tag: "Assistants in", preview: false, body: "cumulusOS speaks the Model Context Protocol, so Claude, Cursor or an agent your team built can read the workspace and use the same tools Strato does, behind a token you set." },
 ];
 
 const HOW = [
@@ -76,14 +84,37 @@ export default function ConnectPage() {
         </div>
       </section>
 
-      <section className="border-t border-border bg-surface">
+      <section id="orders" className="scroll-mt-16 border-t border-border bg-surface">
+        <div className={`${container} py-20 md:py-28`}>
+          <SectionTitle title="Orders that never touch a store." body="Plenty of orders still arrive as an email or a phone call, and some teams already work with an assistant of their own. Both lead into the same ledger, and Strato works the order from there." />
+          <ul className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {BEYOND.map(({ icon: Icon, name, tag, preview, body }, i) => (
+              <Reveal key={name} delay={i * 50}>
+                <li className="flex h-full flex-col rounded-[var(--radius)] bg-bg p-5 shadow-[var(--shadow-bevel)]">
+                  <div className="flex items-center gap-3">
+                    <Icon className="h-4 w-4 shrink-0 text-icon" />
+                    <h3 className="text-[15px] font-semibold text-text">{name}</h3>
+                    <span className={`ml-auto rounded-full px-2 py-0.5 text-[11.5px] font-medium ${preview ? "bg-surface text-text-secondary" : "bg-accent-soft text-brand-red-deep"}`}>{tag}</span>
+                  </div>
+                  <p className="mt-3 text-[13.5px] leading-6 text-text-secondary">{body}</p>
+                </li>
+              </Reveal>
+            ))}
+          </ul>
+          <Button variant="plain" href="/assistant" iconRight={<ArrowRight />} className="mt-8">
+            How Strato works an order
+          </Button>
+        </div>
+      </section>
+
+      <section className="border-t border-border">
         <div className={`${container} py-20 md:py-28`}>
           <SectionTitle title="Connect, import, stay live, push back." body="The same six steps for every platform, so the second connection takes less time than the first." />
           <FeatureGrid items={HOW} columns={3} className="mt-14" />
         </div>
       </section>
 
-      <section className="border-t border-border">
+      <section className="border-t border-border bg-surface">
         <div className={`${container} grid gap-12 py-20 md:py-28 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16`}>
           <Reveal>
             <h2 className="display">The re-keying is the expensive part.</h2>

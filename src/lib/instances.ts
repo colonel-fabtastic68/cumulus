@@ -135,6 +135,7 @@ export const SHARED_ONLY_PREFIXES = [
   "/baker",
   "/mitch",
   "/product",
+  "/assistant",
   "/motorsport",
   "/automotive",
   "/connect",

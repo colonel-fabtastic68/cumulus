@@ -10,6 +10,7 @@ import { SessionCta } from "./SessionCta";
 /** The pages of the site. Absolute paths, so they work from the legal pages too. */
 export const SITE_LINKS = [
   { href: "/product", label: "Product" },
+  { href: "/assistant", label: "Strato" },
   { href: "/motorsport", label: "Motorsport" },
   { href: "/automotive", label: "Automotive" },
   { href: "/connect", label: "Integrations" },
