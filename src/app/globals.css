@@ -520,6 +520,64 @@ input[type="number"]::-webkit-outer-spin-button {
   line-height: 1.05;
 }
 
+/* Hero calculator sliders: a black rail filled up to a square red handle. --p is how far along the value sits, 0 to 1.
+   The rail's two colors meet in a hard stop under the middle of the handle; it is a fill, not a blend. */
+.calc-range {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 28px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.calc-range::-webkit-slider-runnable-track {
+  height: 4px;
+  background: linear-gradient(to right, var(--brand-black) calc(9px + (100% - 18px) * var(--p, 0)), var(--border-strong) 0);
+}
+.calc-range::-moz-range-track {
+  height: 4px;
+  background: var(--border-strong);
+}
+.calc-range::-moz-range-progress {
+  height: 4px;
+  background: var(--brand-black);
+}
+.calc-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -7px;
+  border: 0;
+  border-radius: 0;
+  background: var(--brand-red);
+}
+.calc-range::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 0;
+  background: var(--brand-red);
+}
+.calc-range:focus-visible {
+  outline: none;
+}
+.calc-range:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid var(--brand-black);
+  outline-offset: 2px;
+}
+.calc-range:focus-visible::-moz-range-thumb {
+  outline: 2px solid var(--brand-black);
+  outline-offset: 2px;
+}
+@media (min-width: 1024px) {
+  .calc-range {
+    height: 22px;
+  }
+}
+
 /* Race patterns: one per section, never behind body text, always aria-hidden. */
 .pat-checker {
   background: repeating-conic-gradient(var(--brand-black) 0 25%, var(--surface) 0 50%) 0 0 / 16px 16px;

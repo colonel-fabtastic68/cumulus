@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ArrowRight, ClipboardList, Cpu, Eye, Hammer, History, Layers, Mail, PackageCheck, Phone, RotateCcw, ShoppingCart, Store, Truck, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui";
+import { BrandMark, type BrandId } from "@/components/marketing/IntegrationLogos";
 import { Reveal } from "@/components/marketing/Reveal";
 import { StratoOrderPreview } from "@/components/marketing/StratoOrderPreview";
 import { CheckList, CtaBand, FeatureGrid, SectionTitle, container } from "@/components/marketing/shared";
@@ -35,9 +36,17 @@ const CONTROL = [
   { icon: Cpu, title: "AI under the hood, for the heavy lifting", body: "Reading a supplier's PDF, matching forty part numbers or drafting a long order runs on a large language model, Google Gemini. It drafts and your team decides. On-hand and cost figures always come from the ledger, never from the model." },
 ];
 
-const MCP_FACTS = [
+/** `apps` are the assistants the workspace's own MCP card gives setup steps for; each is shown with its mark ahead of the rest of the line. */
+const MCP_FACTS: Array<{ term: string; detail: string; apps?: Array<{ id: BrandId; name: string }> }> = [
   { term: "Protocol", detail: "Model Context Protocol, over HTTP" },
-  { term: "Works with", detail: "Claude, Cursor and other MCP clients, or an agent your team built" },
+  {
+    term: "Works with",
+    apps: [
+      { id: "claude", name: "Claude" },
+      { id: "cursor", name: "Cursor" },
+    ],
+    detail: "and other MCP clients, or an agent your team built",
+  },
   { term: "Tools", detail: "The same set Strato uses" },
   { term: "Access", detail: "Behind a token you set" },
 ];
@@ -115,10 +124,25 @@ export default function StratoPage() {
           </Reveal>
           <Reveal delay={100}>
             <dl className="rounded-[var(--radius-lg)] bg-surface shadow-[var(--shadow-bevel),var(--shadow-card)]">
-              {MCP_FACTS.map(({ term, detail }) => (
+              {MCP_FACTS.map(({ term, detail, apps }) => (
                 <div key={term} className="grid grid-cols-[96px_minmax(0,1fr)] gap-4 border-b border-border px-5 py-3 text-[13.5px] leading-6 last:border-b-0">
                   <dt className="text-text-secondary">{term}</dt>
-                  <dd className="font-medium text-text">{detail}</dd>
+                  <dd className="font-medium text-text">
+                    {apps ? (
+                      <span className="flex flex-wrap items-center gap-x-4">
+                        {apps.map((app) => (
+                          <span key={app.id} className="inline-flex items-center gap-1.5">
+                            {/* The name is right beside it, so the mark itself is not read out. */}
+                            <span aria-hidden className="inline-flex">
+                              <BrandMark id={app.id} size={18} />
+                            </span>
+                            {app.name}
+                          </span>
+                        ))}
+                      </span>
+                    ) : null}
+                    {detail}
+                  </dd>
                 </div>
               ))}
             </dl>

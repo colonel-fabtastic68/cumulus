@@ -14,7 +14,7 @@ type RivalId = "orion" | "fishbowl" | "katana" | "inflow" | "sheets";
 
 /** Marks come from each vendor's own site (public/logos/compare) and only identify the product. */
 const RIVALS: Array<{ id: RivalId; name: string; logo?: { src: string; width: number; height: number; rounded?: boolean } }> = [
-  { id: "orion", name: "hpCommerce Orion", logo: { src: "/logos/compare/hpcommerce.png", width: 150, height: 72 } },
+  { id: "orion", name: "hpCommerce Orion", logo: { src: "/logos/compare/hpcommerce.png", width: 187, height: 72 } },
   { id: "fishbowl", name: "Fishbowl", logo: { src: "/logos/compare/fishbowl.png", width: 180, height: 180 } },
   { id: "katana", name: "Katana", logo: { src: "/logos/compare/katana.png", width: 180, height: 180, rounded: true } },
   { id: "inflow", name: "inFlow", logo: { src: "/logos/compare/inflow.svg", width: 31, height: 40 } },

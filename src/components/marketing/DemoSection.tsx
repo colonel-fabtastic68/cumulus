@@ -15,7 +15,8 @@ export function DemoSection({ calendlyUrl }: { calendlyUrl?: string }) {
           <h2 className="display">Thirty minutes on your own parts.</h2>
           <p className="lede mt-4">Bring a spreadsheet or a few part numbers. We walk through receiving, builds, orders and Strato on your data, with the people who build cumulusOS.</p>
           <CheckList className="mt-6" items={["No slides. The demo runs in a real workspace with your numbers.", "Leave with a plan for what to import first and what to connect.", "If it is not a fit, we will say so and point you somewhere better."]} />
-          <dl className="mt-6 grid gap-4 text-[13.5px] text-text-secondary sm:grid-cols-3">
+          {/* Two columns beside the form: three were narrower than the email address, which ran out of its cell and up against the form. */}
+          <dl className="mt-6 grid gap-x-6 gap-y-4 text-[13.5px] text-text-secondary sm:grid-cols-3 lg:grid-cols-2">
             <div className="flex items-start gap-2.5">
               <Clock className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
               <div>
@@ -32,10 +33,10 @@ export function DemoSection({ calendlyUrl }: { calendlyUrl?: string }) {
             </div>
             <div className="flex items-start gap-2.5">
               <Mail className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-              <div>
+              <div className="min-w-0">
                 <dt className="font-medium text-text">Prefer email?</dt>
                 <dd>
-                  <a href={`mailto:${CONTACT_EMAIL}`} className="text-text hover:text-accent">
+                  <a href={`mailto:${CONTACT_EMAIL}`} className="text-text [overflow-wrap:anywhere] hover:text-accent">
                     {CONTACT_EMAIL}
                   </a>
                 </dd>
