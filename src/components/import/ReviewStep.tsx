@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ArrowLeft, Download, FileWarning, Layers, Package, Plus, Trash2, Undo2 } from "lucide-react";
-import { Badge, Banner, Button, Card, Drawer, EmptyState, SearchField, Segmented, Table, Toggle, useToast, type Column, type ComboboxOption } from "@/components/ui";
+import { Badge, Banner, Button, Card, Drawer, EmptyState, Modal, SearchField, Segmented, Table, Toggle, useToast, type Column, type ComboboxOption } from "@/components/ui";
 import { canWrite, useCurrentUser } from "@/lib/auth";
 import { formatMoney, formatQty, pluralize } from "@/lib/format";
 import type { ImportBomLine } from "@/lib/importBoms";
@@ -60,6 +60,7 @@ export function ReviewStep({ source, mapping, fillSkus, overrides = NO_OVERRIDES
   const [importing, setImporting] = useState(false);
   const [openLine, setOpenLine] = useState<number | null>(null);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [tickedWarning, setTickedWarning] = useState(false);
 
   const sourceKind = source.kind === "generic" ? undefined : source.kind;
   const activeEdits = editing ? edits : NO_EDITS;
@@ -219,7 +220,17 @@ export function ReviewStep({ source, mapping, fillSkus, overrides = NO_OVERRIDES
     [settings.currency, editing, fileLength],
   );
 
+  /** Rows that will be saved as assemblies, so the count can be checked before importing. */
+  const assemblyCount = useMemo(() => toImport.filter((r) => (r.row.type ?? r.existing?.type) === "assembly").length, [toImport]);
+
+  /** Ticking a row only selects it; importing with rows still ticked asks first, since the ticks change nothing on their own. */
+  const requestImport = () => {
+    if (editing && selected.size > 0) setTickedWarning(true);
+    else void runImport();
+  };
+
   const runImport = async () => {
+    setTickedWarning(false);
     if (!writable || toImport.length === 0) return;
     setImporting(true);
     try {
@@ -245,18 +256,21 @@ export function ReviewStep({ source, mapping, fillSkus, overrides = NO_OVERRIDES
           Your role can review the file but not import it. Ask an owner or admin to run the import or change your role.
         </Banner>
       )}
-      <div className="grid grid-cols-2 gap-3 @md:grid-cols-4">
+      <div className={editing ? "grid grid-cols-2 gap-3 @md:grid-cols-5" : "grid grid-cols-2 gap-3 @md:grid-cols-4"}>
         <SummaryTile label="Rows" value={counts.all} />
         <SummaryTile label="New items" value={counts.new} tone="success" />
         <SummaryTile label="Updates" value={counts.update} tone="info" />
         <SummaryTile label="Errors" value={counts.error} tone={counts.error ? "critical" : "default"} />
+        {editing && <SummaryTile label="Assemblies" value={assemblyCount} tone={assemblyCount ? "info" : "default"} />}
       </div>
       {onOverrides && <StratoFill source={source} mapping={mapping} rows={bareRows} itemsBySku={itemsBySku} overrides={overrides} onOverrides={onOverrides} hint={describeAnswers(settings.onboarding)} />}
       <ImportChanges rows={reviewRows} />
 
       {editing && (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-text-secondary">
-          <span>Click a row to change it or give an assembly its parts list. Tick rows to mark several as assemblies, or to leave them out.</span>
+          <span>
+            Click a row to change it or give an assembly its parts list. To change several at once, tick them, then choose <span className="font-medium text-text">Mark as assembly</span>, <span className="font-medium text-text">Mark as part</span> or <span className="font-medium text-text">Remove from import</span> in the bar above the table. Ticking alone changes nothing.
+          </span>
           {(editedCount > 0 || addedCount > 0 || restorable.length > 0) && (
             <span className="text-text">
               {[editedCount > 0 && `${pluralize(editedCount, "row")} changed`, addedCount > 0 && `${pluralize(addedCount, "row")} added`, restorable.length > 0 && `${pluralize(restorable.length, "row")} left out`].filter(Boolean).join(", ")}.
@@ -387,10 +401,46 @@ export function ReviewStep({ source, mapping, fillSkus, overrides = NO_OVERRIDES
         <Button icon={<ArrowLeft />} onClick={onBack} disabled={importing}>
           Back
         </Button>
-        <Button variant="primary" icon={<Download />} loading={importing} disabled={!writable || toImport.length === 0} onClick={runImport}>
+        <Button variant="primary" icon={<Download />} loading={importing} disabled={!writable || toImport.length === 0} onClick={requestImport}>
           Import {pluralize(toImport.length, "row")}
         </Button>
       </div>
+
+      <Modal
+        open={tickedWarning}
+        onClose={() => setTickedWarning(false)}
+        title={`${pluralize(selected.size, "row is", "rows are")} ticked but not changed`}
+        subtitle="Ticking a row only selects it."
+        footer={
+          <>
+            <Button variant="plain" onClick={() => void runImport()}>
+              Import without changing them
+            </Button>
+            <Button
+              onClick={() => {
+                setTickedWarning(false);
+                markType(selected, "part");
+              }}
+            >
+              Mark as parts
+            </Button>
+            <Button
+              variant="primary"
+              icon={<Layers />}
+              onClick={() => {
+                setTickedWarning(false);
+                markType(selected, "assembly");
+              }}
+            >
+              Mark as assemblies
+            </Button>
+          </>
+        }
+      >
+        <p className="text-[13px] text-text-secondary">
+          Did you mean to change them first? Marking them updates the Type column and the Assemblies count; check them, then click Import again. Importing now saves them as they are shown.
+        </p>
+      </Modal>
     </div>
   );
 }
