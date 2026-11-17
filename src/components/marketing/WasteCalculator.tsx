@@ -72,8 +72,11 @@ export function WasteCalculator() {
           {/* The figure scales to the card: each glyph of the expanded face is about 1.1em wide, so the size is the width divided by the character count, capped at 44px. */}
           <div className="[container-type:inline-size]">
             <div className="text-[12px] leading-4 text-white/90">Estimated cost a year</div>
-            <div className="race-number mt-1 whitespace-nowrap" style={{ fontSize: `min(44px, ${(100 / (money(total).length * 1.1)).toFixed(2)}cqw)` }}>
-              {money(total)}
+            {/* The line keeps one height, so a longer figure set in smaller type never resizes the card. */}
+            <div className="mt-1 flex h-10 items-end">
+              <div className="race-number whitespace-nowrap" style={{ fontSize: `min(44px, ${(100 / (money(total).length * 1.1)).toFixed(2)}cqw)` }}>
+                {money(total)}
+              </div>
             </div>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
