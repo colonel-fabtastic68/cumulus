@@ -1,9 +1,27 @@
 import { skuFromName } from "@/lib/sku";
+import { bomLinesProblem } from "@/lib/importBoms";
 import type { ImportRow } from "@/lib/inventory";
 import type { Item } from "@/lib/types";
 import { uniq } from "@/lib/utils";
 import { customColumns, invertMapping } from "./mapping";
-import { FIELD_LABELS, type ColumnMapping, type ReviewRow, type TargetField } from "./types";
+import { FIELD_LABELS, type ColumnMapping, type ReviewRow, type RowEdit, type RowEdits, type TargetField } from "./types";
+
+/** Apply a review-step edit on top of a converted row: values win over the file, null clears. Returns the fields touched. */
+export function applyRowEdit(row: ImportRow, edit: RowEdit): string[] {
+  const target = row as unknown as Record<string, unknown>;
+  const touched: string[] = [];
+  for (const [k, v] of Object.entries(edit)) {
+    if (v === undefined) continue;
+    touched.push(k);
+    if (v === null) {
+      if (k === "sku") row.sku = "";
+      else delete target[k];
+    } else target[k] = v;
+  }
+  // A part has no parts list.
+  if (row.type === "part") delete row.bom;
+  return touched;
+}
 
 export interface NumberParse {
   value: number | undefined;
@@ -125,6 +143,7 @@ export function changedFields(row: ImportRow, existing: Item): string[] {
   }
   if (row.tags && row.tags.join("|") !== existing.tags.join("|")) out.push("tags");
   if (row.published === false && existing.status !== "inactive") out.push("status");
+  if (row.bom?.length) out.push("bom");
   for (const [k, v] of Object.entries(row.attributes ?? {})) if ((existing.attributes?.[k] ?? "") !== v) out.push(`custom:${k}`);
   return out;
 }
@@ -133,7 +152,7 @@ export function changedFields(row: ImportRow, existing: Item): string[] {
 /** Lower-case name with single spaces, for matching an import row to an existing item by name. */
 const nameKey = (s: string | undefined) => (s ?? "").trim().replace(/\s+/g, " ").toLowerCase();
 
-export function buildReviewRows(rows: Record<string, string>[], mapping: ColumnMapping, itemsBySku: Map<string, Item>, source?: "shopify" | "woocommerce", opts: { fillSkus?: boolean; overrides?: Map<number, Partial<ImportRow>> } = {}): ReviewRow[] {
+export function buildReviewRows(rows: Record<string, string>[], mapping: ColumnMapping, itemsBySku: Map<string, Item>, source?: "shopify" | "woocommerce", opts: { fillSkus?: boolean; overrides?: Map<number, Partial<ImportRow>>; edits?: RowEdits; skip?: ReadonlySet<number> } = {}): ReviewRow[] {
   const cols = invertMapping(mapping);
   const custom = customColumns(mapping);
   const seen = new Map<string, number>();
@@ -146,7 +165,15 @@ export function buildReviewRows(rows: Record<string, string>[], mapping: ColumnM
       for (const [k, v] of Object.entries(extra)) if (v !== undefined && k !== "sku" && target[k] === undefined) target[k] = v;
       if (extra.sku && !c.row.sku) c.row.sku = extra.sku;
     }
-    return c;
+    // A person's own edits win over the file and over Strato; a field they set no longer carries the file's parse error.
+    const edit = opts.edits?.get(i + 1);
+    if (edit) {
+      const touched = applyRowEdit(c.row, edit);
+      const labels = touched.map((f) => (FIELD_LABELS as Record<string, string>)[f]).filter(Boolean);
+      const errors = c.errors.filter((e) => !labels.some((l) => e.startsWith(`${l}:`)));
+      return { row: c.row, errors, edited: touched.length > 0 };
+    }
+    return { ...c, edited: false };
   });
   // Rows without a SKU: an existing item with the same name keeps its SKU, otherwise one is made from the name,
   // unique among the workspace's SKUs and the file's own.
@@ -174,9 +201,11 @@ export function buildReviewRows(rows: Record<string, string>[], mapping: ColumnM
       filled.set(i, "made");
     });
   }
-  return rows.map((_, i) => {
+  // Lines left out of the import are dropped before duplicates are counted, so the copy that stays is not an error.
+  const kept = rows.map((_, i) => i).filter((i) => !opts.skip?.has(i + 1));
+  const checked = kept.map((i) => {
     const line = i + 1;
-    const { row, errors } = converted[i]!;
+    const { row, errors, edited } = converted[i]!;
     const sku = row.sku.trim().toUpperCase();
     const existing = sku ? itemsBySku.get(sku) : undefined;
     if (!sku) errors.unshift("Missing SKU");
@@ -186,7 +215,17 @@ export function buildReviewRows(rows: Record<string, string>[], mapping: ColumnM
       else seen.set(sku, line);
     }
     if (sku && !existing && !row.name?.trim()) errors.push("Name is required for new items");
+    return { line, sku, existing, row, errors, edited, filled: filled.get(i) };
+  });
+  // Parts lists may only name items that will exist: ones already in inventory, or rows of this file that import cleanly.
+  const known = new Set<string>(itemsBySku.keys());
+  for (const c of checked) if (c.sku && c.errors.length === 0) known.add(c.sku);
+  return checked.map(({ line, sku, existing, row, errors, edited, filled: how }) => {
+    if (sku && row.bom?.length) {
+      const problem = bomLinesProblem(sku, row.bom, known);
+      if (problem) errors.push(problem);
+    }
     const status: ReviewRow["status"] = errors.length ? "error" : existing ? "update" : "new";
-    return { line, sku, ...(filled.has(i) ? { skuFilled: filled.get(i) } : {}), status, message: errors.length ? errors.join("; ") : undefined, row, existing, changedFields: existing && !errors.length ? changedFields(row, existing) : [] };
+    return { line, sku, ...(how ? { skuFilled: how } : {}), status, message: errors.length ? errors.join("; ") : undefined, row, existing, changedFields: existing && !errors.length ? changedFields(row, existing) : [], ...(edited ? { edited: true } : {}) };
   });
 }
