@@ -119,7 +119,7 @@ export class FirestoreStore implements Store {
     this.cache = {
       items: [], movements: [], lots: [], suppliers: [], receipts: [], builds: [], orders: [],
       rmas: [], members: [], activity: [], integrations: [], settings: [], agentSessions: [],
-      locations: [], transfers: [], shipments: [], quotes: [], channelTombstones: [], quoteTemplates: [], orderTemplates: [], customers: [], events: [], purchaseOrders: [], purchaseOrderTemplates: [], cycleCounts: [], documents: [], packs: [], workOrders: [], jobs: [], connectors: [], intakeMessages: [],
+      locations: [], transfers: [], shipments: [], quotes: [], channelTombstones: [], quoteTemplates: [], orderTemplates: [], customers: [], events: [], purchaseOrders: [], purchaseOrderTemplates: [], cycleCounts: [], documents: [], packs: [], workOrders: [], jobs: [], serials: [], serialEvents: [], connectors: [], intakeMessages: [],
     };
     for (const name of COLLECTIONS) {
       const p = new Promise<void>((resolve, reject) => {

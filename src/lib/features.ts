@@ -154,6 +154,20 @@ export const FEATURES = {
     area: "Production",
     notes: [51],
   },
+  serials: {
+    label: "Serial numbers",
+    description: "Give each unit of an assembly its own serial number when its work order is released, with a record page showing its history, what went into it, where it is and who bought it.",
+    status: "preview",
+    area: "Production",
+    notes: [],
+  },
+  workOrderSteps: {
+    label: "Work order steps",
+    description: "A list of steps on each work order (cut, weld, paint, assemble, check), copied from the item's standard steps, so the run shows which step it is on and since when.",
+    status: "preview",
+    area: "Production",
+    notes: [],
+  },
   jobs: {
     label: "Jobs and projects",
     description: "Group orders, purchases, work and stock issued under a job, with the people assigned and the running cost.",

@@ -121,6 +121,14 @@ export interface Item {
 
   /** Bill of materials. Only meaningful for assemblies. */
   bom: BomLine[];
+  /** Feature `serials`: "serial" gives every unit made its own serial number. Absent = not tracked by unit. */
+  tracking?: ItemTracking;
+  /** How serial numbers are written: "{SKU}" and a run of # for the counter, e.g. "CH-{####}". Absent = "{SKU}-{####}". */
+  serialFormat?: string;
+  /** The next serial counter for this item. Absent = 1. */
+  serialNext?: number;
+  /** Feature `workOrderSteps`: the standard steps to make this item, copied onto each work order when it is released. */
+  routing?: RoutingStep[];
   /** Chip color for assemblies, so families of builds are easy to tell apart in lists. */
   color?: string;
   /** Price per customer price group (Settings → Catalog), keyed by group id. Falls back to the list price. */
@@ -380,6 +388,100 @@ export interface Build {
 
 export type WorkOrderStatus = "planned" | "released" | "in_progress" | "completed" | "cancelled";
 
+export type ItemTracking = "none" | "serial";
+
+/** One standard step to make an item (feature `workOrderSteps`), e.g. "Weld" at "Fab bay", 2 days. */
+export interface RoutingStep {
+  name: string;
+  /** Where the step happens: a work area, a machine or an outside vendor, by name. */
+  workCenter?: string;
+  /** Done by an outside vendor (powder coat, plating, heat treat) rather than in the shop. */
+  outside?: boolean;
+  /** Planned working days, used to lay out the step's dates from the run's start. */
+  days?: number;
+}
+
+export type WorkOrderStepStatus = "pending" | "in_progress" | "done" | "skipped";
+
+/** A step on one work order, copied from the item's routing at release or added to the run. */
+export interface WorkOrderStep {
+  id: ID;
+  name: string;
+  workCenter?: string;
+  outside?: boolean;
+  status: WorkOrderStepStatus;
+  /** Planned window (YYYY-MM-DD). */
+  plannedStart?: string;
+  plannedFinish?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  /** Member who finished or skipped it. */
+  finishedBy?: ID;
+  note?: string;
+}
+
+/**
+ * Feature `serials`. Where one serial-tracked unit is in its life: created with its work order,
+ * made, on the shelf, built into a bigger unit, shipped, or cancelled before it was made.
+ */
+export type SerialStatus = "planned" | "in_production" | "in_stock" | "installed" | "shipped" | "scrapped" | "voided";
+
+/**
+ * One physical unit with its own number (src/lib/serials.ts). Quantities still move through the
+ * stock ledger; the serial says which unit: where it is, what it went into and who bought it.
+ * A finished serial is its own one-unit batch (lot), so its cost and traceability come from the ledger.
+ */
+export interface Serial {
+  id: ID;
+  itemId: ID;
+  /** e.g. "CH-0147". Unique per item. */
+  number: string;
+  status: SerialStatus;
+  /** Its one-unit batch, set when the unit is finished. */
+  lotId?: ID;
+  locationId?: ID;
+  /** Made by this run and booked by this build. */
+  workOrderId?: ID;
+  buildId?: ID;
+  /** The bigger unit this one was built into (a control arm into a chassis). */
+  parentSerialId?: ID;
+  installedAt?: string;
+  /** Sold on this order, to this customer. */
+  orderId?: ID;
+  customerId?: ID;
+  customer?: string;
+  shipmentId?: ID;
+  jobId?: ID;
+  /** Modular BOMs: the alternatives and optional parts it was built with. */
+  options?: BomSelection;
+  finishedAt?: string;
+  shippedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+}
+
+export type SerialEventKind = "created" | "step_started" | "step_finished" | "step_skipped" | "finished" | "installed" | "received_part" | "shipped" | "voided" | "note";
+
+/** One dated line in a serial's history. Added, never edited. */
+export interface SerialEvent {
+  id: ID;
+  serialId: ID;
+  kind: SerialEventKind;
+  /** When it happened; may be back-dated relative to createdAt. */
+  occurredAt: string;
+  /** Plain words for the timeline, e.g. "Started Powdercoat at Coater". */
+  text: string;
+  workOrderId?: ID;
+  stepId?: ID;
+  /** The other serial involved: the parent it went into, or the part that went into it. */
+  otherSerialId?: ID;
+  orderId?: ID;
+  createdAt: string;
+  createdBy: string;
+  createdByName?: string;
+}
+
 export interface WorkOrderComponent {
   itemId: ID;
   /** For the whole run, waste included. */
@@ -419,6 +521,10 @@ export interface WorkOrder {
   assignedTo?: ID[];
   /** Builds booked against this run, oldest first. */
   buildIds?: ID[];
+  /** Feature `workOrderSteps`: the steps of this run, in order. */
+  steps?: WorkOrderStep[];
+  /** Feature `serials`: the serial numbers of the units this run makes, created at release. */
+  serialIds?: ID[];
   note?: string;
   releasedAt?: string;
   startedAt?: string;
@@ -900,6 +1006,8 @@ export interface ShipmentLine {
   qty: number;
   /** Where this line was relieved from when it differs from the shipment's location (the part's own fulfillment location). */
   locationId?: ID;
+  /** Feature `serials`: the serial-numbered units that left on this line. */
+  serialIds?: ID[];
 }
 
 /** One parcel or hand-off against an order. An order can have several (partial shipments). */
@@ -1067,6 +1175,8 @@ export type ActivityType =
   | "workOrder.progress"
   | "workOrder.completed"
   | "workOrder.cancelled"
+  | "workOrder.step"
+  | "serial.note"
   | "job.created"
   | "job.updated"
   | "job.completed"
@@ -1082,7 +1192,7 @@ export interface ActivityEvent {
   message: string;
   actorId: string;
   actorName: string;
-  entityType?: "item" | "receipt" | "build" | "order" | "rma" | "supplier" | "member" | "transfer" | "shipment" | "integration" | "location" | "quote" | "purchaseOrder" | "cycleCount" | "workOrder" | "job" | "connector";
+  entityType?: "item" | "receipt" | "build" | "order" | "rma" | "supplier" | "member" | "transfer" | "shipment" | "integration" | "location" | "quote" | "purchaseOrder" | "cycleCount" | "workOrder" | "job" | "connector" | "serial";
   entityId?: ID;
   /** Free-form details, e.g. { count: 12 } for bulk operations. */
   meta?: Record<string, unknown>;
@@ -1593,6 +1703,8 @@ export interface CollectionMap {
   packs: PackListing;
   workOrders: WorkOrder;
   jobs: Job;
+  serials: Serial;
+  serialEvents: SerialEvent;
   connectors: Connector;
   intakeMessages: IntakeMessage;
 }
@@ -1629,6 +1741,8 @@ export const COLLECTIONS: CollectionName[] = [
   "packs",
   "workOrders",
   "jobs",
+  "serials",
+  "serialEvents",
   "connectors",
   "intakeMessages",
 ];

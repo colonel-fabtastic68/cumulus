@@ -49,6 +49,8 @@ export default function ExportsPage() {
     packs: useCollection("packs"),
     workOrders: useCollection("workOrders"),
     jobs: useCollection("jobs"),
+    serials: useCollection("serials"),
+    serialEvents: useCollection("serialEvents"),
     connectors: useCollection("connectors"),
     intakeMessages: useCollection("intakeMessages"),
   };

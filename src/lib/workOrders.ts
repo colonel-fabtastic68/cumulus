@@ -1,8 +1,10 @@
-import type { BomSelection, Item, WorkOrder, WorkOrderComponent, WorkOrderStatus } from "@/lib/types";
+import type { BomSelection, Build, Item, RoutingStep, Serial, WorkOrder, WorkOrderComponent, WorkOrderStatus, WorkOrderStep } from "@/lib/types";
 import type { Store, WriteOp } from "@/lib/store/types";
 import { activityOp, buildAssembly, explodeBom, InventoryError, nextNumber, type Actor } from "@/lib/inventory";
 import { bomSelectionError } from "@/lib/bomOptions";
 import { toDateInput } from "@/lib/format";
+import { isTracked, newSerials, SERIAL_UNFINISHED, serialEvent, serialsInStock } from "@/lib/serials";
+import { currentStep, stepsFromRouting } from "@/lib/workOrderSteps";
 import { newId, nowIso, round, sum } from "@/lib/utils";
 
 /**
@@ -157,6 +159,62 @@ function fixedComponents(items: Item[], assembly: Item, wo: Pick<WorkOrder, "qty
   return explodeFor(items, assembly, wo.qty, wo).map((r) => ({ itemId: r.item.id, qtyRequired: r.required, qtyConsumed: 0 }));
 }
 
+/** Serial numbers for units of a serial-tracked item made on this run (feature `serials`). */
+async function planSerials(store: Store, actor: Actor, item: Item, wo: WorkOrder, count: number): Promise<{ serials: Serial[]; ops: WriteOp[] }> {
+  if (count <= 0) return { serials: [], ops: [] };
+  const taken = (await store.list("serials")).filter((s) => s.itemId === item.id).map((s) => s.number);
+  const made = newSerials(
+    item,
+    count,
+    taken,
+    { workOrderId: wo.id, ...(wo.jobId ? { jobId: wo.jobId } : {}), ...(wo.orderId ? { orderId: wo.orderId } : {}), ...(wo.locationId ? { locationId: wo.locationId } : {}), ...(wo.options ? { options: wo.options } : {}) },
+    actor,
+    `Planned on ${wo.number}`,
+  );
+  return {
+    serials: made.serials,
+    ops: [
+      ...made.serials.map((doc): WriteOp => ({ op: "put", collection: "serials", doc })),
+      ...made.events.map((doc): WriteOp => ({ op: "put", collection: "serialEvents", doc })),
+      { op: "patch", collection: "items", id: item.id, patch: { serialNext: made.serialNext } },
+    ],
+  };
+}
+
+/** What a release adds: the item's standard steps (feature `workOrderSteps`) and serial numbers for the units (feature `serials`). */
+async function releaseExtras(store: Store, actor: Actor, assembly: Item, wo: WorkOrder): Promise<{ patch: Partial<Pick<WorkOrder, "steps" | "serialIds">>; ops: WriteOp[]; numbers: string[] }> {
+  const patch: Partial<Pick<WorkOrder, "steps" | "serialIds">> = {};
+  const ops: WriteOp[] = [];
+  let numbers: string[] = [];
+  if (assembly.routing?.length && !wo.steps?.length) patch.steps = stepsFromRouting(assembly.routing, wo.startOn);
+  if (isTracked(assembly) && !wo.serialIds?.length) {
+    const made = await planSerials(store, actor, assembly, wo, wo.qty - wo.qtyCompleted);
+    patch.serialIds = made.serials.map((s) => s.id);
+    numbers = made.serials.map((s) => s.number);
+    ops.push(...made.ops);
+  }
+  return { patch, ops, numbers };
+}
+
+function serialRange(numbers: string[]): string {
+  if (numbers.length === 0) return "";
+  return numbers.length === 1 ? ` · serial ${numbers[0]}` : ` · serials ${numbers[0]} to ${numbers[numbers.length - 1]}`;
+}
+
+/** The run's serials that are still being made. */
+function unfinishedSerials(wo: WorkOrder, all: Serial[]): Serial[] {
+  const byId = new Map(all.map((s) => [s.id, s]));
+  return (wo.serialIds ?? []).map((id) => byId.get(id)).filter((s): s is Serial => !!s && SERIAL_UNFINISHED.includes(s.status));
+}
+
+function voidOps(actor: Actor, serials: Serial[], why: string, workOrderId: string): WriteOp[] {
+  const now = nowIso();
+  return serials.flatMap((s): WriteOp[] => [
+    { op: "put", collection: "serials", doc: { ...s, status: "voided", updatedAt: now } },
+    { op: "put", collection: "serialEvents", doc: serialEvent(actor, s.id, "voided", why, { workOrderId }) },
+  ]);
+}
+
 export async function createWorkOrder(store: Store, actor: Actor, input: WorkOrderInput): Promise<WorkOrder> {
   const items = await store.list("items");
   const assembly = items.find((i) => i.id === input.assemblyId);
@@ -193,10 +251,13 @@ export async function createWorkOrder(store: Store, actor: Actor, input: WorkOrd
     updatedAt: now,
     createdBy: actor.id,
   };
+  const extras = input.release ? await releaseExtras(store, actor, assembly, wo) : { patch: {}, ops: [], numbers: [] };
+  Object.assign(wo, extras.patch);
   const all: WriteOp[] = [
     ...ops,
+    ...extras.ops,
     { op: "put", collection: "workOrders", doc: wo },
-    activityOp(actor, input.release ? "workOrder.released" : "workOrder.created", `${actor.name} ${input.release ? "released" : "planned"} ${wo.number}: ${wo.qty} × ${assembly.sku}${wo.dueOn ? `, due ${wo.dueOn}` : ""}`, { entityType: "workOrder", entityId: wo.id, meta: { qty: wo.qty, assembly: assembly.sku } }),
+    activityOp(actor, input.release ? "workOrder.released" : "workOrder.created", `${actor.name} ${input.release ? "released" : "planned"} ${wo.number}: ${wo.qty} × ${assembly.sku}${wo.dueOn ? `, due ${wo.dueOn}` : ""}${serialRange(extras.numbers)}`, { entityType: "workOrder", entityId: wo.id, meta: { qty: wo.qty, assembly: assembly.sku } }),
   ];
   await store.batch(all);
   return wo;
@@ -230,7 +291,23 @@ export async function updateWorkOrder(store: Store, actor: Actor, id: string, pa
     const kept = wo.components.filter((c) => c.qtyConsumed > 0 && !fresh.some((f) => f.itemId === c.itemId)).map((c) => ({ ...c, qtyRequired: c.qtyConsumed }));
     next.components = [...fresh, ...kept];
   }
-  await store.put("workOrders", next);
+  // A released serial-tracked run keeps one open serial per unit still to make.
+  const extra: WriteOp[] = [];
+  if (wo.status !== "planned" && next.qty !== wo.qty && wo.serialIds?.length) {
+    const assembly = (await store.list("items")).find((i) => i.id === wo.assemblyId);
+    if (assembly && isTracked(assembly)) {
+      const open = unfinishedSerials(wo, await store.list("serials"));
+      const needed = next.qty - next.qtyCompleted;
+      if (open.length < needed) {
+        const made = await planSerials(store, actor, assembly, next, needed - open.length);
+        next.serialIds = [...wo.serialIds, ...made.serials.map((s) => s.id)];
+        extra.push(...made.ops);
+      } else if (open.length > needed) {
+        extra.push(...voidOps(actor, open.slice(needed), `Dropped when ${wo.number} went down to ${next.qty}`, wo.id));
+      }
+    }
+  }
+  await store.batch([...extra, { op: "put", collection: "workOrders", doc: next }]);
   return next;
 }
 
@@ -243,11 +320,14 @@ export async function releaseWorkOrder(store: Store, actor: Actor, id: string): 
   if (!assembly) throw new InventoryError("The assembly on this work order no longer exists");
   if (assembly.bom.length === 0) throw new InventoryError(`${assembly.sku} has no bill of materials`);
   const now = nowIso();
-  const next: WorkOrder = { ...wo, status: "released", components: fixedComponents(items, assembly, wo), releasedAt: now, updatedAt: now };
+  let next: WorkOrder = { ...wo, status: "released", components: fixedComponents(items, assembly, wo), releasedAt: now, updatedAt: now };
+  const extras = await releaseExtras(store, actor, assembly, next);
+  next = { ...next, ...extras.patch };
   const short = workOrderNeeds(next, items).filter((n) => n.shortage > 0);
   await store.batch([
+    ...extras.ops,
     { op: "put", collection: "workOrders", doc: next },
-    activityOp(actor, "workOrder.released", `${actor.name} released ${wo.number}: ${wo.qty} × ${assembly.sku}${short.length ? ` · short on ${short.map((s) => s.item.sku).join(", ")}` : ""}`, { entityType: "workOrder", entityId: wo.id, meta: { short: short.map((s) => ({ sku: s.item.sku, shortage: s.shortage })) } }),
+    activityOp(actor, "workOrder.released", `${actor.name} released ${wo.number}: ${wo.qty} × ${assembly.sku}${short.length ? ` · short on ${short.map((s) => s.item.sku).join(", ")}` : ""}${serialRange(extras.numbers)}`, { entityType: "workOrder", entityId: wo.id, meta: { short: short.map((s) => ({ sku: s.item.sku, shortage: s.shortage })) } }),
   ]);
   return next;
 }
@@ -255,6 +335,8 @@ export async function releaseWorkOrder(store: Store, actor: Actor, id: string): 
 export interface CompleteWorkOrderInput {
   /** Units finished now. Defaults to everything still open. */
   qty?: number;
+  /** Serial-tracked runs: which units are finished now. Defaults to the oldest open serials. */
+  serialIds?: string[];
   occurredAt?: string;
   note?: string;
 }
@@ -262,39 +344,102 @@ export interface CompleteWorkOrderInput {
 /**
  * Books finished units: a Build takes the components out and puts the units in,
  * and the run moves to in progress or completed. A planned run is released first.
+ *
+ * A serial-tracked item is booked one build per unit, so each serial gets its own
+ * one-unit batch and cost; numbered parts it consumed are recorded as built into it.
  */
 export async function completeWorkOrder(store: Store, actor: Actor, id: string, input: CompleteWorkOrderInput = {}): Promise<{ workOrder: WorkOrder; buildNumber: string }> {
   let wo = await loadWorkOrder(store, id);
   if (!workOrderIsOpen(wo)) throw new InventoryError(`${wo.number} is already ${WORK_ORDER_STATUS_LABEL[wo.status].toLowerCase()}`);
   if (wo.status === "planned") wo = await releaseWorkOrder(store, actor, id);
   const remaining = workOrderRemaining(wo);
-  const qty = input.qty ?? remaining;
+  const qty = input.qty ?? (input.serialIds?.length || remaining);
   checkQty(qty);
   if (qty > remaining) throw new InventoryError(`Only ${remaining} of ${wo.number} are still open`);
-  const build = await buildAssembly(store, actor, {
-    assemblyId: wo.assemblyId,
-    qty,
-    consumeSubassemblies: wo.consumeSubassemblies,
-    locationId: wo.locationId,
-    options: wo.options,
-    occurredAt: input.occurredAt,
-    workOrderId: wo.id,
-    jobId: wo.jobId,
-    note: input.note?.trim() || `Work order ${wo.number}`,
-  });
-  const consumed = new Map(build.components.map((c) => [c.itemId, c.qtyConsumed]));
+  const note = input.note?.trim() || `Work order ${wo.number}`;
+  const buildInput = { assemblyId: wo.assemblyId, consumeSubassemblies: wo.consumeSubassemblies, locationId: wo.locationId, options: wo.options, occurredAt: input.occurredAt, workOrderId: wo.id, jobId: wo.jobId };
+
+  const items = await store.list("items");
+  const assembly = items.find((i) => i.id === wo.assemblyId);
+  const builds: Build[] = [];
+  const serialOps: WriteOp[] = [];
+  let serialIds = wo.serialIds;
+  const finishedNumbers: string[] = [];
+
+  if (assembly && isTracked(assembly)) {
+    const allSerials = await store.list("serials");
+    const open = unfinishedSerials(wo, allSerials);
+    let chosen: Serial[];
+    if (input.serialIds?.length) {
+      chosen = input.serialIds.map((sid) => open.find((s) => s.id === sid)).filter((s): s is Serial => !!s);
+      if (chosen.length !== input.serialIds.length) throw new InventoryError(`Some of the chosen serial numbers are not open on ${wo.number}`);
+      if (chosen.length !== qty) throw new InventoryError(`Choose one serial number per unit: ${qty} for ${qty} ${qty === 1 ? "unit" : "units"}`);
+    } else {
+      chosen = open.slice(0, qty);
+    }
+    // A run released before the item was tracked by unit gets its serials now.
+    if (chosen.length < qty) {
+      const made = await planSerials(store, actor, assembly, wo, qty - chosen.length);
+      chosen = [...chosen, ...made.serials];
+      serialIds = [...(wo.serialIds ?? []), ...made.serials.map((s) => s.id)];
+      serialOps.push(...made.ops);
+    }
+    const builtIn = new Set<string>();
+    // What one unit consumes, to choose its numbered parts before building so the ledger takes their own batches.
+    const perUnit = explodeFor(items, assembly, 1, wo);
+    for (const serial of chosen) {
+      const children = new Map<string, Serial[]>();
+      for (const r of perUnit) {
+        if (!isTracked(r.item)) continue;
+        const take = serialsInStock(allSerials, r.item.id, wo.locationId).filter((s) => !builtIn.has(s.id));
+        const pick = (take.length ? take : serialsInStock(allSerials, r.item.id).filter((s) => !builtIn.has(s.id))).slice(0, Math.round(r.required));
+        pick.forEach((s) => builtIn.add(s.id));
+        if (pick.length) children.set(r.item.id, pick);
+      }
+      const fromLotIds = Object.fromEntries([...children].map(([itemId, list]) => [itemId, list.map((s) => s.lotId).filter((id): id is string => !!id)]));
+      const build = await buildAssembly(store, actor, { ...buildInput, qty: 1, note: `${note} · ${serial.number}`, fromLotIds });
+      builds.push(build);
+      finishedNumbers.push(serial.number);
+      const at = build.completedAt ?? nowIso();
+      const now = nowIso();
+      serialOps.push(
+        { op: "put", collection: "serials", doc: { ...serial, status: "in_stock", lotId: build.lotId, buildId: build.id, ...(wo.locationId ? { locationId: wo.locationId } : {}), ...(wo.options ? { options: wo.options } : {}), finishedAt: at, updatedAt: now } },
+        { op: "put", collection: "serialEvents", doc: serialEvent(actor, serial.id, "finished", `Finished on ${wo.number} (${build.number})`, { occurredAt: at, workOrderId: wo.id }) },
+      );
+      // The numbered parts chosen above are recorded as built into this unit.
+      for (const [itemId, take] of children) {
+        const part = items.find((i) => i.id === itemId)!;
+        for (const child of take) {
+          builtIn.add(child.id);
+          serialOps.push(
+            { op: "put", collection: "serials", doc: { ...child, status: "installed", parentSerialId: serial.id, installedAt: at, updatedAt: now } },
+            { op: "put", collection: "serialEvents", doc: serialEvent(actor, child.id, "installed", `Built into ${serial.number} on ${wo.number}`, { occurredAt: at, workOrderId: wo.id, otherSerialId: serial.id }) },
+            { op: "put", collection: "serialEvents", doc: serialEvent(actor, serial.id, "received_part", `${child.number} (${part.sku}) built in`, { occurredAt: at, workOrderId: wo.id, otherSerialId: child.id }) },
+          );
+        }
+      }
+    }
+  } else {
+    builds.push(await buildAssembly(store, actor, { ...buildInput, qty, note }));
+  }
+
+  const consumed = new Map<string, number>();
+  for (const b of builds) for (const c of b.components) consumed.set(c.itemId, round((consumed.get(c.itemId) ?? 0) + c.qtyConsumed, 4));
   const components = wo.components.map((c) => ({ ...c, qtyConsumed: round(c.qtyConsumed + (consumed.get(c.itemId) ?? 0), 3) }));
   // A substitution made at build time (a sub-assembly exploded because it was short) lands as its own line.
   for (const [itemId, used] of consumed) if (!components.some((c) => c.itemId === itemId)) components.push({ itemId, qtyRequired: used, qtyConsumed: used });
   const qtyCompleted = round(wo.qtyCompleted + qty, 3);
   const done = qtyCompleted >= wo.qty;
   const now = nowIso();
-  const next: WorkOrder = { ...wo, qtyCompleted, components, status: done ? "completed" : "in_progress", buildIds: [...(wo.buildIds ?? []), build.id], startedAt: wo.startedAt ?? now, completedAt: done ? now : undefined, updatedAt: now };
+  const buildNumber = builds.length > 2 ? `${builds[0]!.number} to ${builds[builds.length - 1]!.number}` : builds.map((b) => b.number).join(", ");
+  const next: WorkOrder = { ...wo, qtyCompleted, components, status: done ? "completed" : "in_progress", buildIds: [...(wo.buildIds ?? []), ...builds.map((b) => b.id)], ...(serialIds ? { serialIds } : {}), startedAt: wo.startedAt ?? now, completedAt: done ? now : undefined, updatedAt: now };
+  const serialsNote = finishedNumbers.length ? ` · ${finishedNumbers.join(", ")}` : "";
   await store.batch([
+    ...serialOps,
     { op: "put", collection: "workOrders", doc: next },
-    activityOp(actor, done ? "workOrder.completed" : "workOrder.progress", done ? `${actor.name} completed ${wo.number} (${build.number})` : `${actor.name} booked ${qty} of ${wo.qty} on ${wo.number} (${build.number})`, { entityType: "workOrder", entityId: wo.id, meta: { buildId: build.id, qty } }),
+    activityOp(actor, done ? "workOrder.completed" : "workOrder.progress", done ? `${actor.name} completed ${wo.number} (${buildNumber})${serialsNote}` : `${actor.name} booked ${qty} of ${wo.qty} on ${wo.number} (${buildNumber})${serialsNote}`, { entityType: "workOrder", entityId: wo.id, meta: { buildIds: builds.map((b) => b.id), qty } }),
   ]);
-  return { workOrder: next, buildNumber: build.number };
+  return { workOrder: next, buildNumber };
 }
 
 /** Stops a run. Units already booked stay built; the rest of the parts are no longer committed. */
@@ -303,9 +448,90 @@ export async function cancelWorkOrder(store: Store, actor: Actor, id: string, re
   if (!workOrderIsOpen(wo)) throw new InventoryError(`${wo.number} is already ${WORK_ORDER_STATUS_LABEL[wo.status].toLowerCase()}`);
   const now = nowIso();
   const next: WorkOrder = { ...wo, status: "cancelled", cancelledAt: now, updatedAt: now, note: reason?.trim() ? [wo.note, `Cancelled: ${reason.trim()}`].filter(Boolean).join("\n") : wo.note };
+  // Serials of units never made are cancelled with the run; finished ones keep their history.
+  const voided = wo.serialIds?.length ? voidOps(actor, unfinishedSerials(wo, await store.list("serials")), `Cancelled with ${wo.number}`, wo.id) : [];
   await store.batch([
+    ...voided,
     { op: "put", collection: "workOrders", doc: next },
     activityOp(actor, "workOrder.cancelled", `${actor.name} cancelled ${wo.number}${reason?.trim() ? `: ${reason.trim()}` : ""}${wo.qtyCompleted > 0 ? ` (${wo.qtyCompleted} units already built stay in stock)` : ""}`, { entityType: "workOrder", entityId: wo.id }),
   ]);
+  return next;
+}
+
+// ---- Steps (feature `workOrderSteps`) ---------------------------------------
+
+export type StepAction = "start" | "finish" | "skip";
+
+const STEP_VERB: Record<StepAction, string> = { start: "started", finish: "finished", skip: "skipped" };
+
+/**
+ * Starts, finishes or skips the run's current step. Steps are worked in order, so only the
+ * first step not yet done or skipped can move. Finishing a step that was never started
+ * starts and finishes it at once. The run's unfinished serials get a line in their history.
+ */
+export async function advanceWorkOrderStep(store: Store, actor: Actor, id: string, stepId: string, action: StepAction, opts: { occurredAt?: string; note?: string } = {}): Promise<WorkOrder> {
+  const wo = await loadWorkOrder(store, id);
+  if (!workOrderIsOpen(wo)) throw new InventoryError(`${wo.number} is ${WORK_ORDER_STATUS_LABEL[wo.status].toLowerCase()}`);
+  if (wo.status === "planned") throw new InventoryError(`Release ${wo.number} before working its steps`);
+  const steps = wo.steps ?? [];
+  const idx = steps.findIndex((s) => s.id === stepId);
+  if (idx < 0) throw new InventoryError("That step is no longer on this work order");
+  const current = currentStep(wo);
+  if (!current) throw new InventoryError(`Every step on ${wo.number} is already done`);
+  if (current.id !== stepId) throw new InventoryError(`Steps are worked in order: finish or skip "${current.name}" first`);
+  if (action === "start" && current.status === "in_progress") throw new InventoryError(`"${current.name}" is already started`);
+
+  const at = opts.occurredAt ?? nowIso();
+  const step: WorkOrderStep = { ...current, ...(opts.note?.trim() ? { note: opts.note.trim() } : {}) };
+  if (action === "start") {
+    step.status = "in_progress";
+    step.startedAt = at;
+  } else {
+    step.status = action === "finish" ? "done" : "skipped";
+    if (action === "finish") step.startedAt = step.startedAt ?? at;
+    step.finishedAt = at;
+    step.finishedBy = actor.id;
+  }
+  const now = nowIso();
+  const next: WorkOrder = { ...wo, steps: steps.map((s, i) => (i === idx ? step : s)), startedAt: wo.startedAt ?? (action === "skip" ? undefined : at), updatedAt: now };
+  const label = `${step.name}${step.workCenter ? ` at ${step.workCenter}` : ""}`;
+  const kind = action === "start" ? "step_started" : action === "finish" ? "step_finished" : "step_skipped";
+  const text = `${action === "start" ? "Started" : action === "finish" ? "Finished" : "Skipped"} ${label}${step.outside && action === "start" ? " (outside)" : ""}`;
+
+  const ops: WriteOp[] = [];
+  if (wo.serialIds?.length) {
+    for (const s of unfinishedSerials(wo, await store.list("serials"))) {
+      if (action !== "skip" && s.status === "planned") ops.push({ op: "put", collection: "serials", doc: { ...s, status: "in_production", updatedAt: now } });
+      ops.push({ op: "put", collection: "serialEvents", doc: serialEvent(actor, s.id, kind, text, { occurredAt: at, workOrderId: wo.id, stepId: step.id }) });
+    }
+  }
+  await store.batch([
+    ...ops,
+    { op: "put", collection: "workOrders", doc: next },
+    activityOp(actor, "workOrder.step", `${actor.name} ${STEP_VERB[action]} ${step.name} on ${wo.number}`, { entityType: "workOrder", entityId: wo.id, meta: { step: step.name, action } }),
+  ]);
+  return next;
+}
+
+/** Adds a step at the end of an open run, for work its item's standard steps do not cover. */
+export async function addWorkOrderStep(store: Store, actor: Actor, id: string, input: RoutingStep): Promise<WorkOrder> {
+  const wo = await loadWorkOrder(store, id);
+  if (!workOrderIsOpen(wo)) throw new InventoryError(`${wo.number} is ${WORK_ORDER_STATUS_LABEL[wo.status].toLowerCase()}`);
+  const [step] = stepsFromRouting([input]);
+  if (!step) throw new InventoryError("Give the step a name");
+  const next: WorkOrder = { ...wo, steps: [...(wo.steps ?? []), step], updatedAt: nowIso() };
+  await store.put("workOrders", next);
+  return next;
+}
+
+/** Removes a step that has not been started. */
+export async function removeWorkOrderStep(store: Store, actor: Actor, id: string, stepId: string): Promise<WorkOrder> {
+  const wo = await loadWorkOrder(store, id);
+  if (!workOrderIsOpen(wo)) throw new InventoryError(`${wo.number} is ${WORK_ORDER_STATUS_LABEL[wo.status].toLowerCase()}`);
+  const step = wo.steps?.find((s) => s.id === stepId);
+  if (!step) throw new InventoryError("That step is no longer on this work order");
+  if (step.status !== "pending") throw new InventoryError(`"${step.name}" has already been ${step.status === "in_progress" ? "started" : step.status}; it stays in the record`);
+  const next: WorkOrder = { ...wo, steps: (wo.steps ?? []).filter((s) => s.id !== stepId), updatedAt: nowIso() };
+  await store.put("workOrders", next);
   return next;
 }

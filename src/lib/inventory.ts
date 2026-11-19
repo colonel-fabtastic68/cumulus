@@ -23,6 +23,7 @@ import type { StockAlertRule,
   OrderLine,
   Receipt,
   RefType,
+  Serial,
   Rma,
   RmaDisposition,
   SalesOrder,
@@ -38,6 +39,7 @@ import type { Store, WriteOp } from "@/lib/store/types";
 import { daysBetween, newId, nowIso, round, sum } from "@/lib/utils";
 import { seedSettings } from "@/lib/seed";
 import { bomSelectionError, resolveBom } from "@/lib/bomOptions";
+import { isTracked, serialEvent, serialsInStock } from "@/lib/serials";
 import { toDateInput } from "@/lib/format";
 
 export type Actor = Pick<Member, "id" | "name">;
@@ -969,6 +971,8 @@ export interface BuildInput {
   /** The work order this build books units against, and the job it is for. */
   workOrderId?: string;
   jobId?: string;
+  /** Per component, batches to consume first (the batches of the serial-numbered parts being built in). */
+  fromLotIds?: Record<string, string[]>;
 }
 
 /** Factor 19/20: build an assembly, relieving components (and sub-assemblies) correctly. */
@@ -1012,7 +1016,7 @@ export async function buildAssembly(store: Store, actor: Actor, input: BuildInpu
   };
   // Components first: what they actually cost (their batches under FIFO, the moving average, or
   // standard cost) is what the finished units are worth.
-  const consume = await movementOps(store, actor, reqs.map((r) => ({ itemId: r.item.id, type: "build_consume" as const, locationId: input.locationId, qty: -r.required, refType: "build" as const, refId: build.id, occurredAt })));
+  const consume = await movementOps(store, actor, reqs.map((r) => ({ itemId: r.item.id, type: "build_consume" as const, locationId: input.locationId, qty: -r.required, refType: "build" as const, refId: build.id, occurredAt, ...(input.fromLotIds?.[r.item.id]?.length ? { fromLotIds: input.fromLotIds[r.item.id] } : {}) })));
   const consumed = sum(consume.movements.map((m) => -m.qty * (m.unitCost ?? 0)));
   const cost = consumed > 0 ? round(consumed / input.qty, 4) : rolledUpCost(items, assembly);
   const produce = await movementOps(store, actor, [{ itemId: assembly.id, type: "build_produce", locationId: input.locationId, qty: input.qty, unitCost: cost, lotId, refType: "build", refId: build.id, occurredAt }]);
@@ -1158,6 +1162,11 @@ export async function shipOrder(store: Store, actor: Actor, input: ShipInput): P
 
   const movementInputs: MovementInput[] = [];
   const shipLines: ShipmentLine[] = [];
+  // Feature `serials`: numbered units leave as themselves, oldest on the shelf first.
+  const tracked = requested.some((r) => isTracked(byId.get(r.itemId)));
+  const allSerials = tracked ? await store.list("serials") : [];
+  const shipping = new Set<string>();
+  const shippedSerials: Serial[] = [];
   for (const req of requested) {
     const line = lines.find((l) => l.itemId === req.itemId && openQty(l) > 0);
     const item = byId.get(req.itemId);
@@ -1168,7 +1177,18 @@ export async function shipOrder(store: Store, actor: Actor, input: ShipInput): P
     const lineLocationId = !input.ignoreRouting && line.locationId && (line.locationId === homeId || locations.some((l) => l.id === line.locationId && l.active)) ? line.locationId : undefined;
     const locationId = lineLocationId ?? locationFor(item);
     const available = qtyAt(item, locationId, homeId);
-    if (settings.relievePolicy === "on_fulfill" && item.type === "assembly" && item.bom.length > 0 && available < req.qty) {
+    let lineSerials: Serial[] = [];
+    if (isTracked(item)) {
+      // Units at the shipping location first, then any other numbered unit on the shelf; their own batches leave the ledger.
+      const here = serialsInStock(allSerials, item.id, locationId, homeId);
+      const pool = [...here, ...serialsInStock(allSerials, item.id).filter((s) => !here.includes(s))].filter((s) => !shipping.has(s.id));
+      lineSerials = pool.slice(0, Math.round(req.qty));
+      for (const s of lineSerials) shipping.add(s.id);
+      shippedSerials.push(...lineSerials);
+    }
+    const serialLots = lineSerials.map((s) => s.lotId).filter((id): id is string => !!id);
+    // A serial-numbered unit is shipped finished, never broken back into its parts.
+    if (settings.relievePolicy === "on_fulfill" && item.type === "assembly" && item.bom.length > 0 && available < req.qty && !isTracked(item)) {
       // Relieve components for the portion not on the shelf.
       const fromStock = Math.max(0, available);
       if (fromStock > 0) movementInputs.push({ itemId: item.id, type: "sale", qty: -fromStock, refType: "order", refId: order.id, occurredAt: shippedAt, locationId });
@@ -1180,10 +1200,10 @@ export async function shipOrder(store: Store, actor: Actor, input: ShipInput): P
       if (available < req.qty) {
         throw new InventoryError(`Cannot ship ${order.number}: ${item.sku} has ${available} available, need ${req.qty}${item.type === "assembly" ? ". Build more first." : ""}`, { itemId: item.id });
       }
-      movementInputs.push({ itemId: item.id, type: "sale", qty: -req.qty, unitCost: item.unitCost, refType: "order", refId: order.id, occurredAt: shippedAt, locationId });
+      movementInputs.push({ itemId: item.id, type: "sale", qty: -req.qty, unitCost: item.unitCost, refType: "order", refId: order.id, occurredAt: shippedAt, locationId, ...(serialLots.length ? { fromLotIds: serialLots } : {}) });
     }
     line.shipped = round((line.shipped ?? 0) + req.qty, 3);
-    shipLines.push({ itemId: item.id, qty: req.qty, ...(locationId !== documentLocationId ? { locationId } : {}) });
+    shipLines.push({ itemId: item.id, qty: req.qty, ...(locationId !== documentLocationId ? { locationId } : {}), ...(lineSerials.length ? { serialIds: lineSerials.map((s) => s.id) } : {}) });
   }
 
   const complete = lines.every((l) => openQty(l) <= 0);
@@ -1211,9 +1231,14 @@ export async function shipOrder(store: Store, actor: Actor, input: ShipInput): P
   const mv = await movementOps(store, actor, movementInputs);
   const patch: Partial<SalesOrder> = complete ? { lines, status: "fulfilled", fulfilledAt: shippedAt } : { lines, status: "partial" };
   const units = sum(shipLines.map((l) => l.qty));
+  const serialOps: WriteOp[] = shippedSerials.flatMap((s): WriteOp[] => [
+    { op: "put", collection: "serials", doc: { ...s, status: "shipped", orderId: order.id, ...(order.customerId ? { customerId: order.customerId } : {}), customer: order.customer, shipmentId: shipment.id, shippedAt, updatedAt: nowIso() } },
+    { op: "put", collection: "serialEvents", doc: serialEvent(actor, s.id, "shipped", `Shipped to ${order.customer} on ${order.number} (${shipment.number})`, { occurredAt: shippedAt, orderId: order.id }) },
+  ]);
   const ops: WriteOp[] = [
     ...counterOps,
     ...mv.ops,
+    ...serialOps,
     { op: "put", collection: "shipments", doc: shipment },
     { op: "patch", collection: "orders", id: order.id, patch },
     activityOp(

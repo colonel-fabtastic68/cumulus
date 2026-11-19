@@ -573,7 +573,7 @@ function generate(overrides: Map<string, { min: number; max: number }>, behind: 
     shipments: [],
     quotes: [],
     channelTombstones: [],
-    quoteTemplates: [], orderTemplates: [], customers: [], events: [], purchaseOrders: [], purchaseOrderTemplates: [], cycleCounts: [], documents: [], packs: [], workOrders: [], jobs: [], connectors: seedConnectors(now), intakeMessages: seedIntake(items, orders, now),
+    quoteTemplates: [], orderTemplates: [], customers: [], events: [], purchaseOrders: [], purchaseOrderTemplates: [], cycleCounts: [], documents: [], packs: [], workOrders: [], jobs: [], serials: [], serialEvents: [], connectors: seedConnectors(now), intakeMessages: seedIntake(items, orders, now),
   };
 }
 
@@ -791,7 +791,7 @@ export function freshWorkspace(opts: { members?: Member[]; companyName?: string;
     shipments: [],
     quotes: [],
     channelTombstones: [],
-    quoteTemplates: [], orderTemplates: [], customers: [], events: [], purchaseOrders: [], purchaseOrderTemplates: [], cycleCounts: [], documents: [], packs: [], workOrders: [], jobs: [], connectors: [], intakeMessages: [],
+    quoteTemplates: [], orderTemplates: [], customers: [], events: [], purchaseOrders: [], purchaseOrderTemplates: [], cycleCounts: [], documents: [], packs: [], workOrders: [], jobs: [], serials: [], serialEvents: [], connectors: [], intakeMessages: [],
   };
 }
 
