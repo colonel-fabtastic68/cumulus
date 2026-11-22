@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { Mail } from "lucide-react";
 import { AppIcon } from "@/components/ui";
@@ -14,6 +15,18 @@ export const SITE_LINKS = [
   { href: "/motorsport", label: "Motorsport" },
   { href: "/automotive", label: "Automotive" },
   { href: "/connect", label: "Integrations" },
+];
+
+/**
+ * Programs cumulusOS has been accepted into, in the footer. Files and their sources are in public/logos/programs.
+ * Each mark's alt text is the program's name; the blurb beside them names all three as well.
+ * The lockups differ in shape (one stacked, one a single line), so each gets its own size to read at the same weight:
+ * a width on phones, where the three share one row and shrink together on a narrow screen, and a height from `sm`.
+ */
+const PROGRAMS = [
+  { name: "Harvard Business School Foundry", src: "/logos/programs/hbs-foundry.png", width: 325, height: 180, box: "w-[72px]", size: "sm:h-[52px]" },
+  { name: "freshmango", src: "/logos/programs/freshmango.png", width: 609, height: 96, box: "w-[127px]", size: "sm:h-[26px]" },
+  { name: "Innovate Charlotte", src: "/logos/programs/innovate-charlotte.png", width: 383, height: 168, box: "w-[82px]", size: "sm:h-12" },
 ];
 
 export function Wordmark({ className }: { className?: string }) {
@@ -72,6 +85,24 @@ export function MarketingFooter() {
               { href: "/eula", label: "License agreement" },
             ]}
           />
+        </div>
+      </div>
+      <div className="mx-auto max-w-[1120px] px-6 pb-10">
+        {/* The same two columns as the block above, so the three marks sit under the three link columns. */}
+        <div className="grid gap-6 border-t border-border pt-8 md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] md:items-center md:gap-10">
+          <div>
+            <h2 className="text-[13px] font-semibold text-text">Proud member of</h2>
+            {/* The programs are named in words as well as shown, so search engines can read them. */}
+            <p className="mt-1 max-w-[400px] text-pretty text-[13.5px] leading-6 text-text-secondary">cumulusOS has been accepted into Harvard Business School Foundry, freshmango and Innovate Charlotte as we work to solve inventory for small businesses. We continue to deliver meaningful results and are excited for what comes next.</p>
+          </div>
+          {/* One row at every width: spread edge to edge on phones, in the link columns from `sm`. */}
+          <ul className="flex min-w-0 items-center justify-between gap-4 sm:grid sm:grid-cols-3 sm:gap-8">
+            {PROGRAMS.map((p) => (
+              <li key={p.name} className={`min-w-0 ${p.box} sm:w-auto`}>
+                <Image src={p.src} alt={p.name} unoptimized width={p.width} height={p.height} className={`h-auto w-full sm:w-auto ${p.size}`} />
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
       <div className="mx-auto flex max-w-[1120px] flex-wrap items-center justify-between gap-2 px-6 pb-8 text-[12px] text-text-tertiary">
