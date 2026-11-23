@@ -283,6 +283,8 @@ export function useInventoryColumns({ currency, supplierName, location, onOrder 
         minWidth: 78,
         maxWidth: 96,
         priority: 1,
+        // The latest change is what people look for, so the first click puts it on top.
+        firstSortDir: "desc",
         sortValue: (i) => i.updatedAt,
         render: (i) => <span className="whitespace-nowrap text-text-secondary">{formatRelative(i.updatedAt)}</span>,
       },

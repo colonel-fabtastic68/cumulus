@@ -76,6 +76,8 @@ export interface Column<T> {
   render: (row: T) => ReactNode;
   /** Value used for sorting. Omit to disable sorting on this column. */
   sortValue?: (row: T) => string | number | null | undefined;
+  /** Direction of the first click on the header. Dates read best newest first. Default "asc". */
+  firstSortDir?: "asc" | "desc";
   align?: "left" | "right" | "center";
   width?: string;
   className?: string;
@@ -127,7 +129,33 @@ export interface TableProps<T> {
   layoutKey?: string;
   /** Faint vertical hairlines between columns, for tables with many numeric columns. */
   columnDividers?: boolean;
+  /** Remember the sort and page for this browser tab under this key, so leaving the page and coming back keeps them. */
+  stateKey?: string;
+  /** Offer a rows-per-page choice in the footer, remembered in this browser under this key. */
+  pageSizeKey?: string;
+  pageSizeOptions?: number[];
 }
+
+/** Reads a remembered value; storage can be missing or blocked (private windows, previews). */
+function readStored<V>(storage: "session" | "local", key: string): V | undefined {
+  try {
+    if (typeof window === "undefined") return undefined;
+    const raw = (storage === "session" ? window.sessionStorage : window.localStorage).getItem(key);
+    return raw ? (JSON.parse(raw) as V) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeStored(storage: "session" | "local", key: string, value: unknown) {
+  try {
+    (storage === "session" ? window.sessionStorage : window.localStorage).setItem(key, JSON.stringify(value));
+  } catch {
+    // Storage blocked: the choice simply is not remembered.
+  }
+}
+
+type SortState = { key: string; dir: "asc" | "desc" };
 
 const hideCls = { sm: "hidden sm:table-cell", md: "hidden md:table-cell", lg: "hidden lg:table-cell" };
 const MIN_TABLE_WIDTH = 640;
@@ -168,8 +196,14 @@ function fitColumns<T>(columns: Column<T>[], width: number | null): { cols: Colu
   return { cols, widths };
 }
 
-export function Table<T>({ rows, columns: allColumns, rowKey, rowLabel, rowClassName, onRowClick, selectable, selected, onSelectedChange, emptyState, pageSize = 50, defaultSort, toolbar, bulkActions, footer, dense, className, stickyHeader = false, lockHeader = false, fit = false, columnDividers = false, layoutKey }: TableProps<T>) {
-  const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(defaultSort ?? null);
+export function Table<T>({ rows, columns: allColumns, rowKey, rowLabel, rowClassName, onRowClick, selectable, selected, onSelectedChange, emptyState, pageSize = 50, defaultSort, toolbar, bulkActions, footer, dense, className, stickyHeader = false, lockHeader = false, fit = false, columnDividers = false, layoutKey, stateKey, pageSizeKey, pageSizeOptions = [25, 50, 100, 250] }: TableProps<T>) {
+  const stateStorageKey = stateKey ? `cumulus:table-state:${stateKey}` : undefined;
+  const sizeStorageKey = pageSizeKey ? `cumulus:table-rows:${pageSizeKey}` : undefined;
+  const [sort, setSort] = useState<SortState | null>(() => (stateStorageKey ? readStored<{ sort?: SortState | null }>("session", stateStorageKey)?.sort : undefined) ?? defaultSort ?? null);
+  const [rowsPerPage, setRowsPerPage] = useState<number>(() => {
+    const stored = sizeStorageKey ? readStored<number>("local", sizeStorageKey) : undefined;
+    return stored && stored > 0 ? stored : pageSize;
+  });
   const layoutState = useSavedLayout(layoutKey);
   // Reads the stored layout fresh on every change so rapid drags never work from a stale render.
   const updateLayout = useCallback(
@@ -265,7 +299,11 @@ export function Table<T>({ rows, columns: allColumns, rowKey, rowLabel, rowClass
       )}
     </div>
   ) : null;
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useState(() => (stateStorageKey ? readStored<{ page?: number }>("session", stateStorageKey)?.page : undefined) ?? 0);
+  // Remember sort and page for this tab, so coming back from an item page lands where you were.
+  useEffect(() => {
+    if (stateStorageKey) writeStored("session", stateStorageKey, { sort, page });
+  }, [stateStorageKey, sort, page]);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [fitWidth, setFitWidth] = useState<number | null>(null);
 
@@ -303,9 +341,10 @@ export function Table<T>({ rows, columns: allColumns, rowKey, rowLabel, rowClass
     });
   }, [rows, sort, columns]);
 
-  const pageCount = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const size = pageSizeKey ? rowsPerPage : pageSize;
+  const pageCount = Math.max(1, Math.ceil(sorted.length / size));
   const current = Math.min(page, pageCount - 1);
-  const visible = sorted.slice(current * pageSize, current * pageSize + pageSize);
+  const visible = sorted.slice(current * size, current * size + size);
   const sel = selected ?? new Set<string>();
   const allVisibleSelected = visible.length > 0 && visible.every((r) => sel.has(rowKey(r)));
   const someSelected = visible.some((r) => sel.has(rowKey(r)));
@@ -411,7 +450,7 @@ export function Table<T>({ rows, columns: allColumns, rowKey, rowLabel, rowClass
                       <button
                         type="button"
                         className={cn("inline-flex items-center gap-1 hover:text-text", active && "text-text")}
-                        onClick={() => setSort(active ? { key: c.key, dir: sort!.dir === "asc" ? "desc" : "asc" } : { key: c.key, dir: "asc" })}
+                        onClick={() => setSort(active ? { key: c.key, dir: sort!.dir === "asc" ? "desc" : "asc" } : { key: c.key, dir: c.firstSortDir ?? "asc" })}
                       >
                         {c.header}
                         {active && (sort!.dir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
@@ -489,13 +528,35 @@ export function Table<T>({ rows, columns: allColumns, rowKey, rowLabel, rowClass
           </tbody>
         </table>
       </div>
-      {(footer || pageCount > 1) && (
-        <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2 text-[12.5px] text-text-secondary">
+      {(footer || pageCount > 1 || pageSizeKey) && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3 py-2 text-[12.5px] text-text-secondary">
           <div>{footer ?? `${sorted.length} row${sorted.length === 1 ? "" : "s"}`}</div>
+          <div className="flex flex-wrap items-center gap-3">
+          {pageSizeKey && (
+            <label className="inline-flex items-center gap-1.5">
+              Rows per page
+              <select
+                value={size}
+                onChange={(e) => {
+                  const next = Number(e.target.value);
+                  setRowsPerPage(next);
+                  setPage(0);
+                  if (sizeStorageKey) writeStored("local", sizeStorageKey, next);
+                }}
+                className="h-7 rounded-[var(--radius-sm)] border border-border-strong/70 bg-surface px-1.5 text-[12.5px] text-text outline-none focus:border-accent"
+              >
+                {Array.from(new Set([...pageSizeOptions, size])).sort((a, b) => a - b).map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {pageCount > 1 && (
             <div className="flex items-center gap-1">
               <span>
-                {current * pageSize + 1}–{Math.min(sorted.length, (current + 1) * pageSize)} of {sorted.length}
+                {current * size + 1}–{Math.min(sorted.length, (current + 1) * size)} of {sorted.length}
               </span>
               <Button size="sm" variant="plain" disabled={current === 0} onClick={() => setPage(current - 1)} aria-label="Previous page">
                 <ChevronLeft className="h-3.5 w-3.5" />
@@ -505,6 +566,7 @@ export function Table<T>({ rows, columns: allColumns, rowKey, rowLabel, rowClass
               </Button>
             </div>
           )}
+          </div>
         </div>
       )}
     </div>
