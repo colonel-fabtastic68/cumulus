@@ -7,6 +7,7 @@ import { useCollection, useItems, useItemsById } from "@/lib/store/provider";
 import { canWrite, useCurrentUser } from "@/lib/auth";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { Button, Page, QueryParamEffect } from "@/components/ui";
+import { useFeature } from "@/lib/useFeature";
 import { BuildModal } from "@/components/inventory";
 import { AssembliesTable, BuildDetailModal, BuildHistoryTable, BuildStats, CopyBomModal, isBuildableAssembly } from "@/components/builds";
 
@@ -23,7 +24,9 @@ export default function BuildsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [copySource, setCopySource] = useState<Item | null>(null);
 
-  const assemblies = useMemo(() => items.filter(isBuildableAssembly), [items]);
+  // Feature `assembliesWithoutBom`: active assemblies with no parts yet are listed too, so they can be set up from here.
+  const showUnbuilt = useFeature("assembliesWithoutBom");
+  const assemblies = useMemo(() => items.filter((i) => isBuildableAssembly(i) || (showUnbuilt && i.type === "assembly" && i.status === "active" && i.bom.length === 0)), [items, showUnbuilt]);
   const selected = useMemo(() => (selectedId ? (builds.find((b) => b.id === selectedId) ?? null) : null), [builds, selectedId]);
 
   const selectedSkus = useMemo(() => {

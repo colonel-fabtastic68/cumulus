@@ -78,6 +78,7 @@ Status: **Built** = working on staging behind its flag. **Framework** = data mod
 | 71 | On order column | `onOrderColumn` | Built | Inventory; links to the open purchase orders for the part. |
 | 72 | Labels from a PO or packing slip | `receiptLabels` | Built (PO) | Purchase order → Labels: one per unit received. From a receipt is the next step. |
 | none | Order connectors (email, phone, text) | `connectors` | Framework | Orders → Connectors. Channels: any number of inboxes, one phone line (ElevenLabs voice, Gemini understanding) and one text line, each saved with what it is read for and how it replies. Intake: messages added by hand are read into order lines against the catalog (`src/lib/intake.ts`) and open the new-order form filled in. Nothing reads a mailbox, answers a call or sends a text yet: channels save as "Not live yet". `src/lib/connectors.ts`. |
+| none | Assemblies without parts on the BOM page (Mitch) | `assembliesWithoutBom` | Built | BOM: active assemblies with no parts yet are listed too, marked No parts yet with an Add parts button that opens the item's BOM tab; a filter (All / Ready to build / No parts yet) shows when any exist. Before, an imported or new assembly without parts did not appear on the BOM page at all. `AssembliesTable.tsx`. |
 
 ## Decisions that are still open
 

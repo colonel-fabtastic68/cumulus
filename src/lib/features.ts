@@ -154,6 +154,13 @@ export const FEATURES = {
     area: "Production",
     notes: [51],
   },
+  assembliesWithoutBom: {
+    label: "Assemblies without parts on the BOM page",
+    description: "List every assembly on the BOM page, including ones with no parts yet, marked No parts yet with a button to add them.",
+    status: "preview",
+    area: "Production",
+    notes: [],
+  },
   jobs: {
     label: "Jobs and projects",
     description: "Group orders, purchases, work and stock issued under a job, with the people assigned and the running cost.",
