@@ -20,6 +20,7 @@ import { PricingTab } from "@/components/item/PricingTab";
 import { LocationsTab } from "@/components/item/LocationsTab";
 import { CrossRefsTab } from "@/components/item/CrossRefsTab";
 import { VariantsTab } from "@/components/item/VariantsTab";
+import { ProductionTab } from "@/components/item/ProductionTab";
 import { isVariantParent, variantsOf } from "@/lib/variants";
 import { useFeature } from "@/lib/useFeature";
 import { ItemAside } from "@/components/item/ItemAside";
@@ -27,7 +28,7 @@ import { SupersedeModal } from "@/components/item/SupersedeModal";
 import { duplicateDefaults, errorMessage } from "@/components/item/utils";
 import { whereUsed } from "@/lib/inventory";
 
-type Tab = "overview" | "images" | "locations" | "crossRefs" | "bom" | "whereUsed" | "history" | "batches" | "pricing" | "variants";
+type Tab = "overview" | "images" | "locations" | "crossRefs" | "bom" | "whereUsed" | "history" | "batches" | "pricing" | "variants" | "production";
 
 export default function ItemDetailPage() {
   const params = useParams<{ id: string }>();
@@ -60,8 +61,10 @@ export default function ItemDetailPage() {
   const lotsOnShelf = itemLots.filter((l) => l.qtyRemaining > 0).length;
 
   const variantsEnabled = useFeature("variants");
+  const serialsEnabled = useFeature("serials");
+  const stepsEnabled = useFeature("workOrderSteps");
   const [tab, setTab] = useState<Tab>("overview");
-  const TAB_VALUES: Tab[] = ["overview", "locations", "crossRefs", "bom", "whereUsed", "history", "batches", "pricing", "variants"];
+  const TAB_VALUES: Tab[] = ["overview", "locations", "crossRefs", "bom", "whereUsed", "history", "batches", "pricing", "variants", "production"];
   // "?tab=locations" deep-links a tab (scan results and Strato use it).
   const onTabParam = useCallback((value: string) => {
     if ((TAB_VALUES as string[]).includes(value)) setTab(value as Tab);
@@ -127,6 +130,8 @@ export default function ItemDetailPage() {
     { value: "pricing", label: "Pricing" },
     // Shown while the feature is on, and always for an item that already belongs to a family.
     ...(variantsEnabled || isVariantParent(item) || item.variantOf ? [{ value: "variants" as Tab, label: "Variants", count: variantsOf(items, item.id).length || undefined }] : []),
+    // Serial numbers and standard steps are for things that are made.
+    ...((serialsEnabled || stepsEnabled) && isAssembly ? [{ value: "production" as Tab, label: "Production" }] : []),
   ];
 
   return (
@@ -205,6 +210,7 @@ export default function ItemDetailPage() {
               <PricingTab item={item} currency={settings.currency} canEdit={writable} />
             </div>
             {tab === "variants" && <VariantsTab item={item} items={items} currency={settings.currency} canEdit={writable} />}
+            {tab === "production" && isAssembly && <ProductionTab item={item} canEdit={writable} serialsOn={serialsEnabled} stepsOn={stepsEnabled} />}
           </div>
         </Card>
       </PageLayout>

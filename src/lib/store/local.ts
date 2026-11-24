@@ -198,6 +198,6 @@ export function emptySnapshot(): WorkspaceSnapshot {
     shipments: [],
     quotes: [],
     channelTombstones: [],
-    quoteTemplates: [], orderTemplates: [], customers: [], events: [], purchaseOrders: [], purchaseOrderTemplates: [], cycleCounts: [], documents: [], packs: [], workOrders: [], jobs: [], connectors: [], intakeMessages: [],
+    quoteTemplates: [], orderTemplates: [], customers: [], events: [], purchaseOrders: [], purchaseOrderTemplates: [], cycleCounts: [], documents: [], packs: [], workOrders: [], jobs: [], serials: [], serialEvents: [], connectors: [], intakeMessages: [],
   };
 }

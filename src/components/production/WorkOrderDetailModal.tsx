@@ -16,6 +16,8 @@ import { cn } from "@/lib/utils";
 import { useCurrentUser } from "@/lib/auth";
 import { Badge, Button, ConfirmDialog, DescriptionList, Modal, SimpleTable, TextField, useToast } from "@/components/ui";
 import { DueCell, ProgressCell, WorkOrderStatusBadge } from "./workOrderUtils";
+import { WorkOrderSerials, WorkOrderStepsPanel } from "./WorkOrderSteps";
+import { isTracked, SERIAL_UNFINISHED } from "@/lib/serials";
 
 /** Mounts only while a run is selected and remounts per run. */
 export function WorkOrderDetailModal({ workOrder, onClose, canWrite }: { workOrder: WorkOrder | null; onClose: () => void; canWrite: boolean }) {
@@ -36,6 +38,9 @@ function Detail({ wo, onClose, canWrite }: { wo: WorkOrder; onClose: () => void;
   const settings = useSettings();
   const locationName = useLocationName();
   const pickLists = useFeature("pickLists");
+  const serialsOn = useFeature("serials");
+  const stepsOn = useFeature("workOrderSteps");
+  const serials = useCollection("serials");
   const terms = useTerms();
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
   const assembly = byId.get(wo.assemblyId);
@@ -54,6 +59,10 @@ function Detail({ wo, onClose, canWrite }: { wo: WorkOrder; onClose: () => void;
   const [confirmCancel, setConfirmCancel] = useState(false);
   const n = Number(qty);
   const qtyOk = Number.isInteger(n) && n > 0 && n <= remaining;
+  // Serial-tracked runs finish their oldest open serial numbers first.
+  const nextSerials = serialsOn && isTracked(assembly) && qtyOk
+    ? (wo.serialIds ?? []).map((id) => serials.find((s) => s.id === id)).filter((s) => !!s && SERIAL_UNFINISHED.includes(s.status)).slice(0, n).map((s) => s!.number)
+    : [];
   // Whether the parts on the shelf cover the units being booked now (the rest of the run may still be short).
   const coversNow = qtyOk && needs.every((x) => x.available >= (x.required / remaining) * n - 1e-9);
 
@@ -169,10 +178,13 @@ function Detail({ wo, onClose, canWrite }: { wo: WorkOrder; onClose: () => void;
               </Button>
             </div>
             <p className={cn("mt-1.5 text-[12px]", qtyOk && !coversNow ? "text-warning" : "text-text-tertiary")}>
-              {qtyOk && !coversNow ? `Not enough parts on the shelf for ${n}: short on ${short.map((s) => s.item.sku).join(", ")}.` : `Takes the parts out of stock and puts ${qtyOk ? n : "the"} finished ${n === 1 ? "unit" : "units"} on the shelf as a build.${wo.status === "planned" ? " The run is released first." : ""}`}
+              {qtyOk && !coversNow ? `Not enough parts on the shelf for ${n}: short on ${short.map((s) => s.item.sku).join(", ")}.` : `Takes the parts out of stock and puts ${qtyOk ? n : "the"} finished ${n === 1 ? "unit" : "units"} on the shelf as a build.${wo.status === "planned" ? " The run is released first." : ""}${nextSerials.length ? ` Finishes ${nextSerials.join(", ")}.` : ""}`}
             </p>
           </div>
         )}
+
+        {stepsOn && <WorkOrderStepsPanel wo={wo} canWrite={canWrite} />}
+        {serialsOn && <WorkOrderSerials wo={wo} />}
 
         {needs.length > 0 && (
           <div>

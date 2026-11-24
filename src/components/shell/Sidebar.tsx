@@ -36,7 +36,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const openRuns = features.workOrders ? workOrders.filter((w) => w.status === "released" || w.status === "in_progress").length : 0;
   const intake = useCollection("intakeMessages");
   const waiting = features.connectors ? intake.filter((m) => m.status === "new").length : 0;
-  const mainNav = navWithFeatures(hasFeature(instance, "ranch") ? navWithRanch(NAV) : NAV, { workOrders: features.workOrders, jobs: features.jobs, connectors: features.connectors });
+  const mainNav = navWithFeatures(hasFeature(instance, "ranch") ? navWithRanch(NAV) : NAV, { workOrders: features.workOrders, jobs: features.jobs, connectors: features.connectors, serials: features.serials });
   const counts: Record<string, number> = {
     "/orders/connectors": waiting,
     "/builds/work-orders": openRuns, "/inventory": lowCount, "/orders": openOrders, "/orders/purchase": openPos, "/rmas": openRmas };
@@ -48,7 +48,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
   const renderLink = (n: NavItem) => {
     const Icon = n.icon;
-    const active = isNavActive(n.href, pathname);
+    // A group is open on any of its pages, including ones outside its own path (Serial numbers under BOM).
+    const active = isNavActive(n.href, pathname) || !!n.children?.some((c) => isNavActive(c.href, pathname));
     const count = counts[n.href];
     // A group: the parent row opens its first page; the children show while any of them is open.
     if (n.children?.length) {

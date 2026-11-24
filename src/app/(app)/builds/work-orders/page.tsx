@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AlertTriangle, CalendarRange, ClipboardList, Factory, Plus } from "lucide-react";
 import type { WorkOrder } from "@/lib/types";
 import { committedValue, productionSchedule, workOrderIsLate, workOrderIsOpen, workOrderNeeds, workOrderRemaining } from "@/lib/workOrders";
+import { currentStep, stepIsLate, stepStatusLine } from "@/lib/workOrderSteps";
 import { useCollection, useItems, useItemsById, useSettings } from "@/lib/store/provider";
 import { canWrite, useCurrentUser } from "@/lib/auth";
 import { useAgent } from "@/components/agent/AgentProvider";
@@ -27,6 +28,7 @@ const FILTERS: Array<{ value: Filter; label: string }> = [
 
 export default function WorkOrdersPage() {
   const enabled = useFeature("workOrders");
+  const stepsOn = useFeature("workOrderSteps");
   const workOrders = useCollection("workOrders");
   const items = useItems();
   const itemsById = useItemsById();
@@ -98,8 +100,23 @@ export default function WorkOrdersPage() {
       },
       { key: "priority", header: "Priority", width: "100px", hideBelow: "lg", sortValue: (w) => ({ high: 0, normal: 1, low: 2 })[w.priority ?? "normal"], render: (w) => (w.priority === "high" ? <Badge tone="warning">High</Badge> : <span className="text-text-secondary">{w.priority === "low" ? "Low" : "Normal"}</span>) },
       { key: "status", header: "Status", width: "120px", sortValue: (w) => w.status, render: (w) => <WorkOrderStatusBadge status={w.status} /> },
+      ...(stepsOn
+        ? [
+            {
+              key: "step",
+              header: "Step",
+              hideBelow: "md" as const,
+              sortValue: (w: WorkOrder) => currentStep(w)?.name ?? "",
+              render: (w: WorkOrder) => {
+                const line = workOrderIsOpen(w) ? stepStatusLine(w) : undefined;
+                const step = currentStep(w);
+                return line ? <span className={step && stepIsLate(step) ? "text-[12.5px] text-warning" : "text-[12.5px] text-text-secondary"}>{line}</span> : <span className="text-text-tertiary">—</span>;
+              },
+            },
+          ]
+        : []),
     ],
-    [itemsById, shortRuns],
+    [itemsById, shortRuns, stepsOn],
   );
 
   if (!enabled) {
