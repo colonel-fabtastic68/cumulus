@@ -41,6 +41,21 @@ export function matchesView(item: Item, view: InventoryView, rule?: StockAlertRu
   }
 }
 
+/**
+ * Whether an item lives at a location (feature `inventoryPageFixes`): it has stock or a bin there,
+ * purchase orders receive it there or sales orders ship it from there, or, with no routing of its
+ * own and no stock anywhere else, it belongs to the default location. Items at zero stock still show.
+ */
+export function itemIsAtLocation(item: Item, locationId: string, homeId: string): boolean {
+  const entry = item.stock?.[locationId];
+  if (entry && (entry.qty !== 0 || entry.bin)) return true;
+  if (!item.stock && locationId === homeId && item.onHand !== 0) return true;
+  if (item.receiveLocationId === locationId || item.fulfillLocationId === locationId) return true;
+  if (locationId !== homeId || item.receiveLocationId || item.fulfillLocationId) return false;
+  // Unrouted items with no stock elsewhere belong to the default location.
+  return !Object.entries(item.stock ?? {}).some(([id, s]) => id !== homeId && s.qty !== 0);
+}
+
 export function matchesSearch(item: Item, q: string): boolean {
   return matches(q, item.sku, item.name, item.category, item.tags.join(" "), item.barcode, item.location, crossRefText(item));
 }

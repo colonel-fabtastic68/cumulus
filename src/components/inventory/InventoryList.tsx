@@ -20,7 +20,7 @@ import { StockAlertsModal } from "./StockAlertsModal";
 import { BulkEditModal } from "./BulkEditModal";
 import { RoutingByGroupModal } from "./RoutingByGroupModal";
 import { useInventoryColumns } from "./InventoryColumns";
-import { INVENTORY_VIEWS, describeFilters, inventoryViews, matchesSearch, matchesView, type InventoryView } from "./inventoryFilters";
+import { INVENTORY_VIEWS, describeFilters, inventoryViews, isInventoryView, itemIsAtLocation, matchesSearch, matchesView, type InventoryView } from "./inventoryFilters";
 import { openPurchaseQty } from "@/lib/purchaseOrders";
 import { overstockTotal } from "@/lib/overstock";
 import { useFeatures } from "@/lib/useFeature";
@@ -31,6 +31,23 @@ import { downloadCsv, itemsToCsv } from "./exportItemsCsv";
 type Dialog = "new" | "adjust" | "build" | "bulk" | "routing" | "deactivate" | "delete" | null;
 
 const MAX_SKUS_IN_PROMPT = 40;
+
+/** Feature `inventoryPageFixes`: the list's filters for this browser tab, so coming back from an item keeps them. */
+const FILTERS_KEY = "cumulus:inventory:filters";
+interface RememberedFilters {
+  q?: string;
+  view?: string;
+  category?: string;
+  supplierId?: string;
+  locationId?: string;
+}
+function readFilters(): RememberedFilters {
+  try {
+    return JSON.parse(window.sessionStorage.getItem(FILTERS_KEY) ?? "{}") as RememberedFilters;
+  } catch {
+    return {};
+  }
+}
 
 function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -60,15 +77,26 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
   const views = useMemo(() => inventoryViews({ overstock: features.overstock }), [features.overstock]);
   const onOrder = useMemo(() => openPurchaseQty(purchaseOrders), [purchaseOrders]);
 
-  const [q, setQ] = useState(initialQuery);
+  // A link that asks for a search or view (Strato, the home page) wins over what was remembered.
+  const fromLink = initialQuery !== "" || initialView !== "all";
+  const [remembered] = useState<RememberedFilters>(() => (features.inventoryPageFixes && !fromLink ? readFilters() : {}));
+  const [q, setQ] = useState(initialQuery || remembered.q || "");
   // Variants (src/lib/variants.ts): a family shows as one row, the parent carrying the family's stock.
   // A search looks through the variants themselves, so a specific size or color can still be found.
   const items = useMemo(() => (features.variants && !q.trim() ? collapseFamilies(allItems) : allItems), [features.variants, q, allItems]);
-  const [view, setView] = useState<InventoryView>(initialView);
+  const [view, setView] = useState<InventoryView>(fromLink || !isInventoryView(remembered.view) ? initialView : remembered.view);
   const [alertsOpen, setAlertsOpen] = useState(false);
-  const [category, setCategory] = useState("");
-  const [supplierId, setSupplierId] = useState("");
-  const [locationId, setLocationId] = useState("");
+  const [category, setCategory] = useState(remembered.category ?? "");
+  const [supplierId, setSupplierId] = useState(remembered.supplierId ?? "");
+  const [locationId, setLocationId] = useState(remembered.locationId ?? "");
+  useEffect(() => {
+    if (!features.inventoryPageFixes) return;
+    try {
+      window.sessionStorage.setItem(FILTERS_KEY, JSON.stringify({ q, view, category, supplierId, locationId }));
+    } catch {
+      // Storage blocked: the filters simply are not remembered.
+    }
+  }, [features.inventoryPageFixes, q, view, category, supplierId, locationId]);
   const [transferOpen, setTransferOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -88,16 +116,17 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
   const supplierOptions = useMemo(() => [...suppliers].sort((a, b) => a.name.localeCompare(b.name)).map((s) => ({ value: s.id, label: s.name })), [suppliers]);
 
   // Search + category + supplier + location apply to every view; the view counts reflect them.
-  // A location filter keeps the items that hold stock (or a bin) there.
+  // A location filter keeps the items that hold stock (or a bin) there; with `inventoryPageFixes`, every item that lives there.
   const base = useMemo(
     () =>
       items.filter((i) => {
         if (!matchesSearch(i, q) || (category && i.category !== category) || (supplierId && !itemHasSupplier(i, supplierId))) return false;
         if (!location) return true;
+        if (features.inventoryPageFixes) return itemIsAtLocation(i, location.id, location.homeId);
         const entry = i.stock?.[location.id];
         return qtyAt(i, location.id, location.homeId) !== 0 || !!entry?.bin;
       }),
-    [items, q, category, supplierId, location],
+    [items, q, category, supplierId, location, features.inventoryPageFixes],
   );
   const counts = useMemo(() => {
     const out: Record<InventoryView, number> = { all: 0, active: 0, low: 0, overstock: 0, assemblies: 0, inactive: 0 };
@@ -212,10 +241,10 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
       <div className="min-w-0 max-w-full overflow-x-auto">
         <Segmented value={view} onChange={setView} options={views.map((v) => ({ value: v.value, label: v.label, count: counts[v.value] }))} />
       </div>
-      <Select value={category} onChange={(e) => setCategory(e.target.value)} placeholder="All categories" options={categories.map((c) => ({ value: c, label: c }))} containerClassName="w-full sm:w-44" aria-label="Category" />
-      <Select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} placeholder="All suppliers" options={supplierOptions} containerClassName="w-full sm:w-48" aria-label="Supplier" />
+      <Select value={category} onChange={(e) => setCategory(e.target.value)} options={[{ value: "", label: "All categories" }, ...categories.map((c) => ({ value: c, label: c }))]} containerClassName="w-full sm:w-44" aria-label="Category" />
+      <Select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} options={[{ value: "", label: "All suppliers" }, ...supplierOptions]} containerClassName="w-full sm:w-48" aria-label="Supplier" />
       {locations.length > 1 && (
-        <Select value={locationId} onChange={(e) => setLocationId(e.target.value)} placeholder="All locations" options={locations.map((l) => ({ value: l.id, label: l.name }))} containerClassName="w-full sm:w-44" aria-label="Location" />
+        <Select value={locationId} onChange={(e) => setLocationId(e.target.value)} options={[{ value: "", label: "All locations" }, ...locations.map((l) => ({ value: l.id, label: l.name }))]} containerClassName="w-full sm:w-44" aria-label="Location" />
       )}
       {features.resetFilters && filtersActive && (
         <Button variant="plain" icon={<FilterX />} onClick={clearFilters}>
@@ -302,6 +331,8 @@ export function InventoryList({ initialView = "all", initialQuery = "" }: Invent
           selected={selectedIds}
           onSelectedChange={setSelected}
           pageSize={50}
+          stateKey={features.inventoryPageFixes ? "inventory" : undefined}
+          pageSizeKey={features.inventoryPageFixes ? "inventory" : undefined}
           lockHeader
           fit
           layoutKey="inventory"

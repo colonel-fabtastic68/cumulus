@@ -84,6 +84,13 @@ export const FEATURES = {
     area: "Inventory",
     notes: [71],
   },
+  inventoryPageFixes: {
+    label: "Inventory list remembers where you were",
+    description: "Search, filters, sort, page and rows per page stay put when you open an item and come back; a location lists every item that lives there, not only those with stock; Updated sorts newest first.",
+    status: "preview",
+    area: "Inventory",
+    notes: [],
+  },
   resetFilters: {
     label: "Reset filters",
     description: "One button that clears every filter on a list.",

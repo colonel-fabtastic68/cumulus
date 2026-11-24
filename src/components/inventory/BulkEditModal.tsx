@@ -252,14 +252,14 @@ function BulkEditForm({ open, onClose, items, onDone }: BulkEditModalProps) {
           <Select label="Supplier" value={v.supplierId} onChange={set("supplierId")} placeholder="Leave unchanged" options={suppliers.map((s) => ({ value: s.id, label: s.name }))} />
         </FormGrid>
         <FormGrid cols={4}>
-          <TextField label="Location" value={v.location} onChange={set("location")} placeholder="Leave unchanged" />
+          <TextField label="Bin / shelf" value={v.location} onChange={set("location")} placeholder="Leave unchanged" help={locations.length > 1 ? "A label like A-12. Which location items live in is set below." : "A label like A-12."} />
           <TextField label="Min qty" type="number" step="any" min={0} value={v.minQty} onChange={set("minQty")} placeholder="—" />
           <TextField label="Max qty" type="number" step="any" min={0} value={v.maxQty} onChange={set("maxQty")} placeholder="—" />
           <TextField label="Lead time" suffix="days" type="number" min={0} value={v.leadTimeDays} onChange={set("leadTimeDays")} placeholder="—" />
         </FormGrid>
         {locations.length > 1 && (
           <FormGrid cols={2}>
-            <Select label="Purchase orders receive into" value={v.receiveLocationId} onChange={set("receiveLocationId")} placeholder="Leave unchanged" options={routingOptions} help="Where deliveries of these parts land unless the receipt says otherwise." />
+            <Select label="Location (purchase orders receive into)" value={v.receiveLocationId} onChange={set("receiveLocationId")} placeholder="Leave unchanged" options={routingOptions} help="Where these parts live and deliveries land. Stock already on hand moves with a transfer." />
             <Select label="Sales orders relieve from" value={v.fulfillLocationId} onChange={set("fulfillLocationId")} placeholder="Leave unchanged" options={routingOptions} help="Where shipments of these parts take stock from unless the shipment says otherwise." />
           </FormGrid>
         )}
