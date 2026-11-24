@@ -4,18 +4,18 @@ import { useSettings } from "@/lib/store/provider";
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Copy, Hammer, Layers } from "lucide-react";
+import { Copy, Hammer, Layers, ListPlus } from "lucide-react";
 import type { Item } from "@/lib/types";
 import { buildableQty, isLowStock } from "@/lib/inventory";
 import { formatNumber, formatQty } from "@/lib/format";
 import { cn, matches } from "@/lib/utils";
-import { Badge, Button, EmptyState, SearchField, Table, type Column } from "@/components/ui";
+import { Badge, Button, EmptyState, SearchField, Segmented, Table, type Column } from "@/components/ui";
 import { ExportBomMenu } from "./ExportBomMenu";
 
 interface AssembliesTableProps {
   /** Every item in the workspace; needed to explode BOMs. */
   items: Item[];
-  /** Active assemblies with a BOM. */
+  /** Active assemblies with a BOM, and (feature `assembliesWithoutBom`) ones with no parts yet. */
   assemblies: Item[];
   canWrite: boolean;
   onBuild: (assembly: Item) => void;
@@ -25,10 +25,15 @@ interface AssembliesTableProps {
 export function AssembliesTable({ items, assemblies, canWrite, onBuild, onCopyBom }: AssembliesTableProps) {
   const rule = useSettings().stockAlerts;
   const [q, setQ] = useState("");
+  const [show, setShow] = useState<"all" | "ready" | "empty">("all");
 
-  const buildable = useMemo(() => new Map(assemblies.map((a) => [a.id, buildableQty(items, a)])), [items, assemblies]);
+  const buildable = useMemo(() => new Map(assemblies.filter((a) => a.bom.length > 0).map((a) => [a.id, buildableQty(items, a)])), [items, assemblies]);
+  const emptyCount = useMemo(() => assemblies.filter((a) => a.bom.length === 0).length, [assemblies]);
 
-  const rows = useMemo(() => (q.trim() ? assemblies.filter((a) => matches(q, a.sku, a.name, a.category, a.location)) : assemblies), [assemblies, q]);
+  const rows = useMemo(() => {
+    const shown = show === "all" ? assemblies : assemblies.filter((a) => (show === "empty" ? a.bom.length === 0 : a.bom.length > 0));
+    return q.trim() ? shown.filter((a) => matches(q, a.sku, a.name, a.category, a.location)) : shown;
+  }, [assemblies, q, show]);
 
   const columns = useMemo<Column<Item>[]>(
     () => [
@@ -57,11 +62,10 @@ export function AssembliesTable({ items, assemblies, canWrite, onBuild, onCopyBo
       {
         key: "bom",
         header: "BOM",
-        render: (a) => <span className="text-text-secondary">{formatNumber(a.bom.length)}</span>,
+        render: (a) => (a.bom.length === 0 ? <Badge tone="attention">No parts yet</Badge> : <span className="text-text-secondary">{formatNumber(a.bom.length)}</span>),
         sortValue: (a) => a.bom.length,
         align: "right",
-        width: "70px",
-        hideBelow: "lg",
+        width: "120px",
       },
       {
         key: "onHand",
@@ -88,6 +92,7 @@ export function AssembliesTable({ items, assemblies, canWrite, onBuild, onCopyBo
         key: "buildable",
         header: "Buildable now",
         render: (a) => {
+          if (a.bom.length === 0) return <span className="text-text-tertiary">—</span>;
           const n = buildable.get(a.id) ?? 0;
           return <span className={cn("font-medium", n === 0 ? "text-critical" : "text-text")}>{formatNumber(n)}</span>;
         },
@@ -107,7 +112,16 @@ export function AssembliesTable({ items, assemblies, canWrite, onBuild, onCopyBo
         header: "",
         align: "right",
         width: "290px",
-        render: (a) => (
+        render: (a) =>
+          a.bom.length === 0 ? (
+            <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+              {canWrite && (
+                <Button size="sm" variant="primary" icon={<ListPlus />} href={`/inventory/${a.id}?tab=bom`} title="Open this assembly's BOM tab to add the parts it is built from">
+                  Add parts
+                </Button>
+              )}
+            </div>
+          ) : (
           <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
             <ExportBomMenu assembly={a} items={items} label="Export" />
             {canWrite && onCopyBom && (
@@ -163,6 +177,17 @@ export function AssembliesTable({ items, assemblies, canWrite, onBuild, onCopyBo
             <h3 className="text-[13.5px] font-semibold text-text">Assemblies</h3>
             {lowCount > 0 && <Badge tone="warning">{lowCount} below minimum</Badge>}
           </div>
+          {emptyCount > 0 && (
+            <Segmented
+              value={show}
+              onChange={setShow}
+              options={[
+                { value: "all", label: "All", count: assemblies.length },
+                { value: "ready", label: "Ready to build", count: assemblies.length - emptyCount },
+                { value: "empty", label: "No parts yet", count: emptyCount },
+              ]}
+            />
+          )}
           <SearchField value={q} onChange={setQ} placeholder="Search SKU, name or category" className="w-full sm:ml-auto sm:w-72" />
         </div>
       }
