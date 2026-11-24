@@ -119,6 +119,8 @@ export interface TableProps<T> {
   stickyHeader?: boolean;
   /** Keep the column header visible while the page scrolls. The card stops clipping, so use it on full-width list pages. */
   lockHeader?: boolean;
+  /** With lockHeader: the toolbar (and the bulk actions that replace it) stays pinned too, with the column header just below it. */
+  lockToolbar?: boolean;
   /**
    * Fit the columns to the card: the table measures its own width, hides the lowest-priority columns only when the
    * minimums no longer fit, grows the rest toward their maximums and gives the remainder to the flex column. Headers
@@ -196,7 +198,7 @@ function fitColumns<T>(columns: Column<T>[], width: number | null): { cols: Colu
   return { cols, widths };
 }
 
-export function Table<T>({ rows, columns: allColumns, rowKey, rowLabel, rowClassName, onRowClick, selectable, selected, onSelectedChange, emptyState, pageSize = 50, defaultSort, toolbar, bulkActions, footer, dense, className, stickyHeader = false, lockHeader = false, fit = false, columnDividers = false, layoutKey, stateKey, pageSizeKey, pageSizeOptions = [25, 50, 100, 250] }: TableProps<T>) {
+export function Table<T>({ rows, columns: allColumns, rowKey, rowLabel, rowClassName, onRowClick, selectable, selected, onSelectedChange, emptyState, pageSize = 50, defaultSort, toolbar, bulkActions, footer, dense, className, stickyHeader = false, lockHeader = false, lockToolbar = false, fit = false, columnDividers = false, layoutKey, stateKey, pageSizeKey, pageSizeOptions = [25, 50, 100, 250] }: TableProps<T>) {
   const stateStorageKey = stateKey ? `cumulus:table-state:${stateKey}` : undefined;
   const sizeStorageKey = pageSizeKey ? `cumulus:table-rows:${pageSizeKey}` : undefined;
   const [sort, setSort] = useState<SortState | null>(() => (stateStorageKey ? readStored<{ sort?: SortState | null }>("session", stateStorageKey)?.sort : undefined) ?? defaultSort ?? null);
@@ -204,6 +206,17 @@ export function Table<T>({ rows, columns: allColumns, rowKey, rowLabel, rowClass
     const stored = sizeStorageKey ? readStored<number>("local", sizeStorageKey) : undefined;
     return stored && stored > 0 ? stored : pageSize;
   });
+  // A pinned toolbar pushes the pinned column header down by its own height.
+  const pinToolbar = lockHeader && lockToolbar;
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const [toolbarHeight, setToolbarHeight] = useState(0);
+  useLayoutEffect(() => {
+    const el = toolbarRef.current;
+    if (!pinToolbar || !el) return;
+    const ro = new ResizeObserver(() => setToolbarHeight(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [pinToolbar]);
   const layoutState = useSavedLayout(layoutKey);
   // Reads the stored layout fresh on every change so rapid drags never work from a stale render.
   const updateLayout = useCallback(
@@ -400,7 +413,7 @@ export function Table<T>({ rows, columns: allColumns, rowKey, rowLabel, rowClass
   return (
     <div className={cn("card", lockHeader ? "overflow-visible" : "overflow-hidden", className)}>
       {(toolbar || columnsMenu || (bulkActions && sel.size > 0)) && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2.5">
+        <div ref={toolbarRef} className={cn("flex flex-wrap items-center gap-2 border-b border-border px-3 py-2.5", pinToolbar && "sticky top-0 z-[3] rounded-t-[inherit] bg-surface")}>
           {bulkActions && sel.size > 0 ? (
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[12.5px] font-medium text-text">{sel.size} selected</span>
@@ -419,7 +432,7 @@ export function Table<T>({ rows, columns: allColumns, rowKey, rowLabel, rowClass
       )}
       <div ref={wrapRef} className={cn(lockHeader ? "overflow-x-auto md:overflow-visible" : "overflow-x-auto", stickyHeader && "max-h-[70vh] overflow-y-auto")}>
         <table className={cn("w-full min-w-[640px] border-collapse text-[13px] max-sm:text-[14px]", fit && "table-fit table-fixed")}>
-          <thead className={cn("bg-surface-subdued text-[12px] font-[550] text-text-secondary max-sm:text-[12.5px]", (stickyHeader || lockHeader) && "sticky top-0 z-[2]", lockHeader && "shadow-[0_1px_0_var(--divider)]")}>
+          <thead style={pinToolbar ? { top: toolbarHeight } : undefined} className={cn("bg-surface-subdued text-[12px] font-[550] text-text-secondary max-sm:text-[12.5px]", (stickyHeader || lockHeader) && "sticky top-0 z-[2]", lockHeader && "shadow-[0_1px_0_var(--divider)]")}>
             <tr>
               {selectable && (
                 <th className={cn("border-b border-[color:var(--divider)]", checkPad)}>

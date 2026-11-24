@@ -224,6 +224,13 @@ export const FEATURES = {
     area: "Data",
     notes: [59],
   },
+  importEditing: {
+    label: "Edit rows and parts lists on import",
+    description: "On the item import's review step: click a row to change it, mark several rows as assemblies at once, and give each assembly its parts list before anything is saved.",
+    status: "preview",
+    area: "Data",
+    notes: [],
+  },
   recordRestore: {
     label: "Restore a single record",
     description: "Bring one item, order or customer back from a Time Machine snapshot without rolling back the whole workspace.",

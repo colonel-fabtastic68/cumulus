@@ -8,6 +8,7 @@ import { FIELD_LABELS, type ReviewRow, type TargetField } from "./types";
 function labelFor(field: string): string {
   if (field.startsWith("custom:")) return field.slice(7);
   if (field === "status") return "Status";
+  if (field === "bom") return "Parts list";
   return (FIELD_LABELS as Record<string, string>)[field] ?? field;
 }
 

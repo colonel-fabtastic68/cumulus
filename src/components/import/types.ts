@@ -96,6 +96,17 @@ export interface ParsedSource {
 
 export type WizardStep = 1 | 2 | 3 | 4;
 
+/** A person's change to one row on the review step (feature `importEditing`): a value replaces the file's, null clears it. */
+export type RowEdit = { [K in keyof ImportRow]?: ImportRow[K] | null };
+/** Row edits by 1-based line. */
+export type RowEdits = Map<number, RowEdit>;
+
+/** Rows added on the review step (blank lines after the file's, filled in through edits) and lines left out of the import. */
+export interface RowChanges {
+  added: number;
+  removed: ReadonlySet<number>;
+}
+
 export type ReviewStatus = "new" | "update" | "error";
 
 export interface ReviewRow {
@@ -110,4 +121,6 @@ export interface ReviewRow {
   existing?: Item;
   /** For updates: fields whose incoming value differs from the item's current value. */
   changedFields: string[];
+  /** Someone changed this row on the review step. */
+  edited?: boolean;
 }

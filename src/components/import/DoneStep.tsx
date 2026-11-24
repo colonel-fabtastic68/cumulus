@@ -26,7 +26,7 @@ export function DoneStep({ result, sourceName, attempted, onRestart, actions }: 
           </span>
           <h2 className="text-[16px] font-semibold text-text">{ok ? "Import complete" : "Import finished with some errors"}</h2>
           <p className="mt-1 max-w-md text-[13px] text-text-secondary">
-            {pluralize(attempted, "row")} from {sourceName} processed. Quantities were recorded as import movements so the stock ledger stays the source of truth.
+            {pluralize(attempted, "row")} from {sourceName} processed.{result.bomsSet ? ` ${pluralize(result.bomsSet, "assembly", "assemblies")} got a parts list.` : ""} Quantities were recorded as import movements so the stock ledger stays the source of truth.
           </p>
           <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
             {actions ?? (
