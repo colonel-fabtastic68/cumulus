@@ -1,15 +1,19 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { Hammer } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Hammer, Plus } from "lucide-react";
 import type { Item } from "@/lib/types";
 import { useCollection, useItems, useItemsById } from "@/lib/store/provider";
 import { canWrite, useCurrentUser } from "@/lib/auth";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { Button, Page, QueryParamEffect } from "@/components/ui";
 import { useFeature } from "@/lib/useFeature";
-import { BuildModal } from "@/components/inventory";
+import { BuildModal, ItemFormModal } from "@/components/inventory";
 import { AssembliesTable, BuildDetailModal, BuildHistoryTable, BuildStats, CopyBomModal, isBuildableAssembly } from "@/components/builds";
+
+/** What the item form starts from when it is opened as New assembly. */
+const NEW_ASSEMBLY: Partial<Item> = { type: "assembly" };
 
 export default function BuildsPage() {
   const items = useItems();
@@ -23,6 +27,10 @@ export default function BuildsPage() {
   const [buildTarget, setBuildTarget] = useState<{ assembly: Item | null } | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [copySource, setCopySource] = useState<Item | null>(null);
+  // Feature `newAssembly`: create an assembly from here, then list its parts on its BOM tab.
+  const router = useRouter();
+  const canCreate = useFeature("newAssembly") && writable;
+  const [newOpen, setNewOpen] = useState(false);
 
   // Feature `assembliesWithoutBom`: active assemblies with no parts yet are listed too, so they can be set up from here.
   const showUnbuilt = useFeature("assembliesWithoutBom");
@@ -54,19 +62,39 @@ export default function BuildsPage() {
   ) : undefined;
 
   return (
-    <Page title="BOM" subtitle="Bills of materials: what each assembly is made of, what you can build now, and what has been built" primaryAction={buildButton}>
+    <Page
+      title="BOM"
+      subtitle="Bills of materials: what each assembly is made of, what you can build now, and what has been built"
+      primaryAction={buildButton}
+      secondaryActions={
+        canCreate ? (
+          <Button icon={<Plus />} onClick={() => setNewOpen(true)}>
+            New assembly
+          </Button>
+        ) : undefined
+      }
+    >
       <Suspense fallback={null}>
         <QueryParamEffect param="highlight" onValue={setSelectedId} />
       </Suspense>
       <div className="flex flex-col gap-4">
         <BuildStats builds={builds} items={items} />
-        <AssembliesTable items={items} assemblies={assemblies} canWrite={writable} onBuild={openBuild} onCopyBom={setCopySource} />
+        <AssembliesTable items={items} assemblies={assemblies} canWrite={writable} onBuild={openBuild} onCopyBom={setCopySource} onNew={canCreate ? () => setNewOpen(true) : undefined} />
         <CopyBomModal source={copySource} onClose={() => setCopySource(null)} />
         <BuildHistoryTable builds={builds} onSelect={(b) => setSelectedId(b.id)} onNew={writable ? () => openBuild(null) : undefined} />
       </div>
 
       <BuildModal open={!!buildTarget} onClose={() => setBuildTarget(null)} assembly={buildTarget?.assembly ?? null} />
       <BuildDetailModal build={selected} onClose={() => setSelectedId(null)} />
+      {/* Saving goes straight to the new assembly's BOM tab, where its parts are listed. */}
+      <ItemFormModal
+        open={newOpen}
+        onClose={() => setNewOpen(false)}
+        defaults={NEW_ASSEMBLY}
+        title="New assembly"
+        submitLabel="Create and add parts"
+        onSaved={(item) => router.push(item.type === "assembly" ? `/inventory/${item.id}?tab=bom` : `/inventory/${item.id}`)}
+      />
     </Page>
   );
 }

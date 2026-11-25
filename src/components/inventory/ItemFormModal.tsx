@@ -107,6 +107,9 @@ interface ItemFormModalProps {
   item?: Item | null;
   defaults?: Partial<Item>;
   onSaved?: (item: Item) => void;
+  /** When creating: the title and button label for a form opened for one purpose (BOM → New assembly). */
+  title?: string;
+  submitLabel?: string;
 }
 
 /** Create or edit an item. Mounts the form only while open so state resets on each opening. */
@@ -115,7 +118,7 @@ export function ItemFormModal(props: ItemFormModalProps) {
   return <ItemForm {...props} />;
 }
 
-function ItemForm({ open, onClose, item, defaults, onSaved }: ItemFormModalProps) {
+function ItemForm({ open, onClose, item, defaults, onSaved, title, submitLabel }: ItemFormModalProps) {
   const store = useStore();
   const user = useCurrentUser();
   const toast = useToast();
@@ -230,13 +233,13 @@ function ItemForm({ open, onClose, item, defaults, onSaved }: ItemFormModalProps
     <Modal
       open={open}
       onClose={onClose}
-      title={editing ? `Edit ${item?.sku}` : "New item"}
+      title={editing ? `Edit ${item?.sku}` : (title ?? "New item")}
       size="lg"
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
           <Button variant="primary" onClick={submit} loading={busy} disabled={invalid}>
-            {editing ? "Save changes" : "Create item"}
+            {editing ? "Save changes" : (submitLabel ?? "Create item")}
           </Button>
         </>
       }

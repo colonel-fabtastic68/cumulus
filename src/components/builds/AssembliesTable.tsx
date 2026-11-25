@@ -4,7 +4,7 @@ import { useSettings } from "@/lib/store/provider";
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Copy, Hammer, Layers, ListPlus } from "lucide-react";
+import { Copy, Hammer, Layers, ListPlus, Plus } from "lucide-react";
 import type { Item } from "@/lib/types";
 import { buildableQty, isLowStock } from "@/lib/inventory";
 import { formatNumber, formatQty } from "@/lib/format";
@@ -20,9 +20,11 @@ interface AssembliesTableProps {
   canWrite: boolean;
   onBuild: (assembly: Item) => void;
   onCopyBom?: (assembly: Item) => void;
+  /** Feature `newAssembly`: the empty page offers to create the first assembly here. */
+  onNew?: () => void;
 }
 
-export function AssembliesTable({ items, assemblies, canWrite, onBuild, onCopyBom }: AssembliesTableProps) {
+export function AssembliesTable({ items, assemblies, canWrite, onBuild, onCopyBom, onNew }: AssembliesTableProps) {
   const rule = useSettings().stockAlerts;
   const [q, setQ] = useState("");
   const [show, setShow] = useState<"all" | "ready" | "empty">("all");
@@ -150,6 +152,17 @@ export function AssembliesTable({ items, assemblies, canWrite, onBuild, onCopyBo
 
   const empty = q.trim() ? (
     <EmptyState icon={<Layers />} title="No assemblies match" description={`Nothing matches “${q.trim()}”. Try a SKU, name or category.`} action={<Button size="sm" onClick={() => setQ("")}>Clear search</Button>} />
+  ) : onNew ? (
+    <EmptyState
+      icon={<Layers />}
+      title="No assemblies yet"
+      description="An assembly is an item with a bill of materials: the parts it is built from. Create one, list its parts, and it shows up here ready to build."
+      action={
+        <Button size="sm" variant="primary" icon={<Plus />} onClick={onNew}>
+          New assembly
+        </Button>
+      }
+    />
   ) : (
     <EmptyState
       icon={<Layers />}
