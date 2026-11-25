@@ -18,6 +18,7 @@ Written 2026-11-11 against the feature notes of 2026-10-28 (items 42 to 72).
   - `released`: on for everyone.
 - Because production hides anything in preview, **`dev` can be merged into `main` at any time**. Merge often so the branches never drift; unfinished features ride along switched off.
 - To release a feature, change its status to `released` (or `beta` to let pilot customers opt in first), merge, done. Later, delete the flag and its checks.
+- Since 2026-11-25 every feature the table marks Built is `beta`: off on cumulusos.com until a workspace switches it on in Settings → Labs. The Framework ones (connectors, variants, unit conversions, QuickBooks Desktop) stay `preview`.
 - `CUMULUS_FEATURES=workOrders,jobs` (or `*`) on a deployment forces features on there, for a pilot customer's instance.
 - Settings → Labs lists the features with a switch per workspace, so a feature can be switched off in staging to compare with today's product.
 - Staging has no database configured: it runs the sample company in the browser, so demos cannot touch customer data. A staging bar across the top says so.
