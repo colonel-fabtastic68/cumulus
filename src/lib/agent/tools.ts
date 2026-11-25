@@ -91,7 +91,7 @@ const REPORTS = ["lowStock", "valuation", "shelfLife", "deadStock", "consumption
  * They are only declared to the model while the feature is on, so a workspace without them
  * pays nothing for them in its prompt. See agentToolsFor.
  */
-export const TOOL_FEATURES = ["workOrders", "jobs", "variants", "modularBoms"] as const;
+export const TOOL_FEATURES = ["workOrders", "jobs", "variants", "modularBoms", "stratoGuide"] as const;
 export type ToolFeature = (typeof TOOL_FEATURES)[number];
 
 const REPORT_FEATURE: Partial<Record<(typeof REPORTS)[number], ToolFeature>> = { workOrders: "workOrders", productionSchedule: "workOrders", jobs: "jobs" };
@@ -134,6 +134,23 @@ export const agentTools = {
   getWorkspaceSummary: tool({
     description: "Overview of the workspace: item counts, inventory value, low-stock count, open orders/RMAs, categories, suppliers and live connections. Call this first when you need context.",
     inputSchema: z.object({}),
+  }),
+  showOnScreen: tool({
+    description:
+      "Point at things on the user's screen. Each step lights up one control (a sidebar entry, the page's main button, a tab, the search box, a settings section, a button in an open order dialog) with a one-sentence note; the user moves through the steps with Next or by clicking the control. Use it when the user asks where something is or how to do something in the app. target is an id from 'On-screen targets' in the workspace snapshot; give page (a path such as /orders) for every target that is not nav:…, so the guide opens that page first. 2 to 6 steps, only the clicks that matter.",
+    inputSchema: z.object({
+      title: z.string().optional().describe("What is being shown, e.g. 'Print a pick list'"),
+      steps: z
+        .array(
+          z.object({
+            target: z.string().describe("A data-guide id, e.g. nav:/orders, page:primary, tab:bom, settings:labs, order:pick-list"),
+            text: z.string().describe("One sentence: what this is and what to do"),
+            page: z.string().optional().describe("Path to open first, e.g. /orders. Not needed for nav:… targets"),
+          }),
+        )
+        .min(1)
+        .max(8),
+    }),
   }),
   getConnections: tool({
     description: "The workspace's live connections (Shopify, WooCommerce, Shippo, EasyPost): status, store, what syncs, last sync and its result, last error, how many items are linked and which items are not yet in the store. Never includes credentials.",
@@ -423,7 +440,7 @@ export const agentTools = {
 export type AgentTools = typeof agentTools;
 export type AgentToolName = keyof AgentTools;
 
-export const READ_TOOLS: AgentToolName[] = ["listLabelTemplates", "getWorkspaceSummary", "getConnections", "listStoreProductsWithoutSku", "searchItems", "getItem", "explodeBom", "whereUsed", "getReport", "getReplenishment", "traceLot", "previewBulkUpdate", "listPurchaseOrders", "suggestPurchaseOrders", "proposeCycleCount", "getCycleCount"];
+export const READ_TOOLS: AgentToolName[] = ["showOnScreen", "listLabelTemplates", "getWorkspaceSummary", "getConnections", "listStoreProductsWithoutSku", "searchItems", "getItem", "explodeBom", "whereUsed", "getReport", "getReplenishment", "traceLot", "previewBulkUpdate", "listPurchaseOrders", "suggestPurchaseOrders", "proposeCycleCount", "getCycleCount"];
 export const WRITE_TOOLS: AgentToolName[] = [
   "replenish",
   "snoozeReplenishment",
@@ -462,6 +479,7 @@ export function isWriteTool(name: string): name is AgentToolName {
 /** Human labels for proposal cards. */
 export const TOOL_LABELS: Record<AgentToolName, string> = {
   getWorkspaceSummary: "Workspace summary",
+  showOnScreen: "Show on screen",
   getConnections: "Connections",
   syncChannel: "Sync channel",
   listStoreProductsWithoutSku: "Store products without SKU",
@@ -508,7 +526,7 @@ export const TOOL_LABELS: Record<AgentToolName, string> = {
 };
 
 /** Whole tools that exist only while a feature is on. */
-const TOOL_FEATURE: Partial<Record<AgentToolName, ToolFeature>> = { saveWorkOrder: "workOrders", saveJob: "jobs", createVariants: "variants" };
+const TOOL_FEATURE: Partial<Record<AgentToolName, ToolFeature>> = { saveWorkOrder: "workOrders", saveJob: "jobs", createVariants: "variants", showOnScreen: "stratoGuide" };
 
 export type ToolFeatureFlags = Partial<Record<ToolFeature, boolean>>;
 

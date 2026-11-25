@@ -45,8 +45,16 @@ export function Page({ title, subtitle, titleMeta, backHref, backLabel, primaryA
         </div>
         {(primaryAction || secondaryActions) && (
           <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
-            {secondaryActions}
-            {primaryAction}
+            {secondaryActions && (
+              <div data-guide="page:secondary" className="flex flex-wrap items-center gap-2">
+                {secondaryActions}
+              </div>
+            )}
+            {primaryAction && (
+              <div data-guide="page:primary" className="flex items-center">
+                {primaryAction}
+              </div>
+            )}
           </div>
         )}
       </header>

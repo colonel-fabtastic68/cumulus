@@ -85,7 +85,7 @@ export function TopBar({ onMenu }: { onMenu?: () => void }) {
         </Button>
       </span>
       <span className="md:hidden">
-        <IconButton variant={isOpen ? "primary" : "plain"} size="md" className={isOpen ? undefined : "text-text-secondary"} aria-label="Strato" onClick={() => (isOpen ? toggleAgent() : openAgent())} icon={<Sparkles />} />
+        <IconButton variant={isOpen ? "primary" : "plain"} size="md" className={isOpen ? undefined : "text-text-secondary"} aria-label="Strato" data-guide="topbar:strato" onClick={() => (isOpen ? toggleAgent() : openAgent())} icon={<Sparkles />} />
       </span>
       <IconButton variant="plain" size="md" className="text-text-secondary" aria-label={`Scan a barcode (${mod}/)`} title={`Scan (${mod}/)`} onClick={() => setScan({ open: true })} icon={<ScanBarcode />} />
       <IconButton variant="plain" size="md" className="hidden text-text-secondary sm:inline-flex" aria-label="Activity" href="/activity" icon={<Bell />} />

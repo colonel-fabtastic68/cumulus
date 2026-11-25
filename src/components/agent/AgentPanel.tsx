@@ -18,6 +18,8 @@ import { isLowStock } from "@/lib/inventory";
 import { cn, newId, nowIso } from "@/lib/utils";
 import { formatRelative } from "@/lib/format";
 import { useAgent } from "./AgentProvider";
+import { usePathname } from "next/navigation";
+import { useGuide } from "@/components/guide/GuideProvider";
 
 export type AgentUIMessage = UIMessage<unknown, UIDataTypes, InferUITools<typeof agentTools>>;
 
@@ -119,10 +121,12 @@ export function AgentChat({ onClose, pending, consumePending, pendingSession, co
   const jobs = useCollection("jobs");
   // Unreleased features Strato may use here: their tools are only declared to the model while they are on.
   const flags = useFeatures();
+  const pathname = usePathname();
+  const guide = useGuide();
   const toolFeatures = useMemo(() => Object.fromEntries(TOOL_FEATURES.map((f) => [f, flags[f]])) as ToolFeatureFlags, [flags]);
   const context = useMemo(
-    () => buildAgentContext({ items, suppliers, orders, rmas, settings: [settings], members, integrations, purchaseOrders, purchaseOrderTemplates, movements, workOrders, jobs }, { ...pageContext, features: toolFeatures }),
-    [items, suppliers, orders, rmas, settings, members, integrations, purchaseOrders, purchaseOrderTemplates, movements, workOrders, jobs, pageContext, toolFeatures],
+    () => buildAgentContext({ items, suppliers, orders, rmas, settings: [settings], members, integrations, purchaseOrders, purchaseOrderTemplates, movements, workOrders, jobs }, { ...pageContext, features: toolFeatures, route: pathname, guide: guide.summary ?? undefined, navFlags: { workOrders: flags.workOrders, jobs: flags.jobs, connectors: flags.connectors, serials: flags.serials } }),
+    [items, suppliers, orders, rmas, settings, members, integrations, purchaseOrders, purchaseOrderTemplates, movements, workOrders, jobs, pageContext, toolFeatures, pathname, guide.summary, flags.workOrders, flags.jobs, flags.connectors, flags.serials],
   );
   useEffect(() => {
     latestBody.context = context;
@@ -132,7 +136,7 @@ export function AgentChat({ onClose, pending, consumePending, pendingSession, co
   }, [context, user.name, autoApprove, toolFeatures]);
   const api = useApi();
   const docs = useDocuments();
-  const execCtx = useMemo(() => ({ store, actor: { id: user.id, name: user.name }, api, uploadDocument: docs.upload, origin: typeof window !== "undefined" ? window.location.origin : "" }), [store, user.id, user.name, api, docs.upload]);
+  const execCtx = useMemo(() => ({ store, actor: { id: user.id, name: user.name }, api, uploadDocument: docs.upload, origin: typeof window !== "undefined" ? window.location.origin : "", guide: guide.start }), [store, user.id, user.name, api, docs.upload, guide.start]);
 
   const transport = useMemo(
     () =>

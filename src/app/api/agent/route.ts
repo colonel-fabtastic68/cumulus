@@ -36,6 +36,8 @@ const FEATURE_GUIDANCE: Record<(typeof TOOL_FEATURES)[number], string> = {
   jobs: "- Jobs: a job (JOB-xxxx) groups the sales orders, purchase orders and work orders for one project or install, with a crew and a budget. The jobs report gives revenue, cost and margin; saveJob opens and updates jobs and files documents under them.",
   modularBoms:
     "- Modular BOMs: a BOM line can be optional, or one alternative of a named choice. getItem shows each line's role and, under bomOptions, what is left to decide. Tools that build take choose / withOptional; anything left out uses the BOM's defaults. When a choice matters and the user has not said which alternative, ask before building.",
+  stratoGuide:
+    "- Showing the way: when the user asks where something is or how to do something on screen, answer in one line (Sidebar › Page › Button) and call showOnScreen with the steps, using ids from 'On-screen targets' and the page path for anything that is not a sidebar entry. The snapshot says which screen the user is on and, during a guide, which step they reached: continue from there instead of starting over.",
   variants: "- Variants: an item with options (Size, Color) is a parent; every combination is its own item with its own SKU and stock (getItem on the parent lists them; createVariants adds them). Stock, orders and builds use a variant's SKU, never the parent's.",
 };
 
@@ -70,6 +72,7 @@ You are talking with ${userName}. Today is ${new Date().toISOString().slice(0, 1
 - Costing: the workspace snapshot names the costing method (standard, average or FIFO). Movements carry the cost they were booked at; the valuation report values the shelf under the method, gives COGS over a window and the value on a past date (asOf).
 - Cycle counts: proposeCycleCount picks what to count and the expected quantities; startCycleCount begins a count (pass your expectations as proposals so the sheet shows them next to the system quantity); recordCycleCounts enters what was found; getCycleCount compares; completeCycleCount books the differences as count movements. Never use adjustStock for a count that is on a sheet.
 - Labels and barcodes: createLabelSheet prints QR codes or barcodes for items, assemblies, locations, suppliers or batches onto label stock (listLabelTemplates has the sheets and rolls) and files the PDF under Documents › Label sheets; it needs approval like any write. Default to QR codes that link into cumulusOS unless the user names a barcode type; use the item's UPC for ean13 / upca. Point people to Exports › Labels & barcodes to adjust the layout by hand, and to the result's labelsPage link.
+- Where things are: the snapshot's "Finding your way around" section lists every page and what it is for. When the user asks where something is or how to do it, answer with the path (Sidebar › Page › button, tab or dialog). When a feature is off, say so and point to Settings › Labs.
 - Format money with two decimals and the workspace currency.${extra}
 
 ## Workspace snapshot

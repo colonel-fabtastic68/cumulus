@@ -32,7 +32,7 @@ import { useFeatures } from "@/lib/useFeature";
 function Row({ id, children }: { id: string; children: ReactNode }) {
   const def = settingsSection(id);
   return (
-    <div id={id} className="scroll-mt-4 border-t border-border py-6 first:border-t-0 first:pt-0 last:pb-0">
+    <div id={id} data-guide={`settings:${id}`} className="scroll-mt-4 border-t border-border py-6 first:border-t-0 first:pt-0 last:pb-0">
       <Section title={def.title} description={def.description}>
         {children}
       </Section>

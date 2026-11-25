@@ -17,6 +17,7 @@ export function Tabs<T extends string>({ value, onChange, tabs, className }: { v
         <button
           key={t.value}
           role="tab"
+          data-guide={`tab:${t.value}`}
           type="button"
           aria-selected={t.value === value}
           onClick={() => onChange(t.value)}

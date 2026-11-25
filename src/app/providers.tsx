@@ -7,6 +7,7 @@ import { StoreProvider } from "@/lib/store/provider";
 import { AuthProvider } from "@/lib/auth";
 import { ToastProvider } from "@/components/ui";
 import { AgentProvider } from "@/components/agent/AgentProvider";
+import { GuideProvider } from "@/components/guide/GuideProvider";
 
 export function Providers({ children, runtimeConfig }: { children: ReactNode; runtimeConfig?: RuntimeConfig }) {
   // Must run before anything below reads the Firebase config.
@@ -26,7 +27,9 @@ function WorkspaceTree({ children }: { children: ReactNode }) {
     <StoreProvider key={key} workspaceId={mode === "local" ? null : workspaceId}>
       <AuthProvider>
         <ToastProvider>
-          <AgentProvider>{children}</AgentProvider>
+          <AgentProvider>
+            <GuideProvider>{children}</GuideProvider>
+          </AgentProvider>
         </ToastProvider>
       </AuthProvider>
     </StoreProvider>
