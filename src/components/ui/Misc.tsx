@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
 import { AlertCircle, AlertTriangle, CheckCircle2, Info, X } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
 import type { Member } from "@/lib/types";
@@ -196,12 +197,28 @@ export interface MenuItem {
 
 export function Menu({ trigger, items, align = "right", className, menuClassName }: { trigger: ReactNode; items: Array<MenuItem | "divider">; align?: "left" | "right"; className?: string; /** Size the dropdown, e.g. a fixed width so long labels truncate inside a narrow panel. */ menuClassName?: string }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; left?: number; right?: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  // The menu is portaled and fixed, so a table card's overflow can never clip it; it opens upward when the bottom is near.
+  const place = useCallback(() => {
+    const r = ref.current?.getBoundingClientRect();
+    if (!r) return;
+    const estimate = items.reduce((h, it) => h + (it === "divider" ? 9 : 32), 8);
+    const below = window.innerHeight - r.bottom - 8;
+    const upward = below < estimate && r.top > below;
+    setPos({
+      ...(upward ? { bottom: window.innerHeight - r.top + 4 } : { top: r.bottom + 4 }),
+      ...(align === "right" ? { right: Math.max(8, window.innerWidth - r.right) } : { left: Math.max(8, r.left) }),
+    });
+  }, [items, align]);
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (ref.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
     };
     // Escape closes the menu only; stop it before any surrounding dialog sees it.
     const onKey = (e: KeyboardEvent) => {
@@ -210,44 +227,60 @@ export function Menu({ trigger, items, align = "right", className, menuClassName
         setOpen(false);
       }
     };
+    // A fixed menu would drift from its trigger while the page scrolls; close it instead.
+    const onMove = () => setOpen(false);
     document.addEventListener("mousedown", onDoc);
     document.addEventListener("keydown", onKey, true);
+    document.addEventListener("scroll", onMove, true);
+    window.addEventListener("resize", onMove);
     return () => {
       document.removeEventListener("mousedown", onDoc);
       document.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("scroll", onMove, true);
+      window.removeEventListener("resize", onMove);
     };
   }, [open]);
   return (
     <div ref={ref} className={cn("relative inline-block", className)}>
-      <div onClick={() => setOpen((o) => !o)}>{trigger}</div>
-      {open && (
-        <div role="menu" className={cn("animate-menu absolute z-[60] mt-1 min-w-[180px] rounded-[var(--radius)] bg-surface p-1 shadow-[var(--shadow-pop)]", align === "right" ? "right-0" : "left-0", menuClassName)}>
-          {items.map((it, i) =>
-            it === "divider" ? (
-              <div key={i} className="my-1 border-t border-border" />
-            ) : (
-              <button
-                key={i}
-                type="button"
-                role="menuitem"
-                disabled={it.disabled}
-                onClick={() => {
-                  setOpen(false);
-                  if (it.href) router.push(it.href);
-                  else it.onSelect?.();
-                }}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-[6px] px-2.5 py-1.5 text-left text-[13px] hover:bg-surface-hover disabled:opacity-50",
-                  it.destructive ? "text-critical" : "text-text",
-                )}
-              >
-                {it.icon && <span className="text-text-secondary [&>svg]:h-3.5 [&>svg]:w-3.5">{it.icon}</span>}
-                <span className="min-w-0 flex-1">{it.label}</span>
-              </button>
-            ),
-          )}
-        </div>
-      )}
+      <div
+        onClick={() => {
+          if (!open) place();
+          setOpen((o) => !o);
+        }}
+      >
+        {trigger}
+      </div>
+      {open &&
+        pos &&
+        createPortal(
+          <div ref={menuRef} role="menu" style={pos} className={cn("animate-menu fixed z-[150] min-w-[180px] rounded-[var(--radius)] bg-surface p-1 shadow-[var(--shadow-pop)]", menuClassName)}>
+            {items.map((it, i) =>
+              it === "divider" ? (
+                <div key={i} className="my-1 border-t border-border" />
+              ) : (
+                <button
+                  key={i}
+                  type="button"
+                  role="menuitem"
+                  disabled={it.disabled}
+                  onClick={() => {
+                    setOpen(false);
+                    if (it.href) router.push(it.href);
+                    else it.onSelect?.();
+                  }}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-[6px] px-2.5 py-1.5 text-left text-[13px] hover:bg-surface-hover disabled:opacity-50",
+                    it.destructive ? "text-critical" : "text-text",
+                  )}
+                >
+                  {it.icon && <span className="text-text-secondary [&>svg]:h-3.5 [&>svg]:w-3.5">{it.icon}</span>}
+                  <span className="min-w-0 flex-1">{it.label}</span>
+                </button>
+              ),
+            )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

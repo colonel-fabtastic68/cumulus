@@ -134,27 +134,27 @@ export function OrdersTable({ orders, canWrite, busyId, onSelect, onFulfil, onCa
       {
         key: "actions",
         header: "",
-        width: "44px",
+        width: "170px",
         align: "right",
         render: (o) => {
           const open = isOrderOpen(o);
+          const busy = busyId === o.id;
           return (
-            <div onClick={(e) => e.stopPropagation()} className="flex justify-end">
+            <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-end gap-1">
+              {open && canWrite && (
+                <Button size="sm" icon={<Truck />} onClick={() => onFulfil(o)} loading={busy}>
+                  {o.status === "partial" ? "Ship the rest" : "Ship"}
+                </Button>
+              )}
               <Menu
                 trigger={
-                  <IconButton variant="plain" size="sm" aria-label={`Actions for ${o.number}`} className="text-text-secondary" loading={busyId === o.id}>
+                  <IconButton variant="plain" size="sm" aria-label={`More actions for ${o.number}`} className="text-text-secondary">
                     <MoreHorizontal className="h-4 w-4" />
                   </IconButton>
                 }
                 items={[
                   { label: "View details", icon: <Eye />, onSelect: () => onSelect(o) },
-                  ...(open && canWrite
-                    ? ([
-                        "divider",
-                        { label: o.status === "partial" ? "Ship the rest" : "Ship", icon: <Truck />, onSelect: () => onFulfil(o), disabled: busyId === o.id },
-                        { label: "Cancel order", icon: <XCircle />, destructive: true, onSelect: () => onCancel(o), disabled: busyId === o.id },
-                      ] as const)
-                    : []),
+                  ...(open && canWrite ? (["divider", { label: "Cancel order", icon: <XCircle />, destructive: true, onSelect: () => onCancel(o), disabled: busy }] as const) : []),
                 ]}
               />
             </div>

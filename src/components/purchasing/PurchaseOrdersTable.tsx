@@ -111,30 +111,38 @@ export function PurchaseOrdersTable({ purchaseOrders, canWrite, busyId, onSelect
       {
         key: "actions",
         header: "",
-        width: "44px",
+        width: "190px",
         align: "right",
-        render: (p) => (
-          <div onClick={(e) => e.stopPropagation()} className="flex justify-end">
-            <Menu
-              trigger={
-                <IconButton variant="plain" size="sm" aria-label={`Actions for ${p.number}`} className="text-text-secondary" loading={busyId === p.id}>
-                  <MoreHorizontal className="h-4 w-4" />
-                </IconButton>
-              }
-              items={[
-                { label: "View details", icon: <Eye />, onSelect: () => onSelect(p) },
-                ...(poIsOpen(p) && canWrite
-                  ? ([
-                      "divider",
-                      ...(p.status === "draft" ? [{ label: "Mark as sent", icon: <Send />, onSelect: () => onSend(p), disabled: busyId === p.id }] : []),
-                      { label: p.status === "partial" ? "Receive the rest" : "Receive", icon: <PackageCheck />, onSelect: () => onReceive([p]), disabled: busyId === p.id },
-                      { label: "Cancel order", icon: <XCircle />, destructive: true, onSelect: () => onCancel(p), disabled: busyId === p.id },
-                    ] as const)
-                  : []),
-              ]}
-            />
-          </div>
-        ),
+        render: (p) => {
+          const open = poIsOpen(p);
+          const busy = busyId === p.id;
+          return (
+            <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-end gap-1">
+              {open && canWrite && (
+                <Button size="sm" icon={<PackageCheck />} onClick={() => onReceive([p])} loading={busy}>
+                  {p.status === "partial" ? "Receive the rest" : "Receive"}
+                </Button>
+              )}
+              <Menu
+                trigger={
+                  <IconButton variant="plain" size="sm" aria-label={`More actions for ${p.number}`} className="text-text-secondary">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </IconButton>
+                }
+                items={[
+                  { label: "View details", icon: <Eye />, onSelect: () => onSelect(p) },
+                  ...(open && canWrite
+                    ? ([
+                        "divider",
+                        ...(p.status === "draft" ? [{ label: "Mark as sent", icon: <Send />, onSelect: () => onSend(p), disabled: busy }] : []),
+                        { label: "Cancel order", icon: <XCircle />, destructive: true, onSelect: () => onCancel(p), disabled: busy },
+                      ] as const)
+                    : []),
+                ]}
+              />
+            </div>
+          );
+        },
       },
     ],
     [currency, canWrite, busyId, onSelect, onSend, onReceive, onCancel, purchaseOrders],
