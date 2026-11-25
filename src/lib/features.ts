@@ -147,6 +147,13 @@ export const FEATURES = {
     area: "Orders",
     notes: [],
   },
+  poUpload: {
+    label: "Upload a purchase order",
+    description: "New purchase order offers Upload a document beside Enter manually: Strato reads a PDF, photo or spreadsheet into an order you check against the document before it is added.",
+    status: "preview",
+    area: "Purchasing",
+    notes: [],
+  },
   modularBoms: {
     label: "Modular BOMs",
     description: "Mark BOM lines as a choice (pick one of a group) or optional, and decide them when the assembly is built.",

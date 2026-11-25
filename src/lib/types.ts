@@ -855,7 +855,8 @@ export interface PurchaseOrder {
   note?: string;
   /** Template the order started from. */
   templateId?: ID;
-  source?: "manual" | "template" | "strato" | "suggestion" | "replenishment" | "auto";
+  /** upload = read from a document (feature `poUpload`) and signed off by a person. */
+  source?: "manual" | "template" | "strato" | "suggestion" | "replenishment" | "auto" | "upload";
   sentAt?: string;
   /** Set when every line is fully received. */
   receivedAt?: string;
