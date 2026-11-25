@@ -116,6 +116,16 @@ export interface LabelSpec {
   itemDetails?: ItemDetailPart[];
   /** Labels per record id, when a document sets them (one per unit received on a purchase order). Records not listed use `copies`. */
   counts?: Record<string, number>;
+  /** Saved codes: a record listed here prints its own code, text and text size instead of the sheet's. */
+  perEntry?: Record<string, EntryCode>;
+}
+
+/** One record's own code on a sheet that mixes them. */
+export interface EntryCode {
+  symbology: Symbology;
+  encode: EncodeMode;
+  fields: LabelFields;
+  textScale: number;
 }
 
 export const DEFAULT_SPEC: LabelSpec = {

@@ -70,6 +70,25 @@ export interface ItemImage {
   source?: "manual" | "shopify" | "woocommerce";
 }
 
+/**
+ * Feature `savedCodes`: the barcode or QR code made for an item under Labels & barcodes.
+ * It is kept on the item so the list there, the label sheets and the pick lists all draw the same code.
+ */
+export interface SavedCode {
+  symbology: "qrcode" | "datamatrix" | "code128" | "code39" | "ean13" | "upca";
+  /** What the code carries: a link that opens the item in cumulusOS, or the item code on its own. UPC and EAN carry the item's barcode number. */
+  encode: "code" | "link";
+  /** What is printed beside the code. */
+  fields: { name: boolean; code: boolean; price: boolean; detail: boolean };
+  /** What the details line carries. Absent = category and bin. */
+  details?: Array<"category" | "bin" | "vendorPn" | "supplier" | "fitment">;
+  /** Text size against the label: 1 is sized to the label. Absent = 1. */
+  textScale?: number;
+  createdAt: string;
+  createdBy?: ID;
+  updatedAt?: string;
+}
+
 export interface Item {
   id: ID;
   sku: string;
@@ -143,6 +162,8 @@ export interface Item {
   salesUnit?: string;
   /** Assemblies: on a pick list, break this item out to its parts (it ships as a kit of parts, not built). */
   pickAsParts?: boolean;
+  /** Feature `savedCodes`: the code made for this item under Labels & barcodes. Pick lists print it. */
+  savedCode?: SavedCode;
   /** Variants (src/lib/variants.ts). A parent lists its options; it holds no stock of its own. */
   variantAxes?: VariantAxis[];
   /** A variant points at its parent and says which value it is for each option. */
