@@ -46,6 +46,10 @@ const GuideContext = createContext<GuideContextValue | null>(null);
 const LOOK_MS = 4000;
 const POLL_MS = 120;
 const MAX_STEPS = 8;
+/** A control taller than this share of the window (a whole settings section) is pointed at by its top band. */
+const TALL = 0.6;
+const BAND = 140;
+const CARD_H = 170;
 
 function findTarget(target: string): HTMLElement | null {
   if (typeof document === "undefined") return null;
@@ -78,7 +82,8 @@ export function GuideProvider({ children }: { children: ReactNode }) {
         if (run.current !== id) return false;
         const el = findTarget(step.target);
         if (el) {
-          el.scrollIntoView({ block: "center", inline: "nearest" });
+          const tall = el.getBoundingClientRect().height > window.innerHeight * TALL;
+          el.scrollIntoView({ block: tall ? "start" : "center", inline: "nearest" });
           return true;
         }
         await new Promise((r) => setTimeout(r, POLL_MS));
@@ -182,10 +187,11 @@ function GuideOverlay({ state, onNext, onBack, onStop }: { state: GuideState; on
     let last = "";
     const tick = () => {
       const r = state.found ? findTarget(step.target)?.getBoundingClientRect() : undefined;
-      const key = r ? [r.top, r.left, r.width, r.height].map(Math.round).join("/") : "";
+      const height = r ? (r.height > window.innerHeight * TALL ? Math.min(r.height, BAND) : r.height) : 0;
+      const key = r ? [r.top, r.left, r.width, height].map(Math.round).join("/") : "";
       if (key !== last) {
         last = key;
-        setBox(r ? { top: r.top, left: r.left, width: r.width, height: r.height } : null);
+        setBox(r ? { top: r.top, left: r.left, width: r.width, height } : null);
       }
       frame = requestAnimationFrame(tick);
     };
@@ -205,11 +211,11 @@ function GuideOverlay({ state, onNext, onBack, onStop }: { state: GuideState; on
   }, [step.target, state.found, onNext]);
 
   const last = state.index === state.steps.length - 1;
+  // Below the control when it fits, else above it, and always inside the window.
+  let top = box ? box.top + box.height + 14 : 0;
+  if (box && top + CARD_H > window.innerHeight) top = box.top - 14 - CARD_H;
   const card: CSSProperties = box
-    ? {
-        left: Math.max(12, Math.min(box.left, window.innerWidth - CARD_W - 12)),
-        ...(box.top + box.height + 180 < window.innerHeight ? { top: box.top + box.height + 14 } : { bottom: window.innerHeight - box.top + 14 }),
-      }
+    ? { left: Math.max(12, Math.min(box.left, window.innerWidth - CARD_W - 12)), top: Math.max(12, Math.min(top, window.innerHeight - CARD_H - 12)) }
     : { left: "50%", bottom: 24, transform: "translateX(-50%)" };
 
   return createPortal(
