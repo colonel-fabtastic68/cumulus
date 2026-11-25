@@ -16,6 +16,8 @@ import { cn } from "@/lib/utils";
 import { Button, Checkbox, FormGrid, Modal, Select, SimpleTable, TextArea, TextField, Toggle, useToast } from "@/components/ui";
 import { ItemPicker } from "@/components/inventory";
 import { BomOptionsPicker } from "@/components/builds/BomOptionsPicker";
+import { BuildSetupNotice } from "@/components/builds/BuildSetupNotice";
+import { buildBlocker, buildBlockerLabel, isBuildableAssembly } from "@/components/builds/buildUtils";
 import { PRIORITY_OPTIONS } from "./workOrderUtils";
 
 interface Props {
@@ -61,6 +63,8 @@ function WorkOrderForm({ open, onClose, assembly: preset, onCreated }: Props) {
 
   const live = useMemo(() => (assembly ? (items.find((i) => i.id === assembly.id) ?? assembly) : null), [items, assembly]);
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
+  // An item found by search that cannot be built yet (no parts list, not an assembly, not active): the form says what to set up.
+  const blocked = !!live && !!buildBlocker(live);
   const raw = Number(qty);
   const n = Number.isInteger(raw) && raw > 0 ? raw : 0;
   const modular = !!live && hasBomOptions(live);
@@ -74,6 +78,7 @@ function WorkOrderForm({ open, onClose, assembly: preset, onCreated }: Props) {
 
   const submit = async () => {
     if (!live) return setError("Choose the assembly to build");
+    if (blocked) return setError(`${live.sku} cannot be built yet`);
     if (n <= 0) return setError("Enter a whole-number quantity");
     if (datesWrong) return setError("The due date is before the start date");
     setBusy(true);
@@ -114,7 +119,7 @@ function WorkOrderForm({ open, onClose, assembly: preset, onCreated }: Props) {
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" onClick={() => void submit()} loading={busy} disabled={!live || n <= 0 || datesWrong}>
+          <Button variant="primary" onClick={() => void submit()} loading={busy} disabled={!live || blocked || n <= 0 || datesWrong}>
             {release ? "Create and release" : "Plan work order"}
           </Button>
         </>
@@ -131,12 +136,14 @@ function WorkOrderForm({ open, onClose, assembly: preset, onCreated }: Props) {
                 setSelection({});
                 setOrderId("");
               }}
-              filter={(i) => i.type === "assembly" && i.bom.length > 0 && i.status === "active"}
+              filter={isBuildableAssembly}
+              explain={buildBlockerLabel}
               autoFocus={!preset}
             />
           </div>
           <TextField label="Quantity" type="number" min={1} step={1} value={qty} onChange={(e) => setQty(e.target.value)} error={qty.trim() !== "" && n === 0 ? "Whole numbers only" : undefined} autoFocus={!!preset} />
         </FormGrid>
+        {live && blocked && <BuildSetupNotice item={live} />}
         <FormGrid cols={3}>
           <TextField label="Start" hint="(optional)" type="date" value={startOn} onChange={(e) => setStartOn(e.target.value)} />
           <TextField label="Due" hint="(optional)" type="date" value={dueOn} onChange={(e) => setDueOn(e.target.value)} error={datesWrong ? "Before the start date" : undefined} />
@@ -152,7 +159,7 @@ function WorkOrderForm({ open, onClose, assembly: preset, onCreated }: Props) {
         <div className="rounded-[var(--radius)] border border-border p-3">
           <Toggle label="Pull sub-assemblies from stock" help={consumeSub ? "Sub-assemblies on the BOM are taken from their own shelf stock." : "Sub-assemblies are built from base parts when their stock runs out."} checked={consumeSub} onChange={setConsumeSub} />
         </div>
-        {live && n > 0 && (
+        {live && !blocked && n > 0 && (
           <div>
             <div className="mb-1.5 flex items-center justify-between text-[12.5px]">
               <span className="font-medium">Parts the run needs</span>
