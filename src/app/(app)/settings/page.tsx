@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
+import type { WorkspaceSettings } from "@/lib/types";
 import { currentInstance, releaseStage } from "@/lib/firebase-config";
 import { useSettings } from "@/lib/store/provider";
 import { useAuth, useCurrentUser } from "@/lib/auth";
@@ -40,6 +41,30 @@ function Row({ id, children }: { id: string; children: ReactNode }) {
   );
 }
 
+/** JSON with object keys sorted, so the same settings always give the same text whatever order the store returns fields in. */
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .filter((k) => (value as Record<string, unknown>)[k] !== undefined)
+      .map((k) => `${JSON.stringify(k)}:${stableJson((value as Record<string, unknown>)[k])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+/** What the forms show: every setting except the Labs switches and the save stamp, hashed short. */
+function settingsFormKey(settings: WorkspaceSettings): string {
+  const shown: Partial<WorkspaceSettings> = { ...settings };
+  delete shown.features;
+  delete shown.updatedAt;
+  const text = stableJson(shown);
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
 export default function SettingsPage() {
   const settings = useSettings();
   const user = useCurrentUser();
@@ -65,9 +90,10 @@ export default function SettingsPage() {
     return () => window.removeEventListener("hashchange", jump);
   }, []);
 
-  // Forms are keyed on updatedAt so they restart from the stored values after
-  // every save (or when a teammate changes settings).
-  const formKey = settings.updatedAt;
+  // Forms restart from the stored values when something they show changes: after their own save,
+  // or when a teammate changes settings. A Labs switch only changes `features`, so flipping one
+  // leaves half-typed edits in other sections alone and nothing above it is rebuilt.
+  const formKey = useMemo(() => settingsFormKey(settings), [settings]);
 
   return (
     <Page medium title="Settings" subtitle="Company details, inventory policy, Strato, your plan and where the data lives">

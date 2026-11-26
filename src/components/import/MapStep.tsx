@@ -64,7 +64,7 @@ export function MapStep({ source, mapping, onMappingChange, fillSkus, onFillSkus
         body: JSON.stringify({ headers: source.headers, sample: source.rows.slice(0, 5) }),
       });
       if (res.status === 503) {
-        setAiHint({ tone: "warning", text: "Strato needs a Gemini key to map columns. Add GOOGLE_GENERATIVE_AI_API_KEY to the environment and restart, or keep mapping by hand." });
+        setAiHint({ tone: "warning", text: "Strato can't map columns right now. Map them by hand below." });
         return;
       }
       if (!res.ok) throw new Error(`Mapping service returned ${res.status}`);

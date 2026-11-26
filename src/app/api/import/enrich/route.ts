@@ -65,7 +65,7 @@ const SYSTEM = `You are Strato, the inventory assistant in cumulusOS. A spreadsh
 export async function POST(req: Request) {
   try {
     await authenticateForStrato(req);
-    if (!geminiConfigured()) throw new GeminiUnavailable("Strato needs a Gemini key (GOOGLE_GENERATIVE_AI_API_KEY) to fill in gaps.");
+    if (!geminiConfigured()) throw new GeminiUnavailable("Strato can't fill in gaps right now. Try again later.");
     const body = await readJson<{ rows?: unknown; exampleSkus?: unknown; categories?: unknown; takenSkus?: unknown; hint?: unknown; fields?: unknown }>(req);
     const parsedRows = z.array(rowSchema).max(MAX_ROWS).safeParse(body.rows);
     if (!parsedRows.success || parsedRows.data.length === 0) throw new HttpError(400, `Send 1–${MAX_ROWS} rows.`);

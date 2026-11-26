@@ -7,6 +7,7 @@ import { useFeatureContext } from "@/lib/useFeature";
 import { Badge, Toggle, useToast, type BadgeTone } from "@/components/ui";
 import { SettingsCard } from "./SettingsCard";
 import { useSaveSettings } from "./useSaveSettings";
+import { keepInView } from "./keepInView";
 
 const STATUS: Record<FeatureStatus, { label: string; tone: BadgeTone }> = {
   planned: { label: "Planned", tone: "default" },
@@ -38,6 +39,8 @@ export function LabsSection({ settings, readOnly }: { settings: WorkspaceSetting
 
   const set = async (id: FeatureId, on: boolean) => {
     setSaving(id);
+    // The switch stays under the pointer while the page catches up with the change.
+    const release = keepInView(document.querySelector(`[data-labs-row="${id}"]`));
     try {
       const next = { ...(settings.features ?? {}) };
       // Back at the default there is nothing to remember.
@@ -49,6 +52,7 @@ export function LabsSection({ settings, readOnly }: { settings: WorkspaceSetting
       toast(e instanceof Error ? e.message : "Could not save the switch", "critical");
     } finally {
       setSaving(null);
+      release();
     }
   };
 
@@ -69,7 +73,7 @@ export function LabsSection({ settings, readOnly }: { settings: WorkspaceSetting
               const status = STATUS[featureStatus(id)];
               const switchable = featureSwitchable(id, ctx.stage);
               return (
-                <div key={id} className="flex items-start justify-between gap-4 px-3 py-2.5">
+                <div key={id} data-labs-row={id} className="flex items-start justify-between gap-4 px-3 py-2.5">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-[13px] font-medium text-text">{def.label}</span>

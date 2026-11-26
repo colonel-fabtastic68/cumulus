@@ -177,7 +177,7 @@ export function AgentChat({ onClose, pending, consumePending, pendingSession, co
     transport,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     onError: (err) => {
-      if (/503|GOOGLE_GENERATIVE_AI_API_KEY/.test(err.message)) setNeedsKey(true);
+      if (/503|strato_unavailable|GOOGLE_GENERATIVE_AI_API_KEY/.test(err.message)) setNeedsKey(true);
     },
     onFinish: ({ messages: msgs }) => {
       void saveSession(msgs);
@@ -382,9 +382,15 @@ export function AgentChat({ onClose, pending, consumePending, pendingSession, co
       <div ref={scrollRef} className={cn("min-h-0 flex-1 overflow-y-auto", page ? "px-6 py-6" : "px-4 py-4")}>
         <div className={cn(page && "mx-auto w-full max-w-[820px]")}>
         {needsKey && (
-          <Banner tone="warning" title="Add a Gemini API key to enable Strato" className="mb-3">
-            Create a key at aistudio.google.com/apikey, put it in <code>.env.local</code> as <code>GOOGLE_GENERATIVE_AI_API_KEY</code>, then restart <code>npm run dev</code>.
-          </Banner>
+          stage === "development" ? (
+            <Banner tone="warning" title="Add a Gemini API key to enable Strato" className="mb-3">
+              Create a key at aistudio.google.com/apikey, put it in <code>.env.local</code> as <code>GOOGLE_GENERATIVE_AI_API_KEY</code>, then restart <code>npm run dev</code>.
+            </Banner>
+          ) : (
+            <Banner tone="warning" title="Strato isn't available right now" className="mb-3">
+              Try again in a few minutes. Everything else in cumulusOS works as usual.
+            </Banner>
+          )
         )}
         {messages.length === 0 ? (
           <div className={cn("flex flex-col", page ? "justify-center pt-10" : "h-full justify-end")}>

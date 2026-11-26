@@ -221,7 +221,7 @@ export function StratoFill({ source, mapping, rows, itemsBySku, overrides, onOve
         </Banner>
       )}
       {error && (
-        <Banner tone={/Gemini key/.test(error) ? "warning" : "critical"} className="mt-3" onDismiss={() => setError(null)}>
+        <Banner tone={/right now/.test(error) ? "warning" : "critical"} className="mt-3" onDismiss={() => setError(null)}>
           {error}
         </Banner>
       )}

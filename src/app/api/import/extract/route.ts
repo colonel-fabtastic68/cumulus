@@ -82,7 +82,7 @@ function decodeBase64(data: string): Buffer {
 export async function POST(req: Request) {
   try {
     await authenticateForStrato(req);
-    if (!geminiConfigured()) throw new GeminiUnavailable("Strato needs a Gemini key (GOOGLE_GENERATIVE_AI_API_KEY) to read documents.");
+    if (!geminiConfigured()) throw new GeminiUnavailable("Strato can't read documents right now. Import a spreadsheet instead, or try again later.");
     const body = await readJson<{ files?: unknown; hint?: unknown; target?: unknown }>(req);
     const files = Array.isArray(body.files) ? (body.files as IncomingFile[]) : [];
     if (files.length === 0) throw new HttpError(400, "Attach a photo, PDF or text file.");

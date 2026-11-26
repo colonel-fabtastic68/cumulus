@@ -27,7 +27,10 @@ const resultSchema = z.object({
  */
 export async function POST(req: Request) {
   const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY;
-  if (!apiKey) return Response.json({ error: "Reading photos needs GOOGLE_GENERATIVE_AI_API_KEY on the server." }, { status: 503 });
+  if (!apiKey) {
+    console.warn("[receiving scan] GOOGLE_GENERATIVE_AI_API_KEY is not set.");
+    return Response.json({ error: "Strato can't read photos right now. Tick the checklist by hand, or try again later." }, { status: 503 });
+  }
   let body: { image?: unknown; lines?: unknown };
   try {
     body = (await req.json()) as typeof body;

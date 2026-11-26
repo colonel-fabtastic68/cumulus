@@ -6,8 +6,9 @@ import type { WorkspaceSettings } from "@/lib/types";
 import { Badge, Toggle, useToast } from "@/components/ui";
 import { SettingsCard } from "./SettingsCard";
 import { useSaveSettings } from "./useSaveSettings";
+import { useFeatureContext } from "@/lib/useFeature";
 
-type AgentStatus = { state: "loading" } | { state: "ready"; configured: boolean; model: string } | { state: "error" };
+type AgentStatus = { state: "loading" } | { state: "ready"; configured: boolean } | { state: "error" };
 
 /** Read-only status from GET /api/agent. */
 export function useAgentStatus(): AgentStatus {
@@ -17,11 +18,11 @@ export function useAgentStatus(): AgentStatus {
     fetch("/api/agent")
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return (await res.json()) as { configured?: unknown; model?: unknown };
+        return (await res.json()) as { configured?: unknown };
       })
       .then((json) => {
         if (cancelled) return;
-        setStatus({ state: "ready", configured: Boolean(json.configured), model: typeof json.model === "string" && json.model ? json.model : "gemini" });
+        setStatus({ state: "ready", configured: Boolean(json.configured) });
       })
       .catch(() => {
         if (!cancelled) setStatus({ state: "error" });
@@ -42,7 +43,7 @@ function StatusBadgeFor({ status }: { status: AgentStatus }) {
     </Badge>
   ) : (
     <Badge tone="warning" dot>
-      Needs API key
+      Not available
     </Badge>
   );
 }
@@ -51,6 +52,8 @@ export function AgentSection({ settings, readOnly }: { settings: WorkspaceSettin
   const saveSettings = useSaveSettings();
   const toast = useToast();
   const status = useAgentStatus();
+  // Keys, models and setup steps only mean something to whoever is running the app locally.
+  const developer = useFeatureContext().stage === "development";
   const [autoApprove, setAutoApprove] = useState(settings.agentAutoApprove);
   const [saving, setSaving] = useState(false);
   const dirty = autoApprove !== settings.agentAutoApprove;
@@ -79,19 +82,12 @@ export function AgentSection({ settings, readOnly }: { settings: WorkspaceSettin
             <StatusBadgeFor status={status} />
           </div>
           <p className="mt-0.5 text-[12.5px] text-text-secondary">
-            {status.state === "loading" && "Checking Strato endpoint…"}
-            {status.state === "error" && (
-              <>
-                The status check at <code className="rounded bg-surface-hover px-1 font-mono text-[12px]">/api/agent</code> failed. Make sure the app server is running.
-              </>
-            )}
-            {status.state === "ready" && (
-              <>
-                Gemini · <span className="font-mono text-[12px]">{status.model}</span> · {status.configured ? "key found on the server" : "no API key on the server"}
-              </>
-            )}
+            {status.state === "loading" && "Checking that Strato is reachable…"}
+            {status.state === "error" && "Strato can't be reached right now. Reload the page, or try again in a few minutes."}
+            {status.state === "ready" && status.configured && "Answers questions about the workspace and drafts changes for you to approve."}
+            {status.state === "ready" && !status.configured && (developer ? "This local build has no API key yet:" : "Strato isn't available on this workspace right now.")}
           </p>
-          {status.state === "ready" && !status.configured && (
+          {developer && status.state === "ready" && !status.configured && (
             <ol className="mt-2 list-decimal space-y-0.5 pl-4 text-[12.5px] text-text-secondary">
               <li>
                 Create a key at{" "}
