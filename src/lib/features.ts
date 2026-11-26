@@ -175,6 +175,13 @@ export const FEATURES = {
     area: "Production",
     notes: [],
   },
+  newAssembly: {
+    label: "New assembly on the BOM page",
+    description: "A New assembly button on the BOM page: name the assembly, then go straight to its BOM tab to list the parts it is built from.",
+    status: "preview",
+    area: "Production",
+    notes: [],
+  },
   serials: {
     label: "Serial numbers",
     description: "Give each unit of an assembly its own serial number when its work order is released, with a record page showing its history, what went into it, where it is and who bought it.",

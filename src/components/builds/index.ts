@@ -6,3 +6,4 @@ export * from "./BuildDetailModal";
 export * from "./ExportBomMenu";
 export * from "./CopyBomModal";
 export * from "./BomOptionsPicker";
+export * from "./BuildSetupNotice";

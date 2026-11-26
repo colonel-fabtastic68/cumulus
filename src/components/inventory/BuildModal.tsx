@@ -11,6 +11,8 @@ import { cn } from "@/lib/utils";
 import { Button, FormGrid, Modal, SimpleTable, TextField, Toggle, useToast } from "@/components/ui";
 import { ItemPicker } from "./ItemPicker";
 import { BomOptionsPicker } from "@/components/builds/BomOptionsPicker";
+import { BuildSetupNotice } from "@/components/builds/BuildSetupNotice";
+import { buildBlocker, buildBlockerLabel, isBuildableAssembly } from "@/components/builds/buildUtils";
 import { bomPickList, printPickSheet } from "@/lib/pickList";
 import { describeBomSelection, hasBomOptions } from "@/lib/bomOptions";
 import { useCollection, useSettings } from "@/lib/store/provider";
@@ -50,6 +52,8 @@ function BuildForm({ open, onClose, assembly: fixed, onDone }: BuildModalProps) 
   const terms = useTerms();
 
   const live = useMemo(() => (assembly ? items.find((i) => i.id === assembly.id) ?? assembly : null), [items, assembly]);
+  // An item found by search that cannot be built yet (no parts list, not an assembly, not active): the form says what to set up.
+  const blocked = !!live && !!buildBlocker(live);
   const raw = Number(qty);
   const n = Number.isInteger(raw) && raw > 0 ? raw : 0;
   const badQty = qty.trim() !== "" && n === 0;
@@ -63,6 +67,7 @@ function BuildForm({ open, onClose, assembly: fixed, onDone }: BuildModalProps) 
 
   const submit = async () => {
     if (!live) return setError("Choose an assembly");
+    if (blocked) return setError(`${live.sku} cannot be built yet`);
     if (n <= 0) return setError("Enter a whole-number quantity");
     if (futureDate) return setError("The build date cannot be in the future");
     setBusy(true);
@@ -96,12 +101,12 @@ function BuildForm({ open, onClose, assembly: fixed, onDone }: BuildModalProps) 
       footer={
         <>
           {pickLists && (
-            <Button variant="plain" icon={<ClipboardList />} onClick={printPick} disabled={!live || n <= 0} className="mr-auto">
+            <Button variant="plain" icon={<ClipboardList />} onClick={printPick} disabled={!live || blocked || n <= 0} className="mr-auto">
               Pick list
             </Button>
           )}
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" onClick={submit} loading={busy} disabled={!live || n <= 0 || shortages.length > 0 || futureDate}>
+          <Button variant="primary" onClick={submit} loading={busy} disabled={!live || blocked || n <= 0 || shortages.length > 0 || futureDate}>
             Build {n > 0 ? `${n} ×` : ""} {live?.sku ?? ""}
           </Button>
         </>
@@ -117,10 +122,15 @@ function BuildForm({ open, onClose, assembly: fixed, onDone }: BuildModalProps) 
                 setAssembly(a);
                 setSelection({});
               }}
-              filter={(i) => i.type === "assembly" && i.bom.length > 0 && i.status === "active"} disabled={!!fixed} autoFocus={!fixed} />
+              filter={isBuildableAssembly}
+              explain={buildBlockerLabel}
+              disabled={!!fixed}
+              autoFocus={!fixed}
+            />
           </div>
-          <TextField label="Quantity" type="number" min={1} step={1} value={qty} onChange={(e) => setQty(e.target.value)} help={live ? `Can build ${canBuild} now` : undefined} error={badQty ? "Whole numbers only" : undefined} autoFocus={!!fixed} />
+          <TextField label="Quantity" type="number" min={1} step={1} value={qty} onChange={(e) => setQty(e.target.value)} help={live && !blocked ? `Can build ${canBuild} now` : undefined} error={badQty ? "Whole numbers only" : undefined} autoFocus={!!fixed} />
         </FormGrid>
+        {live && blocked && <BuildSetupNotice item={live} />}
         <FormGrid cols={2}>
           <TextField label="Build date" type="date" max={toDateInput()} value={date} onChange={(e) => setDate(e.target.value)} error={futureDate ? "Cannot be in the future" : undefined} />
           <TextField label="Note" hint="(optional)" value={note} onChange={(e) => setNote(e.target.value)} />
@@ -134,7 +144,7 @@ function BuildForm({ open, onClose, assembly: fixed, onDone }: BuildModalProps) 
             onChange={setConsumeSub}
           />
         </div>
-        {live && n > 0 && (
+        {live && !blocked && n > 0 && (
           <div>
             <div className="mb-1.5 flex items-center justify-between text-[12.5px]">
               <span className="font-medium">Components required</span>
