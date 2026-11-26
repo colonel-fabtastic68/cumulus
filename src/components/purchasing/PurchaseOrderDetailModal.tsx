@@ -31,7 +31,7 @@ export function PurchaseOrderDetailModal({ po, ...rest }: Props) {
   return <Detail key={po.id} po={po} {...rest} />;
 }
 
-const SOURCE_LABEL: Record<NonNullable<PurchaseOrder["source"]>, string> = { manual: "Typed in", template: "Template", strato: "Strato", suggestion: "Low-stock suggestion", replenishment: "Replenishment", auto: "Automatic replenishment" };
+const SOURCE_LABEL: Record<NonNullable<PurchaseOrder["source"]>, string> = { manual: "Typed in", template: "Template", strato: "Strato", suggestion: "Low-stock suggestion", replenishment: "Replenishment", auto: "Automatic replenishment", upload: "Uploaded document" };
 
 function Detail({ po, onClose, canWrite, busy, onSend, onReceive, onEdit, onCancel, onSaveTemplate }: Props & { po: PurchaseOrder }) {
   const itemsById = useItemsById();

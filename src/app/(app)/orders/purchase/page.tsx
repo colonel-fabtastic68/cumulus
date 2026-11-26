@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { BookmarkPlus, ChevronDown, FileText, FileUp, Lightbulb, Merge, Plus, Sparkles, Trash2 } from "lucide-react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BookmarkPlus, ChevronDown, FileText, FileUp, Lightbulb, Merge, PenLine, Plus, Sparkles, Trash2 } from "lucide-react";
 import type { PurchaseOrder, PurchaseOrderTemplate } from "@/lib/types";
 import { cancelPurchaseOrder, deletePurchaseOrderTemplate, markPurchaseOrderSent, mergePurchaseOrders, poTotal, savePurchaseOrderTemplate, templateFromPurchaseOrder } from "@/lib/purchaseOrders";
 import { replenishmentSummary } from "@/lib/replenishment";
@@ -10,9 +10,10 @@ import { useCollection, useItemsById, useSettings, useStore } from "@/lib/store/
 import { canWrite, useCurrentUser } from "@/lib/auth";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { Button, ConfirmDialog, EmptyState, Menu, Modal, Page, QueryParamEffect, Select, TextField, useToast } from "@/components/ui";
-import { NewPurchaseOrderModal, PurchaseOrderDetailModal, PurchaseOrderStats, PurchaseOrdersTable, ReceivePurchaseOrderModal, UploadPoTemplateModal } from "@/components/purchasing";
+import { NewPurchaseOrderModal, PurchaseOrderDetailModal, PurchaseOrderStats, PurchaseOrdersTable, ReceivePurchaseOrderModal, UploadPoTemplateModal, UploadPurchaseOrder, type UploadPurchaseOrderHandle } from "@/components/purchasing";
 import { useReplenishmentPlan } from "@/components/replenishment/useReplenishmentPlan";
 import { useDocuments } from "@/lib/documents";
+import { useFeature } from "@/lib/useFeature";
 
 export default function PurchaseOrdersPage() {
   const purchaseOrders = useCollection("purchaseOrders");
@@ -28,6 +29,8 @@ export default function PurchaseOrdersPage() {
   const { open: openAgent, setPageContext } = useAgent();
   const plan = useReplenishmentPlan();
   const toOrder = useMemo(() => replenishmentSummary(plan).toOrder, [plan]);
+  const uploadEnabled = useFeature("poUpload");
+  const uploadRef = useRef<UploadPurchaseOrderHandle>(null);
 
   const [creating, setCreating] = useState(false);
   const [templateId, setTemplateId] = useState<string | null>(null);
@@ -157,11 +160,43 @@ export default function PurchaseOrdersPage() {
       title="Purchase orders"
       subtitle="What is on order from suppliers, and what has arrived"
       primaryAction={
-        writable ? (
+        !writable ? undefined : uploadEnabled ? (
+          <Menu
+            align="right"
+            menuClassName="w-72"
+            trigger={
+              <Button variant="primary" icon={<Plus />} iconRight={<ChevronDown />}>
+                New purchase order
+              </Button>
+            }
+            items={[
+              {
+                label: (
+                  <span className="block min-w-0">
+                    <span className="block">Upload a document</span>
+                    <span className="block text-[11px] text-text-tertiary">Strato reads a PDF, photo or spreadsheet. You check it before it is added.</span>
+                  </span>
+                ),
+                icon: <FileUp />,
+                onSelect: () => uploadRef.current?.choose(),
+              },
+              {
+                label: (
+                  <span className="block min-w-0">
+                    <span className="block">Enter manually</span>
+                    <span className="block text-[11px] text-text-tertiary">Pick the supplier and type the lines.</span>
+                  </span>
+                ),
+                icon: <PenLine />,
+                onSelect: startNew,
+              },
+            ]}
+          />
+        ) : (
           <Button variant="primary" icon={<Plus />} onClick={startNew}>
             New purchase order
           </Button>
-        ) : undefined
+        )
       }
       secondaryActions={
         <>
@@ -241,6 +276,7 @@ export default function PurchaseOrdersPage() {
         }}
         onCreated={(po) => setSelectedId(po.id)}
       />
+      {uploadEnabled && writable && <UploadPurchaseOrder ref={uploadRef} onCreated={(po) => setSelectedId(po.id)} onManual={startNew} />}
       <UploadPoTemplateModal
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}

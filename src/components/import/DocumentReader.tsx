@@ -73,7 +73,7 @@ const toQueued = (file: File): Queued => {
 };
 
 /** Photos are re-encoded to a bounded JPEG so a 12-megapixel shot does not blow the request. */
-async function shrinkImage(file: File): Promise<{ data: string; mediaType: string }> {
+export async function shrinkImage(file: File): Promise<{ data: string; mediaType: string }> {
   let bitmap: ImageBitmap | null = null;
   try {
     bitmap = await createImageBitmap(file);
@@ -98,7 +98,7 @@ async function shrinkImage(file: File): Promise<{ data: string; mediaType: strin
   return { data: dataUrl.slice(dataUrl.indexOf(",") + 1), mediaType: "image/jpeg" };
 }
 
-function toBase64(file: File): Promise<string> {
+export function toBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {

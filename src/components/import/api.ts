@@ -13,7 +13,7 @@ import { getFirebaseAuth } from "@/lib/store/firestore";
 export function useStratoImportApi() {
   const { app, workspaceId, mode } = useSession();
   return useCallback(
-    async <T,>(path: string, body: unknown): Promise<T> => {
+    async <T,>(path: string, body: unknown, init?: { signal?: AbortSignal }): Promise<T> => {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (mode === "firestore" && app && workspaceId) {
         const user = getFirebaseAuth(app).currentUser;
@@ -21,7 +21,7 @@ export function useStratoImportApi() {
         headers.Authorization = `Bearer ${await user.getIdToken()}`;
         headers["x-workspace-id"] = workspaceId;
       }
-      const res = await fetch(path, { method: "POST", headers, body: JSON.stringify(body) });
+      const res = await fetch(path, { method: "POST", headers, body: JSON.stringify(body), signal: init?.signal });
       const text = await res.text();
       let data: unknown = null;
       try {
