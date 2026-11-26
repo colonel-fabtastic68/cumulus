@@ -1,4 +1,5 @@
 import { NAV, NAV_SECONDARY, navWithFeatures, type NavItem } from "@/components/shell/nav";
+import { FEATURES, type FeatureId } from "@/lib/features";
 
 /**
  * Strato's map of the app, and the on-screen guide it can run (feature `stratoGuide`).
@@ -71,6 +72,24 @@ export const PAGE_NOTES: Record<string, string> = {
   "/settings": "settings sections: company, inventory-policy, catalog, locations, shipping, quoting, strato, billing, labs (switch unreleased features on for this workspace), time-machine, data (clear or export the workspace), about",
 };
 
+/**
+ * What a feature adds to a page once it is on, appended to that page's note. Without this Strato
+ * would send people the long way round (typing in a supplier's PDF by hand) while the shortcut sits
+ * one click away.
+ */
+export const FEATURE_NOTES: Array<{ feature: FeatureId; href: string; note: string }> = [
+  { feature: "poUpload", href: "/orders/purchase", note: "New purchase order (page:primary) is a menu: Upload a document turns a supplier's PDF, photo of the pages or spreadsheet into an order that the user checks line by line before it is added; Enter manually is the form" },
+  { feature: "newAssembly", href: "/builds", note: "New assembly (page:primary) names an assembly and opens its BOM tab to list the parts" },
+  { feature: "savedCodes", href: "/exports/labels", note: "opens on the saved barcode or QR code of each item; New codes (page:primary) makes them in four steps; ticked codes print, export or share; pick lists print each part's saved code" },
+];
+
+export interface AppFeatures {
+  /** Every feature flag as it stands for this workspace. */
+  on?: Partial<Record<FeatureId, boolean>>;
+  /** Features that are off here and that this workspace can switch on in Settings › Labs. */
+  labsOff?: FeatureId[];
+}
+
 /** On-screen targets besides nav:<path>, with what each one is. */
 export const FIXED_TARGETS: Array<{ id: string; what: string }> = [
   { id: "page:primary", what: "the page's main button (New item, New order, New purchase order…)" },
@@ -107,10 +126,14 @@ function entry(n: NavItem): string {
 }
 
 /** The "Finding your way around" section of Strato's prompt, for the sidebar this workspace sees. */
-export function describeApp(flags: Partial<NavFlags> = {}): string {
+export function describeApp(flags: Partial<NavFlags> = {}, features: AppFeatures = {}): string {
   const main = navFor(flags);
   const hrefs = new Set([...main, ...NAV_SECONDARY].flatMap((n) => [n.href, ...(n.children?.map((c) => c.href) ?? [])]));
-  const notes = Object.entries(PAGE_NOTES).filter(([href]) => hrefs.has(href));
+  const extra = (href: string) => FEATURE_NOTES.filter((f) => f.href === href && features.on?.[f.feature]).map((f) => `; ${f.note}`).join("");
+  const notes = Object.entries(PAGE_NOTES)
+    .filter(([href]) => hrefs.has(href))
+    .map(([href, what]) => [href, what + extra(href)] as const);
+  const labs = (features.labsOff ?? []).map((id) => `${FEATURES[id].label} (${FEATURES[id].description})`);
   return [
     "## Finding your way around",
     `Sidebar, top to bottom: ${main.map(entry).join(" · ")}.`,
@@ -119,5 +142,6 @@ export function describeApp(flags: Partial<NavFlags> = {}): string {
     ...notes.map(([href, what]) => `- ${navLabelFor(href, flags) ?? href} (${href}): ${what}`),
     `On-screen targets for showOnScreen: nav:<path> for any sidebar entry above (nav:/orders/purchase); ${FIXED_TARGETS.map((t) => `${t.id} = ${t.what}`).join("; ")}.`,
     "A feature that is switched off shows nothing: Settings › Labs (settings:labs) turns features on for this workspace. On a phone the sidebar is behind the menu button.",
+    ...(labs.length ? [`Switched off here, and the user can switch them on in Settings › Labs: ${labs.join(" · ")}. When one of these answers the question, say so and point at settings:labs.`] : []),
   ].join("\n");
 }

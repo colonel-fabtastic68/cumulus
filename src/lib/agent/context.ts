@@ -6,10 +6,10 @@ import { describeAnswers } from "@/lib/onboarding";
 import { jobIsOpen } from "@/lib/jobs";
 import { workOrderIsLate, workOrderIsOpen, workOrderNeeds, workOrderRemaining } from "@/lib/workOrders";
 import type { ToolFeatureFlags } from "./tools";
-import { describeApp, navLabelFor, type NavFlags } from "@/lib/guide";
+import { describeApp, navLabelFor, type AppFeatures, type NavFlags } from "@/lib/guide";
 
 /** Compact text snapshot of the workspace for Strato's system prompt. */
-export function buildAgentContext(ws: Pick<WorkspaceSnapshot, "items" | "suppliers" | "orders" | "rmas" | "settings" | "members"> & Partial<Pick<WorkspaceSnapshot, "integrations" | "purchaseOrders" | "purchaseOrderTemplates" | "movements" | "workOrders" | "jobs">>, extra: { page?: string; selectedSkus?: string[]; features?: ToolFeatureFlags; route?: string; guide?: string; navFlags?: Partial<NavFlags> } = {}): string {
+export function buildAgentContext(ws: Pick<WorkspaceSnapshot, "items" | "suppliers" | "orders" | "rmas" | "settings" | "members"> & Partial<Pick<WorkspaceSnapshot, "integrations" | "purchaseOrders" | "purchaseOrderTemplates" | "movements" | "workOrders" | "jobs">>, extra: { page?: string; selectedSkus?: string[]; features?: ToolFeatureFlags; route?: string; guide?: string; navFlags?: Partial<NavFlags>; appFeatures?: AppFeatures } = {}): string {
   const settings = ws.settings[0];
   const active = ws.items.filter((i) => i.status === "active");
   const low = ws.items.filter((i) => isLowStock(i, ws.settings?.[0]?.stockAlerts)).sort((a, b) => a.onHand / (a.minQty || 1) - b.onHand / (b.minQty || 1));
@@ -72,6 +72,6 @@ export function buildAgentContext(ws: Pick<WorkspaceSnapshot, "items" | "supplie
   if (screen || extra.route) lines.push(`User is viewing: ${screen ?? "a page outside the sidebar"}${extra.route ? ` (${extra.route})` : ""}`);
   if (extra.guide) lines.push(`On-screen guide in progress: ${extra.guide}`);
   if (extra.selectedSkus?.length) lines.push(`User has selected these SKUs in the table: ${extra.selectedSkus.join(", ")}`);
-  lines.push("", describeApp(extra.navFlags ?? {}));
+  lines.push("", describeApp(extra.navFlags ?? {}, extra.appFeatures));
   return lines.join("\n");
 }

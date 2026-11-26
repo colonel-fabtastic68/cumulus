@@ -255,7 +255,7 @@ export const FEATURES = {
   stratoGuide: {
     label: "Strato shows you around",
     description: "Ask Strato where something is or how to do it: it answers with the path and lights up the sidebar entry, button, tab or setting on screen, step by step, and it knows which screen you are on.",
-    status: "preview",
+    status: "beta",
     area: "Data",
     notes: [],
   },
