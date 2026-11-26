@@ -8,6 +8,7 @@ import { entriesFor, type LabelEntry } from "@/lib/labels/entries";
 import { buildLabelPdf } from "@/lib/labels/pdf";
 import { DEFAULT_SPEC, LABEL_KINDS, SYMBOLOGIES, TEMPLATES, findTemplate as findLabelTemplate, resolveTemplate, type LabelKind, type LabelSpec } from "@/lib/labels/spec";
 import type { Store } from "@/lib/store/types";
+import type { GuideRequest, GuideResult } from "@/lib/guide";
 import {
   adjustStock,
   buildAssembly,
@@ -99,6 +100,8 @@ export interface ExecContext {
   uploadDocument?: (input: UploadDocumentInput) => Promise<WorkspaceDocument>;
   /** The app's origin, for QR codes that link back into cumulusOS. */
   origin?: string;
+  /** Runs the on-screen guide (feature stratoGuide); only the chat inside the app has one. */
+  guide?: (req: GuideRequest) => Promise<GuideResult>;
 }
 
 interface LabelToolInput extends TargetInput {
@@ -524,6 +527,11 @@ export async function executeTool(name: AgentToolName, rawInput: unknown, ctx: E
           .filter((c) => c.status === "connected" || c.status === "error")
           .map((c) => ({ platform: c.id, status: c.status, where: c.config?.shop ?? c.config?.siteUrl ?? c.config?.account, lastSyncAt: c.lastSyncAt?.slice(0, 16), lastSync: c.lastSyncSummary, syncs: c.settings, linkedItems: items.filter((i) => !!i.channels?.[c.id as "shopify" | "woocommerce"]).length, lastError: c.lastError })),
       };
+    }
+
+    case "showOnScreen": {
+      if (!ctx.guide) throw new InventoryError("Showing things on screen only works from the chat inside the app.");
+      return ctx.guide(rawInput as GuideRequest);
     }
 
     case "getConnections": {

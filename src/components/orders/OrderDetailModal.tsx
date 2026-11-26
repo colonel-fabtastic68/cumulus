@@ -89,7 +89,7 @@ function OrderDetail({ order, onClose, canWrite, busy, onFulfil, onCancel }: Ord
             {(features.printDocuments || features.pickLists || features.documentEmail) && (
               <div className="flex items-center gap-1">
                 {features.printDocuments && (
-                  <Button variant="plain" icon={<Printer />} onClick={print}>
+                  <Button variant="plain" icon={<Printer />} data-guide="order:print" onClick={print}>
                     Print / PDF
                   </Button>
                 )}
@@ -99,7 +99,7 @@ function OrderDetail({ order, onClose, canWrite, busy, onFulfil, onCancel }: Ord
                     <Menu
                       align="left"
                       trigger={
-                        <Button variant="plain" icon={<ClipboardList />}>
+                        <Button variant="plain" icon={<ClipboardList />} data-guide="order:pick-list">
                           Pick list
                         </Button>
                       }
@@ -109,12 +109,12 @@ function OrderDetail({ order, onClose, canWrite, busy, onFulfil, onCancel }: Ord
                       ]}
                     />
                   ) : (
-                    <Button variant="plain" icon={<ClipboardList />} onClick={() => printPick(false)}>
+                    <Button variant="plain" icon={<ClipboardList />} data-guide="order:pick-list" onClick={() => printPick(false)}>
                       Pick list
                     </Button>
                   ))}
                 {features.documentEmail && order.status !== "cancelled" && (
-                  <Button variant="plain" icon={<Mail />} onClick={() => setEmailing(true)}>
+                  <Button variant="plain" icon={<Mail />} data-guide="order:email" onClick={() => setEmailing(true)}>
                     Email
                   </Button>
                 )}
@@ -127,10 +127,10 @@ function OrderDetail({ order, onClose, canWrite, busy, onFulfil, onCancel }: Ord
           <Button onClick={onClose}>Close</Button>
           {open && canWrite && (
             <>
-              <Button icon={<XCircle />} className="text-critical" onClick={() => onCancel(order)} disabled={busy}>
+              <Button icon={<XCircle />} className="text-critical" data-guide="order:cancel" onClick={() => onCancel(order)} disabled={busy}>
                 Cancel order
               </Button>
-              <Button variant="primary" icon={<Truck />} onClick={() => onFulfil(order)} loading={busy}>
+              <Button variant="primary" icon={<Truck />} data-guide="order:ship" onClick={() => onFulfil(order)} loading={busy}>
                 {order.status === "partial" ? "Ship the rest" : "Ship"}
               </Button>
             </>

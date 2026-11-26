@@ -642,3 +642,21 @@ input[type="number"]::-webkit-outer-spin-button {
     --input-border: #5f5f5f;
   }
 }
+
+/* Strato's on-screen guide (src/components/guide): the ring around the control a step points at. */
+.guide-ring {
+  border: 2px solid var(--accent);
+  border-radius: 10px;
+  animation: guide-pulse 1.6s ease-out infinite;
+}
+@keyframes guide-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 12px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}

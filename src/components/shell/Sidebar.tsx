@@ -57,6 +57,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <div key={n.href} className="flex flex-col gap-0.5">
           <Link
             href={n.children[0]!.href}
+            data-guide={`nav:${n.href}`}
             onClick={onNavigate}
             aria-expanded={active}
             className={cn("group flex h-8 items-center gap-2.5 rounded-[var(--radius-sm)] px-2.5 text-[13px] font-[550] transition-colors", active ? "text-text" : "text-text hover:bg-[rgba(0,0,0,0.04)]")}
@@ -76,6 +77,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                   <Link
                     key={c.href}
                     href={c.href}
+                    data-guide={`nav:${c.href}`}
                     onClick={onNavigate}
                     tabIndex={active ? undefined : -1}
                     aria-current={childActive ? "page" : undefined}
@@ -99,6 +101,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       <Link
         key={n.href}
         href={n.href}
+        data-guide={`nav:${n.href}`}
         onClick={onNavigate}
         aria-current={active ? "page" : undefined}
         className={cn(

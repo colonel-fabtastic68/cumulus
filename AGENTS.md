@@ -63,7 +63,7 @@ With no `.env.local` the app runs in **local mode**: no accounts, no database, d
 1. **Register a flag** in `src/lib/features.ts` with status `preview` (on in staging and local, hidden in production).
 2. **Data model** in `src/lib/types.ts`. Make new fields optional so existing workspaces need no migration. A whole new collection also needs: `CollectionMap`, `COLLECTIONS`, `src/lib/store/local.ts`, `src/lib/store/firestore.ts`, both literals in `src/lib/seed.ts`, and the collection map on the Exports page.
 3. **Logic** in its own file under `src/lib/` as plain functions that take a `Store` and an actor. No React in there. Throw `InventoryError` with a message a person can act on.
-4. **Screens** under `src/app/(app)/` and `src/components/`. Gate them with `useFeature("yourFlag")`. New sidebar entries go through `navWithFeatures` in `src/components/shell/nav.ts`.
+4. **Screens** under `src/app/(app)/` and `src/components/`. Gate them with `useFeature("yourFlag")`. New sidebar entries go through `navWithFeatures` in `src/components/shell/nav.ts`. Give a control Strato should be able to point at a `data-guide` id (conventions at the top of `src/lib/guide.ts`).
 5. **Strato**, if the feature should be usable from chat: follow "Strato and unreleased features" in docs/NEXT-RELEASE.md. Prefer a new report or parameter on an existing tool over a new tool.
 6. **Write it down**: add a row to the table in docs/NEXT-RELEASE.md with the flag, the status, and where to find it on screen.
 

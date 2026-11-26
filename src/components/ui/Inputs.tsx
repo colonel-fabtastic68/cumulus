@@ -216,7 +216,7 @@ export function Toggle({ label, checked, onChange, help, disabled, size = "md", 
 
 export function SearchField({ value, onChange, placeholder = "Search", className, autoFocus }: { value: string; onChange: (v: string) => void; placeholder?: string; className?: string; autoFocus?: boolean }) {
   return (
-    <div className={cn("relative", className)}>
+    <div data-guide="search" className={cn("relative", className)}>
       <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary" />
       <input
         type="search"
@@ -244,7 +244,7 @@ export function FormGrid({ children, cols = 2, className }: { children: ReactNod
 /** Segmented filter control, e.g. status tabs above a table. */
 export function Segmented<T extends string>({ value, onChange, options, className }: { value: T; onChange: (v: T) => void; options: Array<{ value: T; label: ReactNode; count?: number }>; className?: string }) {
   return (
-    <div className={cn("inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-[var(--radius-sm)] bg-fill-tertiary/70 p-0.5", className)}>
+    <div data-guide="filters" className={cn("inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-[var(--radius-sm)] bg-fill-tertiary/70 p-0.5", className)}>
       {options.map((o) => (
         <button
           key={o.value}
