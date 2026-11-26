@@ -150,7 +150,7 @@ export const FEATURES = {
   poUpload: {
     label: "Upload a purchase order",
     description: "New purchase order offers Upload a document beside Enter manually: Strato reads a PDF, photo or spreadsheet into an order you check against the document before it is added.",
-    status: "preview",
+    status: "beta",
     area: "Purchasing",
     notes: [],
   },
@@ -178,7 +178,7 @@ export const FEATURES = {
   newAssembly: {
     label: "New assembly on the BOM page",
     description: "A New assembly button on the BOM page: name the assembly, then go straight to its BOM tab to list the parts it is built from.",
-    status: "preview",
+    status: "beta",
     area: "Production",
     notes: [],
   },
@@ -234,7 +234,7 @@ export const FEATURES = {
   savedCodes: {
     label: "Saved barcodes",
     description: "Labels & barcodes opens on the codes made for each item. Make new ones step by step, then print, export, share, edit or delete them; pick lists print each part's saved code.",
-    status: "preview",
+    status: "beta",
     area: "Printing and labels",
     notes: [],
   },
