@@ -17,6 +17,12 @@ export interface ItemPickerProps {
   placeholder?: string;
   /** Restrict the candidates (e.g. only assemblies, only active). */
   filter?: (item: Item) => boolean;
+  /**
+   * Items `filter` leaves out can still be found by typing. Return a few words on why one is not ready
+   * here ("No parts yet") and it is listed under the matches with that reason; return nothing to keep it
+   * hidden. These rows can be picked, so the caller must handle one and say what to do next.
+   */
+  explain?: (item: Item) => string | undefined;
   exclude?: string[];
   autoFocus?: boolean;
   className?: string;
@@ -24,7 +30,7 @@ export interface ItemPickerProps {
 }
 
 /** Searchable combobox for choosing an item by SKU or name. */
-export function ItemPicker({ value, onChange, label, placeholder = "Search SKU or name", filter, exclude, autoFocus, className, disabled }: ItemPickerProps) {
+export function ItemPicker({ value, onChange, label, placeholder = "Search SKU or name", filter, explain, exclude, autoFocus, className, disabled }: ItemPickerProps) {
   const items = useItems();
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
@@ -33,13 +39,31 @@ export function ItemPicker({ value, onChange, label, placeholder = "Search SKU o
   const inputId = useId();
   const listId = `${inputId}-list`;
 
-  const candidates = useMemo(() => {
+  const { candidates, reasons } = useMemo(() => {
     const ex = new Set(exclude ?? []);
-    let rows = items.filter((i) => !ex.has(i.id) && (filter ? filter(i) : i.status === "active"));
-    if (q.trim()) rows = rows.filter((i) => matches(q, i.sku, i.name, i.category, i.barcode, crossRefText(i)));
+    const searching = q.trim() !== "";
+    const bySku = (a: Item, b: Item) => a.sku.localeCompare(b.sku);
+    const ready: Item[] = [];
+    const notReady: Item[] = [];
+    // Why each not-ready row is not ready, by item id.
+    const reasons = new Map<string, string>();
+    for (const i of items) {
+      if (ex.has(i.id)) continue;
+      if (searching && !matches(q, i.sku, i.name, i.category, i.barcode, crossRefText(i))) continue;
+      if (filter ? filter(i) : i.status === "active") {
+        ready.push(i);
+      } else if (searching && explain) {
+        // Typed for by name: say why it is not offered rather than "No matching items".
+        const why = explain(i);
+        if (why) {
+          notReady.push(i);
+          reasons.set(i.id, why);
+        }
+      }
+    }
     // Every match is listed (the list scrolls); typing narrows it.
-    return rows.sort((a, b) => a.sku.localeCompare(b.sku)).slice(0, 200);
-  }, [items, q, filter, exclude]);
+    return { candidates: [...ready.sort(bySku), ...notReady.sort(bySku)].slice(0, 200), reasons };
+  }, [items, q, filter, explain, exclude]);
 
   useEffect(() => {
     if (!open) return;
@@ -126,27 +150,30 @@ export function ItemPicker({ value, onChange, label, placeholder = "Search SKU o
           {candidates.length === 0 ? (
             <div className="px-3 py-3 text-center text-[12.5px] text-text-tertiary">No matching items</div>
           ) : (
-            candidates.map((i, n) => (
-              <button
-                key={i.id}
-                id={`${listId}-${i.id}`}
-                role="option"
-                aria-selected={n === idx}
-                type="button"
-                onMouseEnter={() => setIdx(n)}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => pick(i)}
-                className={cn("flex w-full items-center justify-between gap-3 rounded-[6px] px-2.5 py-1.5 text-left text-[13px]", n === idx && "bg-surface-hover")}
-              >
-                <span className="min-w-0">
-                  <span className="block truncate">
-                    <span className="font-mono text-[12px] text-text-secondary">{i.sku}</span> <span>{i.name}</span>
+            candidates.map((i, n) => {
+              const reason = reasons.get(i.id);
+              return (
+                <button
+                  key={i.id}
+                  id={`${listId}-${i.id}`}
+                  role="option"
+                  aria-selected={n === idx}
+                  type="button"
+                  onMouseEnter={() => setIdx(n)}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => pick(i)}
+                  className={cn("flex w-full items-center justify-between gap-3 rounded-[6px] px-2.5 py-1.5 text-left text-[13px]", n === idx && "bg-surface-hover")}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate">
+                      <span className="font-mono text-[12px] text-text-secondary">{i.sku}</span> <span className={cn(reason && "text-text-secondary")}>{i.name}</span>
+                    </span>
+                    <span className="block text-[11.5px] text-text-tertiary">{[i.category, i.location].filter(Boolean).join(" · ")}</span>
                   </span>
-                  <span className="block text-[11.5px] text-text-tertiary">{[i.category, i.location].filter(Boolean).join(" · ")}</span>
-                </span>
-                <span className="shrink-0 text-[12px] text-text-secondary tabular">{formatQty(i.onHand, i.unit)}</span>
-              </button>
-            ))
+                  {reason ? <span className="shrink-0 text-[12px] font-medium text-warning">{reason}</span> : <span className="shrink-0 text-[12px] text-text-secondary tabular">{formatQty(i.onHand, i.unit)}</span>}
+                </button>
+              );
+            })
           )}
         </div>
       )}

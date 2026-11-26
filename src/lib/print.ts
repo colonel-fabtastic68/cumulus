@@ -2,6 +2,26 @@
 export function openPrintWindow(title: string, bodyHtml: string, extraCss = ""): boolean {
   const w = window.open("", "_blank");
   if (!w) return false;
+  writePrintDocument(w, title, bodyHtml, extraCss);
+  return true;
+}
+
+/**
+ * A print view whose body takes a moment to draw (barcodes). The window opens now, inside the click,
+ * so the pop-up blocker lets it through, and is filled in once the body is ready.
+ */
+export function openPrintWindowWhenReady(title: string, body: Promise<string>, extraCss = ""): boolean {
+  const w = window.open("", "_blank");
+  if (!w) return false;
+  w.document.title = title;
+  body.then(
+    (html) => writePrintDocument(w, title, html, extraCss),
+    () => w.close(),
+  );
+  return true;
+}
+
+function writePrintDocument(w: Window, title: string, bodyHtml: string, extraCss: string): void {
   const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>
 body{font:12px/1.45 -apple-system,Inter,Segoe UI,sans-serif;color:#1a1a1a;margin:28px}
@@ -11,7 +31,6 @@ table{border-collapse:collapse;width:100%;margin-top:12px}th,td{border:1px solid
 .blank{display:inline-block;min-width:64px;border-bottom:1px solid #1a1a1a;height:16px}tr{page-break-inside:avoid}@page{margin:12mm}
 ${extraCss}</style></head><body>${bodyHtml}<script>window.addEventListener('load',function(){setTimeout(function(){window.print()},200)})</script></body></html>`);
   w.document.close();
-  return true;
 }
 
 export function escapeHtml(s: string): string {

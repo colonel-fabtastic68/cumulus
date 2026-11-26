@@ -1,7 +1,7 @@
 import { formatMoney } from "@/lib/format";
 import { barcodePng, baseFontPt, layoutLabels, type LaidOutLabel } from "./render";
 import type { LabelEntry } from "./entries";
-import { isTwoD, resolveTemplate, type LabelSpec, type LabelTemplate } from "./spec";
+import { isTwoD, resolveTemplate, type LabelFields, type LabelSpec, type LabelTemplate } from "./spec";
 
 const PT = 72;
 
@@ -36,9 +36,7 @@ export async function buildLabelPdf(spec: LabelSpec, entries: LabelEntry[], opts
   }
 
   const pages = Array.from({ length: pageCount }, () => doc.addPage([template.pageW * PT, template.pageH * PT]));
-  const pt = baseFontPt(template, spec.textScale);
   const pad = Math.min(0.08, template.labelH * 0.08) * PT;
-  const twoD = isTwoD(spec.symbology);
   const grey = rgb(0.27, 0.27, 0.27);
   const black = rgb(0.07, 0.07, 0.07);
 
@@ -71,8 +69,11 @@ export async function buildLabelPdf(spec: LabelSpec, entries: LabelEntry[], opts
     if (spec.border) page.drawRectangle({ x: left + 0.25, y: top - H + 0.25, width: W - 0.5, height: H - 0.5, borderWidth: 0.5, borderColor: rgb(0.73, 0.73, 0.73) });
     const img = images.get(`${l.symbology}|${l.text}`);
     const e = l.entry;
-    const lines = textLines(spec, e, opts.currency);
+    // A record with its own saved code prints its own text and size.
+    const own = spec.perEntry?.[e.id];
+    const lines = textLines(own?.fields ?? spec.fields, baseFontPt(template, own?.textScale ?? spec.textScale), e, opts.currency);
     const hasText = lines.length > 0;
+    const twoD = isTwoD(l.symbology);
 
     if (twoD) {
       const side = Math.min(H - 2 * pad, hasText ? (W - 2 * pad) * 0.48 : W - 2 * pad);
@@ -94,12 +95,12 @@ export async function buildLabelPdf(spec: LabelSpec, entries: LabelEntry[], opts
     }
   }
 
-  function textLines(s: LabelSpec, e: LabelEntry, currency: string): Array<{ text: string; font: typeof sans; size: number; color: typeof grey; wrap?: boolean }> {
+  function textLines(fields: LabelFields, pt: number, e: LabelEntry, currency: string): Array<{ text: string; font: typeof sans; size: number; color: typeof grey; wrap?: boolean }> {
     const out: Array<{ text: string; font: typeof sans; size: number; color: typeof grey; wrap?: boolean }> = [];
-    if (s.fields.name) out.push({ text: e.title, font: bold, size: pt, color: black, wrap: true });
-    if (s.fields.code) out.push({ text: e.subtitle ?? e.code, font: mono, size: pt * 0.8, color: black });
-    if (s.fields.detail && e.detail) out.push({ text: e.detail, font: sans, size: pt * 0.72, color: grey });
-    if (s.fields.price && e.price !== undefined) out.push({ text: formatMoney(e.price, currency), font: bold, size: pt * 0.95, color: black });
+    if (fields.name) out.push({ text: e.title, font: bold, size: pt, color: black, wrap: true });
+    if (fields.code) out.push({ text: e.subtitle ?? e.code, font: mono, size: pt * 0.8, color: black });
+    if (fields.detail && e.detail) out.push({ text: e.detail, font: sans, size: pt * 0.72, color: grey });
+    if (fields.price && e.price !== undefined) out.push({ text: formatMoney(e.price, currency), font: bold, size: pt * 0.95, color: black });
     return out;
   }
 

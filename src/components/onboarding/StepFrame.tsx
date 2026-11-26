@@ -113,6 +113,10 @@ export interface StepFrameProps {
   /** Secondary action under the step: "Start from scratch", "Skip". */
   secondary?: ReactNode;
   onSkip?: () => void;
+  /** The way out in the header. Other step-by-step flows that borrow the frame say "Cancel". */
+  skipLabel?: string;
+  /** What the steps belong to, for the progress pill's screen-reader label. */
+  flowName?: string;
   /** Floating help control, rendered inside the frame so it sits above everything. */
   help?: ReactNode;
   /** Wider column for the import steps. */
@@ -145,7 +149,7 @@ function StepBody({ lead, title, subtitle, children, footer }: { lead?: string; 
 }
 
 /** The guided setup's chrome: header, a centered column, the typed heading, the step itself, its controls and the progress pill at the bottom. */
-export function StepFrame({ step, total, lead, title, subtitle, stepName, companyName, children, onBack, onContinue, continueLabel = "Continue", continueDisabled, continueBusy, secondary, onSkip, help, wide, stable, swapKey }: StepFrameProps) {
+export function StepFrame({ step, total, lead, title, subtitle, stepName, companyName, children, onBack, onContinue, continueLabel = "Continue", continueDisabled, continueBusy, secondary, onSkip, skipLabel = "Skip setup", flowName = "Setup", help, wide, stable, swapKey }: StepFrameProps) {
   const progress = Math.max(0, Math.min(1, step / total));
   const hasFooter = !!onContinue || !!onBack || !!secondary;
   const footer = hasFooter ? (
@@ -176,7 +180,7 @@ export function StepFrame({ step, total, lead, title, subtitle, stepName, compan
         <span className="ml-auto" />
         {onSkip && (
           <Button size="sm" variant="tertiary" onClick={onSkip}>
-            Skip setup
+            {skipLabel}
           </Button>
         )}
       </header>
@@ -195,7 +199,7 @@ export function StepFrame({ step, total, lead, title, subtitle, stepName, compan
           aria-valuemin={1}
           aria-valuemax={total}
           aria-valuenow={step}
-          aria-label={`Setup step ${step} of ${total}${stepName ? `: ${stepName}` : ""}`}
+          aria-label={`${flowName} step ${step} of ${total}${stepName ? `: ${stepName}` : ""}`}
           className="pointer-events-auto flex items-center gap-3 rounded-full border border-border bg-surface/95 py-2 pl-4 pr-3 shadow-[var(--shadow-flyout)] backdrop-blur transition-[transform,opacity] duration-500"
           style={{ opacity: 0.72 + 0.28 * progress, transform: `scale(${0.96 + 0.04 * progress})` }}
         >

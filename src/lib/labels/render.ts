@@ -49,6 +49,18 @@ export async function barcodeSvg(symbology: Symbology, text: string): Promise<st
   return svg.replace(/^<svg([^>]*?)\swidth="[^"]*"/, "<svg$1").replace(/^<svg([^>]*?)\sheight="[^"]*"/, "<svg$1").replace(/^<svg/, '<svg preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block"');
 }
 
+/**
+ * A 1D code for a line of a document (a pick list): the bars alone, stretched to whatever box they are put in,
+ * and how many modules wide the code is, so the caller can keep each bar wide enough to scan.
+ */
+export async function barcodeStrip(symbology: Symbology, text: string): Promise<{ svg: string; modules: number }> {
+  const lib = await bwip();
+  const sym = effectiveSymbology(symbology, text);
+  const svg = lib.toSVG({ bcid: BCID[sym], text, scale: 1, height: 10, includetext: false });
+  const modules = Number(/viewBox="0 0 ([\d.]+) /.exec(svg)?.[1]) || 0;
+  return { svg: svg.replace(/^<svg/, '<svg preserveAspectRatio="none" style="width:100%;height:100%;display:block"'), modules };
+}
+
 /** A PNG data URL of the code for the PDF, drawn large so it stays crisp when scaled down. */
 export async function barcodePng(symbology: Symbology, text: string): Promise<string> {
   const lib = await bwip();
@@ -77,8 +89,9 @@ export function layoutLabels(spec: LabelSpec, template: LabelTemplate, entries: 
   let slot = Math.max(0, Math.min(per - 1, Math.floor(spec.startAt)));
   const copies = Math.max(1, Math.min(200, Math.floor(spec.copies)));
   for (const entry of entries) {
-    const text = encodedText(entry, spec.encode, spec.symbology, origin);
-    const symbology = effectiveSymbology(spec.symbology, text);
+    const own = spec.perEntry?.[entry.id];
+    const text = encodedText(entry, own?.encode ?? spec.encode, own?.symbology ?? spec.symbology, origin);
+    const symbology = effectiveSymbology(own?.symbology ?? spec.symbology, text);
     // A document's own quantities (one label per unit received) win over the uniform copies setting.
     const count = spec.counts?.[entry.id];
     const n = count !== undefined && Number.isFinite(count) ? Math.max(0, Math.min(500, Math.floor(count))) : copies;
@@ -114,7 +127,6 @@ export function sheetHtml(spec: LabelSpec, template: LabelTemplate, laid: LaidOu
   const pages = laid.length ? Math.max(...laid.map((l) => l.page)) + 1 : 1;
   const pt = baseFontPt(template, spec.textScale);
   const pad = Math.min(0.08, template.labelH * 0.08);
-  const twoD = isTwoD(spec.symbology);
   const css = `
 .sheet-page{position:relative;width:${template.pageW}in;height:${template.pageH}in;background:#fff;overflow:hidden;page-break-after:always;break-after:page}
 .sheet-page:last-child{page-break-after:auto;break-after:auto}
@@ -126,22 +138,26 @@ export function sheetHtml(spec: LabelSpec, template: LabelTemplate, laid: LaidOu
 .lbl.oneD .code{flex:1 1 auto;min-height:0;width:100%}
 .lbl.oneD .txt{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;text-align:center;gap:${(pt * 0.1).toFixed(2)}pt}
 .lbl .code svg{width:100%;height:100%;display:block}
-.t1{font-size:${pt.toFixed(2)}pt;font-weight:600;line-height:1.15;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;word-break:break-word}
-.t2{font-size:${(pt * 0.8).toFixed(2)}pt;line-height:1.15;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.t3{font-size:${(pt * 0.72).toFixed(2)}pt;line-height:1.15;color:#444;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.t4{font-size:${(pt * 0.95).toFixed(2)}pt;line-height:1.15;font-weight:600}
+.t1{font-size:calc(${pt.toFixed(2)}pt * var(--ts,1));font-weight:600;line-height:1.15;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;word-break:break-word}
+.t2{font-size:calc(${(pt * 0.8).toFixed(2)}pt * var(--ts,1));line-height:1.15;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.t3{font-size:calc(${(pt * 0.72).toFixed(2)}pt * var(--ts,1));line-height:1.15;color:#444;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.t4{font-size:calc(${(pt * 0.95).toFixed(2)}pt * var(--ts,1));line-height:1.15;font-weight:600}
 `;
   const byPage: string[][] = Array.from({ length: pages }, () => []);
   for (const l of laid) {
     const key = `${l.symbology}|${l.text}`;
     const svg = svgs.get(key) ?? "";
     const e = l.entry;
+    const own = spec.perEntry?.[e.id];
+    const fields = own?.fields ?? spec.fields;
+    // The record's own text size against the sheet's, which the classes above already carry.
+    const ts = own ? own.textScale / (spec.textScale || 1) : 1;
     const lines: string[] = [];
-    if (spec.fields.name) lines.push(`<div class="t1">${escapeHtml(e.title)}</div>`);
-    if (spec.fields.code) lines.push(`<div class="t2">${escapeHtml(e.subtitle ?? e.code)}</div>`);
-    if (spec.fields.detail && e.detail) lines.push(`<div class="t3">${escapeHtml(e.detail)}</div>`);
-    if (spec.fields.price && e.price !== undefined) lines.push(`<div class="t4">${escapeHtml(formatMoney(e.price, currency))}</div>`);
-    byPage[l.page]!.push(`<div class="lbl ${twoD ? "twoD" : "oneD"}" style="left:${l.x}in;top:${l.y}in"><div class="code" title="${escapeHtml(l.text)}">${svg}</div>${lines.length ? `<div class="txt">${lines.join("")}</div>` : ""}</div>`);
+    if (fields.name) lines.push(`<div class="t1">${escapeHtml(e.title)}</div>`);
+    if (fields.code) lines.push(`<div class="t2">${escapeHtml(e.subtitle ?? e.code)}</div>`);
+    if (fields.detail && e.detail) lines.push(`<div class="t3">${escapeHtml(e.detail)}</div>`);
+    if (fields.price && e.price !== undefined) lines.push(`<div class="t4">${escapeHtml(formatMoney(e.price, currency))}</div>`);
+    byPage[l.page]!.push(`<div class="lbl ${isTwoD(l.symbology) ? "twoD" : "oneD"}" style="left:${l.x}in;top:${l.y}in${ts !== 1 ? `;--ts:${ts.toFixed(3)}` : ""}"><div class="code" title="${escapeHtml(l.text)}">${svg}</div>${lines.length ? `<div class="txt">${lines.join("")}</div>` : ""}</div>`);
   }
   const html = byPage.map((labels) => `<div class="sheet-page">${labels.join("")}</div>`).join("");
   return { html, css, pages };

@@ -5,3 +5,4 @@ export * from "./NewPurchaseOrderModal";
 export * from "./PurchaseOrderDetailModal";
 export * from "./ReceivePurchaseOrderModal";
 export * from "./UploadPoTemplateModal";
+export * from "./UploadPurchaseOrder";

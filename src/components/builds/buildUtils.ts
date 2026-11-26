@@ -26,6 +26,25 @@ export function isBuildableAssembly(item: Item): boolean {
   return item.type === "assembly" && item.bom.length > 0 && item.status === "active";
 }
 
+/** What stands between an item and being built: it has no parts list, it is not an assembly, or it is not active. */
+export type BuildBlocker = "noParts" | "notAssembly" | "notActive";
+
+/** Why an item cannot be built yet; undefined when it can. */
+export function buildBlocker(item: Item): BuildBlocker | undefined {
+  if (item.status !== "active") return "notActive";
+  if (item.type !== "assembly") return "notAssembly";
+  return item.bom.length === 0 ? "noParts" : undefined;
+}
+
+/** The blocker in a few words, for a row in a search list. */
+export function buildBlockerLabel(item: Item): string | undefined {
+  const blocker = buildBlocker(item);
+  if (!blocker) return undefined;
+  if (blocker === "noParts") return "No parts yet";
+  if (blocker === "notAssembly") return "Not an assembly yet";
+  return item.status === "superseded" ? "Superseded" : "Inactive";
+}
+
 export interface ComponentRow {
   itemId: string;
   item?: Item;
