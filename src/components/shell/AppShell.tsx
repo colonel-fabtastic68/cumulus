@@ -185,7 +185,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (!settings.companyName.trim() && !currentInstance()) return <Onboarding />;
 
   // The guided setup takes the whole window: no sidebar or top bar, but Strato's panel stays within reach for its Help button.
-  if (pathname.startsWith("/onboarding")) {
+  // The new-codes steps under Labels & barcodes borrow the same frame.
+  if (pathname.startsWith("/onboarding") || pathname.startsWith("/exports/labels/new")) {
     return (
       <div className="relative flex h-screen overflow-hidden">
         <main className="@container min-h-0 flex-1 overflow-y-auto">{children}</main>

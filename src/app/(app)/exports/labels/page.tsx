@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { LabelStudio } from "@/components/labels/LabelStudio";
+import { LabelsHome } from "@/components/labels/LabelsHome";
 
 export const metadata: Metadata = { title: "Labels & barcodes · cumulusOS" };
 
 export default function LabelsPage() {
-  return <LabelStudio />;
+  return <LabelsHome />;
 }

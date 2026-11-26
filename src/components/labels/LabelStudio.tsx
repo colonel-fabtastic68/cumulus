@@ -233,8 +233,10 @@ export function LabelStudio() {
 
   return (
     <Page
-      title="Labels & barcodes"
+      title={features.savedCodes ? "Label sheet" : "Labels & barcodes"}
       subtitle="QR codes and barcodes for items, assemblies, locations, suppliers and batches: print on label sheets or a roll, or file the PDF under Documents."
+      backHref={features.savedCodes ? "/exports/labels" : undefined}
+      backLabel="Labels & barcodes"
       fullWidth
       secondaryActions={
         <Button icon={<Sparkles />} onClick={askStrato}>
