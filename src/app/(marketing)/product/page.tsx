@@ -66,7 +66,7 @@ export default function ProductPage() {
                 </li>
               ))}
             </ul>
-            <p className="mt-8 text-[13px] text-text-tertiary">Runs on Google Gemini. Other agents can use the same tools over MCP, behind a token you set.</p>
+            <p className="mt-8 text-[13px] text-text-tertiary">Other agents can use the same tools over MCP, behind a token you set.</p>
             <Button variant="plain" href="/assistant" iconRight={<ArrowRight />} className="mt-4">
               How Strato works an order
             </Button>

@@ -113,7 +113,7 @@ export function ChannelCards({ connectors, ...actions }: { connectors: Connector
       <ChannelCard
         icon={<Phone />}
         title="Phone"
-        description="Strato answers the line, takes the order or looks one up, and hands the caller to a person when asked. ElevenLabs gives it a voice; Gemini works out what the caller needs."
+        description="Strato answers the line, takes the order or looks one up, and hands the caller to a person when asked. It speaks with a natural voice and works out what the caller needs."
         footer={
           phone ? (
             <>

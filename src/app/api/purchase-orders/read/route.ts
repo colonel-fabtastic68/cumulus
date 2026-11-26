@@ -128,7 +128,7 @@ export async function POST(req: Request) {
     await authenticateForStrato(req);
     // A workspace's own switch is checked in the browser; this asks whether the deployment offers the feature at all.
     if (!serverFeatureEnabled("poUpload", { poUpload: true })) throw new HttpError(404, "Uploading purchase orders is not switched on here.");
-    if (!geminiConfigured()) throw new GeminiUnavailable("Strato needs a Gemini key (GOOGLE_GENERATIVE_AI_API_KEY) to read documents.");
+    if (!geminiConfigured()) throw new GeminiUnavailable("Strato can't read documents right now. Enter the order manually, or try again later.");
     const body = await readJson<{ files?: unknown; company?: unknown; suppliers?: unknown }>(req);
     const files = Array.isArray(body.files) ? (body.files as IncomingFile[]) : [];
     if (files.length === 0) throw new HttpError(400, "Attach a PDF, a photo or a spreadsheet.");

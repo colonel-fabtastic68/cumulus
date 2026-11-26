@@ -15,7 +15,7 @@ export const SETTINGS_SECTIONS: SettingsSectionDef[] = [
   { id: "locations", title: "Locations", description: "Warehouses, stores, trucks and trailers that hold stock. Transfers move stock between them.", keywords: "warehouse store truck trailer bins" },
   { id: "shipping", title: "Shipping and scanning", description: "Ship-from address and default parcel for carrier rates, and keyboard scanner behavior.", keywords: "parcel address carrier barcode scanner wedge" },
   { id: "quoting", title: "Quoting", description: "Labor rate, margins, tax and terms that every quote starts from.", keywords: "labor margin tax terms quotes" },
-  { id: "strato", title: "Strato", description: "Whether Strato may change data on its own, and whether the model is configured.", keywords: "agent auto approve gemini model api key" },
+  { id: "strato", title: "Strato", description: "Whether Strato may change data on its own, and whether it is available.", keywords: "agent auto approve gemini model api key" },
   { id: "billing", title: "Plan and billing", description: "Your plan, what it includes, and where invoices and card details are managed.", keywords: "subscription price founding members invoice stripe payment upgrade" },
   { id: "labs", title: "Labs", description: "Features that are built but not released yet, and this workspace's switch for each.", keywords: "labs beta preview feature flags unreleased experimental staging try new" },
   { id: "time-machine", title: "Time Machine", description: "Snapshots of the whole workspace, taken daily and on demand, that you can roll back to.", keywords: "backup restore snapshot revert history undo rollback" },

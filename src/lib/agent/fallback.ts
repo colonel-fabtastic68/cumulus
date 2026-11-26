@@ -166,8 +166,31 @@ export function fallbackMiddleware(opts: ChainOptions): LanguageModelMiddleware 
   };
 }
 
-/** What to tell the person in the chat. */
-export function explainChainError(e: unknown, models: string[]): string {
+/**
+ * What to tell the person in the chat. Customers are never told which provider, model or key is
+ * behind Strato; a local build (`technical`) keeps the detail for whoever is developing.
+ */
+export function explainChainError(e: unknown, models: string[], opts: { technical?: boolean } = {}): string {
+  return opts.technical ? technicalReason(e, models) : plainReason(e);
+}
+
+function plainReason(e: unknown): string {
+  if (e instanceof ModelChainError) {
+    if (e.attempts.some((a) => a.outcome === "quota")) {
+      const waits = e.attempts.map((a) => a.retryAfterMs ?? 0).filter(Boolean);
+      const wait = waits.length ? Math.ceil(Math.min(...waits) / 1000) : 60;
+      return `Strato is handling a lot of requests right now. Wait about ${wait} seconds and press Try again; the changes already applied are kept.`;
+    }
+    return "Strato did not answer in time. Press Try again; nothing already applied is lost.";
+  }
+  const msg = e instanceof Error ? e.message : String(e);
+  if (/429|RESOURCE_EXHAUSTED|quota/i.test(msg)) return "Strato is handling a lot of requests right now. Wait a minute and press Try again.";
+  if (/did not start responding|high demand|overloaded|503|UNAVAILABLE/i.test(msg)) return "Strato is busy right now. Wait a moment and press Try again.";
+  if (/API key|401|403|PERMISSION_DENIED|no longer available|not available to new users|not found|404/i.test(msg)) return "Strato isn't available right now. Try again later; nothing in your workspace has changed.";
+  return "Strato could not answer that. Press Try again.";
+}
+
+function technicalReason(e: unknown, models: string[]): string {
   if (e instanceof ModelChainError) {
     const quota = e.attempts.some((a) => a.outcome === "quota");
     const waits = e.attempts.map((a) => a.retryAfterMs ?? 0).filter(Boolean);

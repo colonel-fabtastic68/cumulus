@@ -1,7 +1,7 @@
 import { createGoogle } from "@ai-sdk/google";
 import { convertToModelMessages, createUIMessageStreamResponse, isStepCount, streamText, toUIMessageStream, wrapLanguageModel, type UIMessage } from "ai";
 import { agentToolsFor, TOOL_FEATURES, type ToolFeatureFlags } from "@/lib/agent/tools";
-import { serverFeatureEnabled } from "@/lib/features";
+import { serverFeatureEnabled, releaseStageFromEnv } from "@/lib/features";
 import { explainChainError, fallbackMiddleware } from "@/lib/agent/fallback";
 import { compactHistory } from "@/lib/agent/history";
 
@@ -26,7 +26,7 @@ function modelWithFallback(google: ReturnType<typeof createGoogle>) {
 
 /** Turn provider errors into something the person in the chat can act on. */
 function friendlyError(error: unknown): string {
-  return explainChainError(error, MODELS);
+  return explainChainError(error, MODELS, { technical: releaseStageFromEnv(process.env) === "development" });
 }
 
 /** Guidance for unreleased features, added to the prompt only while the feature is on for the workspace. */
@@ -82,14 +82,17 @@ ${context}`;
 /** Lightweight status check used by Settings and the Agents page. */
 export async function GET() {
   const configured = Boolean(process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY);
+  // Which models sit behind Strato is nobody's business but a developer's.
+  if (releaseStageFromEnv(process.env) !== "development") return Response.json({ configured });
   return Response.json({ configured, model: MODEL, fallbacks: FALLBACK_MODELS });
 }
 
 export async function POST(req: Request) {
   const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY;
   if (!apiKey) {
+    console.warn("[agent] GOOGLE_GENERATIVE_AI_API_KEY is not set, so Strato is off on this server.");
     return Response.json(
-      { error: "Missing GOOGLE_GENERATIVE_AI_API_KEY. Add it to .env.local to enable Strato." },
+      { error: "Strato isn't available right now.", code: "strato_unavailable" },
       { status: 503 },
     );
   }

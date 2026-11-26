@@ -33,7 +33,7 @@ const CONTROL = [
   { icon: Eye, title: "See it before it lands", body: "Strato looks things up on its own. Anything that changes stock, an order or a price waits as a proposal, shown in your own tables with current next to proposed." },
   { icon: UserCheck, title: "Your roles decide who signs off", body: "A change waits for you, or for a teammate whose role allows it. Everyone else can ask and review." },
   { icon: History, title: "A name on every change", body: "What gets applied is a movement in the ledger and an entry in the activity log, with who approved it." },
-  { icon: Cpu, title: "AI under the hood, for the heavy lifting", body: "Reading a supplier's PDF, matching forty part numbers or drafting a long order runs on a large language model, Google Gemini. It drafts and your team decides. On-hand and cost figures always come from the ledger, never from the model." },
+  { icon: Cpu, title: "AI under the hood, for the heavy lifting", body: "Reading a supplier's PDF, matching forty part numbers or drafting a long order runs on a large language model. It drafts and your team decides. On-hand and cost figures always come from the ledger, never from the model." },
 ];
 
 /** `apps` are the assistants the workspace's own MCP card gives setup steps for; each is shown with its mark ahead of the rest of the line. */
