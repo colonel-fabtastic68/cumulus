@@ -6,6 +6,7 @@ import type { User } from "firebase/auth";
 import { currentInstance, getRuntimeConfig } from "@/lib/firebase-config";
 import type { BusinessIntake, MemberRole, UserProfile, WorkspaceInvite, WorkspaceMembership } from "@/lib/types";
 import { debugLog } from "@/lib/debug";
+import { twoStepFromClaims, twoStepPending, type TwoStepState } from "@/lib/twoStep";
 import { getFirebaseApp, getFirebaseAuth, readFirebaseConfig } from "@/lib/store/firestore";
 import { acceptInvite as acceptInviteDoc, createInvite as createInviteDoc, createWorkspace as createWorkspaceDoc, hasMembership, loadOrCreateProfile, rememberWorkspace, removeWorkspaceFromProfile, revokeInvite as revokeInviteDoc, saveBusinessIntake, subscribeInvitesForEmail, subscribeProfile, subscribeWorkspaceInvites, updateWorkspaceName as updateWorkspaceNameDoc, type CreateWorkspaceOptions } from "@/lib/workspaces";
 
@@ -81,6 +82,10 @@ export interface SessionValue {
   saveIntake: (intake: Omit<BusinessIntake, "completedAt">) => Promise<void>;
   /** Reloads the Firebase account, e.g. after its email was verified. */
   refreshAccount: () => Promise<void>;
+  /** Two-step sign-in is on and this sign-in has not entered its emailed code yet (src/lib/twoStep.ts). The profile and workspace wait for it. */
+  needsTwoStep: boolean;
+  /** Two-step sign-in by email is on for this account. */
+  twoStepEnabled: boolean;
 }
 
 const LOCAL_SESSION: SessionValue = {
@@ -108,6 +113,8 @@ const LOCAL_SESSION: SessionValue = {
   needsIntake: false,
   saveIntake: () => Promise.resolve(),
   refreshAccount: () => Promise.resolve(),
+  needsTwoStep: false,
+  twoStepEnabled: false,
 };
 
 const SessionContext = createContext<SessionValue>(LOCAL_SESSION);
@@ -120,6 +127,17 @@ export function setPendingSignUpName(name: string | null) {
 
 function savedWorkspaceKey(uid: string) {
   return `cumulus:workspace:${uid}`;
+}
+
+/** Two-step state from the account's current ID token. A token that cannot be read counts as no two-step: the server and the rules still check. */
+async function readTwoStep(user: User): Promise<TwoStepState> {
+  try {
+    const result = await user.getIdTokenResult();
+    const claims = result.claims as Record<string, unknown>;
+    return twoStepFromClaims(claims, Number(claims.auth_time));
+  } catch {
+    return { enabled: false, verified: true };
+  }
 }
 
 function readSavedWorkspace(uid: string): string | null {
@@ -151,39 +169,68 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
   const [notice, setNotice] = useState<string | null>(null);
   const [chosen, setChosen] = useState<string | null>(null);
   const [inviteFeed, setInviteFeed] = useState<{ email: string; invites: WorkspaceInvite[] }>({ email: "", invites: [] });
+  /** Two-step state of the signed-in account's current token, re-read on every token change. */
+  const [twoStep, setTwoStep] = useState<(TwoStepState & { uid: string }) | null>(null);
 
-  // Auth state → profile (created on first sign-in), kept live afterwards.
+  // Token changes (sign-in, sign-out, the hourly refresh) → two-step state → profile (created on first sign-in), kept live afterwards.
+  // A sign-in that still owes its emailed code loads nothing: the rules would refuse it until the code is in.
   useEffect(() => {
     let unsubProfile = () => {};
+    let profileFor: string | null = null;
     let cancelled = false;
     let unsubAuth = () => {};
+    const dropProfile = () => {
+      unsubProfile();
+      unsubProfile = () => {};
+      profileFor = null;
+    };
+    const loadProfile = async (user: User) => {
+      if (profileFor === user.uid) return;
+      profileFor = user.uid;
+      try {
+        const loaded = await loadOrCreateProfile(app, user, pendingSignUpName);
+        if (cancelled || profileFor !== user.uid) return;
+        debugLog(`profile: loaded (${Object.keys(loaded.workspaces).length} workspaces)`);
+        pendingSignUpName = null;
+        setProfile(loaded);
+        setError(null);
+        unsubProfile = subscribeProfile(app, user.uid, (p) => {
+          if (p) setProfile(p);
+        });
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+        setProfile({ id: user.uid, email: (user.email ?? "").toLowerCase(), name: user.displayName ?? "Teammate", workspaces: {}, createdAt: "", updatedAt: "" });
+      }
+    };
     (async () => {
-      const { onAuthStateChanged } = await import("firebase/auth");
+      const { onIdTokenChanged } = await import("firebase/auth");
       if (cancelled) return;
-      unsubAuth = onAuthStateChanged(getFirebaseAuth(app), async (user) => {
-        debugLog(user ? "auth: signed in" : "auth: signed out");
-        unsubProfile();
-        unsubProfile = () => {};
+      unsubAuth = onIdTokenChanged(getFirebaseAuth(app), async (user) => {
         if (!user) {
+          debugLog("auth: signed out");
+          dropProfile();
           setAccount(null);
           setProfile(null);
           setChosen(null);
+          setTwoStep(null);
           return;
         }
-        setAccount(toSessionUser(user));
-        try {
-          const loaded = await loadOrCreateProfile(app, user, pendingSignUpName);
-          debugLog(`profile: loaded (${Object.keys(loaded.workspaces).length} workspaces)`);
-          pendingSignUpName = null;
-          setProfile(loaded);
-          setError(null);
-          unsubProfile = subscribeProfile(app, user.uid, (p) => {
-            if (p) setProfile(p);
-          });
-        } catch (e) {
-          setError(e instanceof Error ? e.message : String(e));
-          setProfile({ id: user.uid, email: (user.email ?? "").toLowerCase(), name: user.displayName ?? "Teammate", workspaces: {}, createdAt: "", updatedAt: "" });
+        if (profileFor && profileFor !== user.uid) {
+          dropProfile();
+          setProfile(null);
         }
+        if (!profileFor) debugLog("auth: signed in");
+        setAccount(toSessionUser(user));
+        const state = await readTwoStep(user);
+        if (cancelled) return;
+        setTwoStep({ uid: user.uid, ...state });
+        if (twoStepPending(state)) {
+          debugLog("auth: waiting for the two-step code");
+          dropProfile();
+          setProfile(null);
+          return;
+        }
+        await loadProfile(user);
       });
     })();
     return () => {
@@ -279,6 +326,9 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
   const forgetWorkspace = useCallback(
     async (id: string) => {
       if (!profile?.workspaces[id]) return false;
+      // Refused because this sign-in now owes a two-step code (turned on from another device), not because access is gone.
+      const current = getFirebaseAuth(app).currentUser;
+      if (current && twoStepPending(await readTwoStep(current))) return false;
       if (await hasMembership(app, profile.id, id)) return false;
       const name = profile.workspaces[id]!.name;
       setNotice(`You no longer have access to ${name}. Open another workspace, create one, or ask an owner to invite you again.`);
@@ -308,6 +358,9 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
     setAccount(toSessionUser(getFirebaseAuth(app).currentUser ?? user));
   }, [app]);
 
+  const mine = twoStep && account && twoStep.uid === account.uid ? twoStep : null;
+  const needsTwoStep = !!(mine && twoStepPending(mine));
+  const twoStepEnabled = !!mine?.enabled;
   const needsEmailCode = !!(getRuntimeConfig().emailCodes && account && !account.isAnonymous && account.passwordAccount && !account.emailVerified && account.createdAt >= EMAIL_CODES_FROM);
   // Once the email is confirmed, a new account answers the intake before the app opens; the answer lives on the profile.
   const needsIntake = !!(!instance && account && !account.isAnonymous && !needsEmailCode && profile && !profile.guest && !profile.business && account.createdAt >= INTAKE_FROM);
@@ -370,8 +423,10 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
       needsIntake,
       saveIntake,
       refreshAccount,
+      needsTwoStep,
+      twoStepEnabled,
     }),
-    [app, status, account, profile, workspaces, workspaceId, pendingInvites, error, notice, clearNotice, switchWorkspace, createWorkspace, acceptInvite, createInvite, revokeInvite, subscribeInvites, updateWorkspaceName, forgetWorkspace, needsEmailCode, needsIntake, saveIntake, refreshAccount],
+    [app, status, account, profile, workspaces, workspaceId, pendingInvites, error, notice, clearNotice, switchWorkspace, createWorkspace, acceptInvite, createInvite, revokeInvite, subscribeInvites, updateWorkspaceName, forgetWorkspace, needsEmailCode, needsIntake, saveIntake, refreshAccount, needsTwoStep, twoStepEnabled],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

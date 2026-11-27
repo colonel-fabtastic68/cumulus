@@ -4,7 +4,14 @@ service cloud.firestore {
     // Accounts from a bespoke instance's own pool (an Identity Platform tenant, see src/lib/instances.ts)
     // never get into the shared product's data; they only work against their instance's database.
     function signedIn() {
-      return request.auth != null && request.auth.token.firebase.get('tenant', null) == null;
+      return request.auth != null && request.auth.token.firebase.get('tenant', null) == null && twoStepDone();
+    }
+    // Two-step sign-in by email (src/lib/twoStep.ts). Once an account turns it on (the twoStep claim), a sign-in
+    // only counts after its emailed code, when the server adds that sign-in's auth_time to the twoStepAuth claim.
+    // Accounts without the claim are not affected.
+    function twoStepDone() {
+      return request.auth.token.get('twoStep', null) != 'email'
+        || request.auth.token.auth_time in request.auth.token.get('twoStepAuth', []);
     }
     function uid() {
       return request.auth.uid;
@@ -75,6 +82,10 @@ service cloud.firestore {
 
     // One-time sign-up codes, subscription records and in-flight OAuth states are handled by the server only.
     match /emailCodes/{userId} {
+      allow read, write: if false;
+    }
+    // Two-step sign-in codes are written by the server only.
+    match /twoStepCodes/{userId} {
       allow read, write: if false;
     }
     match /oauthStates/{state} {

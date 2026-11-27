@@ -259,6 +259,13 @@ export const FEATURES = {
     area: "Data",
     notes: [],
   },
+  twoStep: {
+    label: "Two-step sign-in by email",
+    description: "Each person can ask for a 6-digit code by email on every new sign-in, in Account. A stolen password alone no longer opens the workspace.",
+    status: "preview",
+    area: "Team and security",
+    notes: [],
+  },
   recaptcha: {
     label: "reCAPTCHA on sign-in and public forms",
     description: "Google reCAPTCHA checks sign-in, sign-up and password reset (through Firebase), and the waitlist, demo, contact and newsletter forms, so scripts cannot flood them.",

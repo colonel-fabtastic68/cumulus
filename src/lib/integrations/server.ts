@@ -5,6 +5,7 @@ import type { Actor } from "@/lib/inventory";
 import { instanceForHost, instanceTenantId, type InstanceDef } from "@/lib/instances";
 import { AdminFirestoreStore, adminApp, readServiceAccount, type ServiceAccount } from "@/lib/mcp/adminStore";
 import { verifyFirebaseIdToken, type VerifiedIdToken } from "./verifyIdToken";
+import { twoStepPending, type TwoStepState } from "@/lib/twoStep";
 
 /**
  * Shared plumbing for the integration and shipping API routes: the caller's
@@ -86,7 +87,10 @@ function bearer(req: Request): string {
   return header.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : "";
 }
 
-async function verifiedFor(token: string, sa: ServiceAccount, instance: InstanceDef | null): Promise<VerifiedIdToken> {
+/** The code a refused half-finished two-step sign-in carries, so the browser can send the person to enter it. */
+export const TWO_STEP_REQUIRED = "two-step-required";
+
+async function verifiedFor(token: string, sa: ServiceAccount, instance: InstanceDef | null, opts: { twoStepPending?: boolean } = {}): Promise<VerifiedIdToken> {
   let t: VerifiedIdToken;
   try {
     t = await verifyFirebaseIdToken(token, sa.project_id);
@@ -94,6 +98,8 @@ async function verifiedFor(token: string, sa: ServiceAccount, instance: Instance
     throw new HttpError(401, "Your session has expired. Sign in again.");
   }
   assertTokenPool(t, instance);
+  // A sign-in that has not entered its emailed code only reaches the two-step routes (src/lib/twoStep.ts).
+  if (!opts.twoStepPending && twoStepPending(t.twoStep)) throw new HttpError(401, "Enter the sign-in code we emailed you first.", TWO_STEP_REQUIRED);
   return t;
 }
 
@@ -126,16 +132,24 @@ export interface AccountContext {
   emailVerified: boolean;
   signInProvider?: string;
   instance: InstanceDef | null;
+  /** The tenant (bespoke instance account pool) the account belongs to, if any. */
+  tenant?: string;
+  /** When this sign-in happened (seconds), and where it stands with two-step sign-in. */
+  authTime: number;
+  twoStep: TwoStepState;
 }
 
-/** Verifies the bearer ID token for calls made outside any workspace: email codes, billing, creating a workspace. */
-export async function authenticateAccount(req: Request): Promise<AccountContext> {
+/**
+ * Verifies the bearer ID token for calls made outside any workspace: email codes, billing, creating a workspace.
+ * `twoStepPending` lets a sign-in that still owes its emailed code through; only the two-step routes pass it.
+ */
+export async function authenticateAccount(req: Request, opts: { twoStepPending?: boolean } = {}): Promise<AccountContext> {
   const sa = requireServiceAccount();
   const token = bearer(req);
   if (!token) throw new HttpError(401, "Sign in first.");
   const instance = requestInstance(req);
-  const t = await verifiedFor(token, sa, instance);
-  return { sa, db: firestoreFor(sa, instance), uid: t.uid, email: (t.email ?? "").toLowerCase(), emailVerified: t.emailVerified, signInProvider: t.signInProvider, instance };
+  const t = await verifiedFor(token, sa, instance, opts);
+  return { sa, db: firestoreFor(sa, instance), uid: t.uid, email: (t.email ?? "").toLowerCase(), emailVerified: t.emailVerified, signInProvider: t.signInProvider, instance, tenant: t.tenant, authTime: t.authTime, twoStep: t.twoStep };
 }
 
 // ---- secrets ----------------------------------------------------------------

@@ -39,15 +39,18 @@ export function AuthPage({ title, subtitle, children, footer }: { title: string;
   // can differ from the client's. Render the same skeleton on both sides until hydration is done.
   const hydrated = useHydrated();
   const redirect = hydrated && mode === "firestore" && !loading && signedIn;
-  const { app } = useSession();
+  // Signed in with the password or a link, but two-step sign-in still wants its emailed code.
+  const { needsTwoStep, app } = useSession();
   // Firebase scores sign-in, sign-up and reset with reCAPTCHA once it is switched on; loading it early scores people better.
   useEffect(() => {
     void prepareAuthRecaptcha(app);
   }, [app]);
+  const twoStep = hydrated && mode === "firestore" && signedIn && needsTwoStep;
 
   useEffect(() => {
-    if (redirect) router.replace(next);
-  }, [redirect, next, router]);
+    if (twoStep) router.replace(`/two-step?next=${encodeURIComponent(next)}`);
+    else if (redirect) router.replace(next);
+  }, [redirect, twoStep, next, router]);
 
   if (hydrated && mode === "local") {
     return (
@@ -59,9 +62,9 @@ export function AuthPage({ title, subtitle, children, footer }: { title: string;
     );
   }
 
-  if (!hydrated || loading || redirect) {
+  if (!hydrated || loading || redirect || twoStep) {
     return (
-      <AuthCard title={redirect ? "Taking you to your workspace" : title}>
+      <AuthCard title={twoStep ? "One more step" : redirect ? "Taking you to your workspace" : title}>
         <div className="flex flex-col gap-3">
           <Skeleton className="h-8 w-full" />
           <Skeleton className="h-8 w-full" />

@@ -32,7 +32,7 @@ const price = (n: number) => formatMoney(n, FOUNDING_PLAN.currency).replace(/\.0
  */
 export function NewWorkspace() {
   const session = useSession();
-  const { app, status, needsEmailCode } = session;
+  const { app, status, needsEmailCode, needsTwoStep } = session;
   const { signOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
@@ -54,8 +54,9 @@ export function NewWorkspace() {
   const here = `${pathname}${params.toString() ? `?${params.toString()}` : ""}`;
   useEffect(() => {
     if (status === "signed-out") router.replace(signInHref(here));
+    else if (needsTwoStep) router.replace(`/two-step?next=${encodeURIComponent(here)}`);
     else if (needsEmailCode) router.replace(`/verify-email?next=${encodeURIComponent(here)}`);
-  }, [status, needsEmailCode, here, router]);
+  }, [status, needsEmailCode, needsTwoStep, here, router]);
 
   const ready = session.mode === "firestore" && !!app && (status === "ready" || status === "no-workspace") && !needsEmailCode;
   useEffect(() => {

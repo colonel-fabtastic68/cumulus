@@ -1,4 +1,5 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
+import { twoStepFromClaims, type TwoStepState } from "@/lib/twoStep";
 
 /**
  * Verifies a Firebase Auth ID token without firebase-admin/auth. That module
@@ -19,6 +20,10 @@ export interface VerifiedIdToken {
   signInProvider?: string;
   /** firebase.tenant: the Identity Platform tenant the account belongs to; absent for the shared account pool. */
   tenant?: string;
+  /** auth_time: when this sign-in happened (seconds). Token refreshes keep it. */
+  authTime: number;
+  /** Two-step sign-in by email (src/lib/twoStep.ts): whether it is on, and whether this sign-in has passed it. */
+  twoStep: TwoStepState;
 }
 
 export async function verifyFirebaseIdToken(token: string, projectId: string): Promise<VerifiedIdToken> {
@@ -39,5 +44,7 @@ export async function verifyFirebaseIdToken(token: string, projectId: string): P
     emailVerified: payload.email_verified === true,
     signInProvider: typeof firebase.sign_in_provider === "string" ? firebase.sign_in_provider : undefined,
     tenant: typeof firebase.tenant === "string" && firebase.tenant ? firebase.tenant : undefined,
+    authTime,
+    twoStep: twoStepFromClaims(payload as Record<string, unknown>, authTime),
   };
 }

@@ -18,7 +18,7 @@ const SIZES = ["Just me", "2–10", "11–50", "51–200", "200+"];
  */
 export function Intake() {
   const session = useSession();
-  const { status, needsEmailCode, needsIntake, saveIntake, account } = session;
+  const { status, needsEmailCode, needsTwoStep, needsIntake, saveIntake, account } = session;
   const router = useRouter();
   const next = useNextPath();
   const [name, setName] = useState("");
@@ -30,9 +30,10 @@ export function Intake() {
 
   useEffect(() => {
     if (status === "signed-out") router.replace(signInHref(`/welcome?next=${encodeURIComponent(next)}`));
+    else if (needsTwoStep) router.replace(`/two-step?next=${encodeURIComponent(`/welcome?next=${encodeURIComponent(next)}`)}`);
     else if (needsEmailCode) router.replace(`/verify-email?next=${encodeURIComponent(`/welcome?next=${encodeURIComponent(next)}`)}`);
     else if (status !== "loading" && !needsIntake) router.replace(next);
-  }, [status, needsEmailCode, needsIntake, next, router]);
+  }, [status, needsEmailCode, needsTwoStep, needsIntake, next, router]);
 
   const toggle = (id: string) =>
     setIntegrations((cur) => {

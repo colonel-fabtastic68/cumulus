@@ -102,10 +102,11 @@ export function JoinInvite({ id }: { id: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [app, pending, session.status]);
 
-  // A new password account confirms its email before it can use an invite addressed to it.
+  // A new password account confirms its email before it can use an invite addressed to it; two-step sign-in wants its code first.
   useEffect(() => {
-    if (session.needsEmailCode) router.replace(`/verify-email?next=${encodeURIComponent(joinPath(id))}`);
-  }, [session.needsEmailCode, id, router]);
+    if (session.needsTwoStep) router.replace(`/two-step?next=${encodeURIComponent(joinPath(id))}`);
+    else if (session.needsEmailCode) router.replace(`/verify-email?next=${encodeURIComponent(joinPath(id))}`);
+  }, [session.needsEmailCode, session.needsTwoStep, id, router]);
 
   // Signed in as the invited address: join.
   useEffect(() => {
