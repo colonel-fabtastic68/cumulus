@@ -3,6 +3,7 @@ import { CONTACT_EMAIL, DEFAULT_EMAIL_FROM } from "@/lib/contact";
 import { HttpError, jsonError, readJson, requireServiceAccount } from "@/lib/integrations/server";
 import { adminApp } from "@/lib/mcp/adminStore";
 import { normalizeEmail, rateLimited } from "@/lib/server/mailingList";
+import { assertHuman } from "@/lib/server/recaptcha";
 import { newId, nowIso } from "@/lib/utils";
 
 export const maxDuration = 30;
@@ -80,6 +81,7 @@ export async function POST(req: Request) {
     if (name.length < 2) throw new HttpError(400, "Tell us your name.");
     const message = clean(body.message, 4000);
     if (message.length < 10) throw new HttpError(400, "A sentence or two about what you stock and what is not working is plenty.");
+    await assertHuman(req, body.recaptchaToken, body.kind === "demo" ? "demo_request" : "contact");
     const record: InquiryRecord = {
       id: newId("inq"),
       kind: body.kind === "demo" ? "demo" : "general",

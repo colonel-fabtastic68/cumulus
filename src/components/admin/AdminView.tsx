@@ -16,7 +16,7 @@ import type { DeleteUserResult } from "@/lib/server/adminActions";
 /** Founder's read-only view of every account, workspace and subscription (ADMIN_EMAILS on the server decides who may open it). */
 export function AdminView() {
   const session = useSession();
-  const { app, status, needsEmailCode } = session;
+  const { app, status, needsEmailCode, needsTwoStep } = session;
   const router = useRouter();
   const [data, setData] = useState<AdminOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -25,8 +25,9 @@ export function AdminView() {
 
   useEffect(() => {
     if (status === "signed-out") router.replace(signInHref("/admin"));
+    else if (needsTwoStep) router.replace(`/two-step?next=${encodeURIComponent("/admin")}`);
     else if (needsEmailCode) router.replace(`/verify-email?next=${encodeURIComponent("/admin")}`);
-  }, [status, needsEmailCode, router]);
+  }, [status, needsEmailCode, needsTwoStep, router]);
 
   const ready = session.mode === "firestore" && !!app && (status === "ready" || status === "no-workspace") && !needsEmailCode;
 

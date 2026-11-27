@@ -102,6 +102,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (needsSignIn) router.replace(signInHref(pathname));
   }, [needsSignIn, pathname, router]);
 
+  // Two-step sign-in: the emailed code comes before anything in a workspace opens (the rules refuse the account until then).
+  const needsTwoStep = mode === "firestore" && session.needsTwoStep;
+  useEffect(() => {
+    if (needsTwoStep) router.replace(`/two-step?next=${encodeURIComponent(pathname)}`);
+  }, [needsTwoStep, pathname, router]);
+
   // New password accounts confirm their email with the one-time code before anything else.
   const needsCode = mode === "firestore" && session.needsEmailCode;
   useEffect(() => {
@@ -121,7 +127,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => clearTimeout(t);
   }, [mode, ready, signedIn]);
 
-  if (loading) return <LoadingSkeleton />;
+  if (loading || needsTwoStep) return <LoadingSkeleton />;
 
   if (mode === "firestore" && !signedIn) return <LoadingSkeleton />;
 

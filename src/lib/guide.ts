@@ -80,6 +80,7 @@ export const PAGE_NOTES: Record<string, string> = {
 export const FEATURE_NOTES: Array<{ feature: FeatureId; href: string; note: string }> = [
   { feature: "poUpload", href: "/orders/purchase", note: "New purchase order (page:primary) is a menu: Upload a document turns a supplier's PDF, photo of the pages or spreadsheet into an order that the user checks line by line before it is added; Enter manually is the form" },
   { feature: "newAssembly", href: "/builds", note: "New assembly (page:primary) names an assembly and opens its BOM tab to list the parts" },
+  { feature: "livePresence", href: "/team", note: "who is online is live: a teammate shows the moment they open cumulusOS and drops off when they close it; the top bar names teammates on the same screen (topbar:presence), and the item and purchase order edit forms warn when someone else has the same record open" },
   { feature: "savedCodes", href: "/exports/labels", note: "opens on the saved barcode or QR code of each item; New codes (page:primary) makes them in four steps; ticked codes print, export or share; pick lists print each part's saved code" },
 ];
 

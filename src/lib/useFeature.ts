@@ -22,3 +22,13 @@ export function useFeatures(): Record<FeatureId, boolean> {
   const ctx = useFeatureContext();
   return useMemo(() => Object.fromEntries(FEATURE_IDS.map((id) => [id, featureEnabled(id, ctx)])) as Record<FeatureId, boolean>, [ctx]);
 }
+
+/**
+ * For features that belong to the account or the deployment rather than one
+ * workspace (sign-in, sign-up, the public site): the stage and CUMULUS_FEATURES
+ * decide, since there is no workspace, and so no Labs switch, before sign-in.
+ */
+export function accountFeatureEnabled(id: FeatureId): boolean {
+  const { stage, features } = getRuntimeConfig();
+  return featureEnabled(id, { stage: stage ?? "production", forced: features });
+}

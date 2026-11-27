@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import localFont from "next/font/local";
+import { RecaptchaSiteKey } from "@/components/recaptcha/Recaptcha";
+import { recaptchaSiteKey } from "@/lib/server/recaptcha";
 
 // Same display face as the marketing site, without its nav, footer or assistant: each page carries its own.
 const archivo = localFont({
@@ -18,5 +20,10 @@ export const metadata: Metadata = { robots: { index: false, follow: false, nocac
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#ffffff" };
 
 export default function ProspectLayout({ children }: { children: ReactNode }) {
-  return <div className={`landing ${archivo.variable} min-h-[100dvh] bg-surface text-text`}>{children}</div>;
+  return (
+    <div className={`landing ${archivo.variable} min-h-[100dvh] bg-surface text-text`}>
+      <RecaptchaSiteKey siteKey={recaptchaSiteKey()} />
+      {children}
+    </div>
+  );
 }

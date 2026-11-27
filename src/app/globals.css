@@ -660,3 +660,8 @@ input[type="number"]::-webkit-outer-spin-button {
     box-shadow: 0 0 0 0 transparent;
   }
 }
+
+/* reCAPTCHA's floating badge is hidden; the forms and sign-in pages carry Google's notice text instead (RecaptchaNotice). */
+.grecaptcha-badge {
+  visibility: hidden;
+}

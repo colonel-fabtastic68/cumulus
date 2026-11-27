@@ -3,7 +3,7 @@ export const APP_HOME = "/home";
 
 /** Only accept same-origin paths as a post-sign-in destination. */
 export function safeNext(raw: string | null | undefined): string {
-  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/sign-") || raw.startsWith("/reset-password")) return APP_HOME;
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/sign-") || raw.startsWith("/reset-password") || raw.startsWith("/two-step")) return APP_HOME;
   return raw;
 }
 

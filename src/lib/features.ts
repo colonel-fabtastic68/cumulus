@@ -22,7 +22,7 @@ export type ReleaseStage = "production" | "staging" | "development";
 
 export type FeatureStatus = "planned" | "preview" | "beta" | "released";
 
-export type FeatureArea = "Catalog" | "Orders" | "Purchasing" | "Production" | "Inventory" | "Reports" | "Printing and labels" | "Accounting" | "Data";
+export type FeatureArea = "Catalog" | "Orders" | "Purchasing" | "Production" | "Inventory" | "Reports" | "Printing and labels" | "Accounting" | "Data" | "Team and security";
 
 export interface FeatureDef {
   label: string;
@@ -257,6 +257,27 @@ export const FEATURES = {
     description: "Ask Strato where something is or how to do it: it answers with the path and lights up the sidebar entry, button, tab or setting on screen, step by step, and it knows which screen you are on.",
     status: "beta",
     area: "Data",
+    notes: [],
+  },
+  twoStep: {
+    label: "Two-step sign-in by email",
+    description: "Each person can ask for a 6-digit code by email on every new sign-in, in Account. A stolen password alone no longer opens the workspace.",
+    status: "preview",
+    area: "Team and security",
+    notes: [],
+  },
+  recaptcha: {
+    label: "reCAPTCHA on sign-in and public forms",
+    description: "Google reCAPTCHA checks sign-in, sign-up and password reset (through Firebase), and the waitlist, demo, contact and newsletter forms, so scripts cannot flood them.",
+    status: "preview",
+    area: "Team and security",
+    notes: [],
+  },
+  livePresence: {
+    label: "Live presence",
+    description: "See who is online the moment they open or close cumulusOS, who else is looking at the same record, and a warning when someone else is editing it.",
+    status: "preview",
+    area: "Team and security",
     notes: [],
   },
   recordRestore: {

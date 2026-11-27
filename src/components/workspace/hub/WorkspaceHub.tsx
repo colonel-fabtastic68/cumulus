@@ -15,6 +15,7 @@ import { describeWorkspaceError } from "@/lib/workspaces";
 import { roleLabel } from "@/components/workspace/team/teamUtils";
 import { passwordError } from "@/components/auth/fields";
 import { PasswordField } from "@/components/auth/fields";
+import { TwoStepSetting } from "./TwoStepSetting";
 
 /**
  * The Account page inside the app, and the page an account lands on with no
@@ -246,6 +247,7 @@ function AccountCard() {
           </Button>
         </form>
       )}
+      {!profile?.guest && <TwoStepSetting />}
     </section>
   );
 }

@@ -15,7 +15,7 @@ export function emailCodesConfigured(): boolean {
 }
 
 /** Derived from the service account key, so a leaked hash cannot be brute-forced without server secrets. */
-function pepper(sa: ServiceAccount): string {
+export function pepper(sa: ServiceAccount): string {
   return createHmac("sha256", sa.private_key).update("cumulusos-email-code-v1").digest("hex");
 }
 
@@ -61,12 +61,23 @@ export async function clearCode(db: Firestore, uid: string): Promise<void> {
   await codeRef(db, uid).delete().catch(() => {});
 }
 
-async function sendCodeEmail(to: string, code: string): Promise<void> {
+/** What a code email says around the code: the line before it and the note after it. */
+export interface CodeEmailWording {
+  lead: string;
+  note: string;
+}
+
+const SIGN_UP_WORDING: CodeEmailWording = {
+  lead: "Your cumulusOS verification code is",
+  note: "It expires in 10 minutes. If you didn't create a cumulusOS account, you can ignore this email.",
+};
+
+export async function sendCodeEmail(to: string, code: string, wording: CodeEmailWording = SIGN_UP_WORDING): Promise<void> {
   const key = process.env.RESEND_API_KEY?.trim();
   const from = process.env.EMAIL_FROM?.trim() || DEFAULT_EMAIL_FROM;
   if (!key) throw new HttpError(503, "Email codes are not set up on this installation.");
-  const text = `Your cumulusOS verification code is ${code}.\n\nIt expires in 10 minutes. If you didn't create a cumulusOS account, you can ignore this email.`;
-  const html = `<div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#303030;line-height:1.5"><p>Your cumulusOS verification code is</p><p style="font-size:28px;font-weight:600;letter-spacing:6px;margin:12px 0">${code}</p><p style="color:#616161">It expires in 10 minutes. If you didn't create a cumulusOS account, you can ignore this email.</p></div>`;
+  const text = `${wording.lead} ${code}.\n\n${wording.note}`;
+  const html = `<div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#303030;line-height:1.5"><p>${wording.lead}</p><p style="font-size:28px;font-weight:600;letter-spacing:6px;margin:12px 0">${code}</p><p style="color:#616161">${wording.note}</p></div>`;
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
@@ -78,11 +89,17 @@ async function sendCodeEmail(to: string, code: string): Promise<void> {
   }
 }
 
-/** Sets emailVerified on the Firebase account through the Identity Toolkit API (firebase-admin/auth cannot load on Vercel). */
-export async function markEmailVerified(sa: ServiceAccount, uid: string): Promise<void> {
+/** An OAuth token for Google APIs (Identity Toolkit, reCAPTCHA Enterprise) as the service account. */
+export async function serviceAccessToken(sa: ServiceAccount): Promise<string> {
   const credential = adminApp(sa).options.credential;
   if (!credential) throw new HttpError(503, "The server has no Firebase credential.");
   const { access_token } = await credential.getAccessToken();
+  return access_token;
+}
+
+/** Sets emailVerified on the Firebase account through the Identity Toolkit API (firebase-admin/auth cannot load on Vercel). */
+export async function markEmailVerified(sa: ServiceAccount, uid: string): Promise<void> {
+  const access_token = await serviceAccessToken(sa);
   const res = await fetch(`https://identitytoolkit.googleapis.com/v1/projects/${encodeURIComponent(sa.project_id)}/accounts:update`, {
     method: "POST",
     headers: { Authorization: `Bearer ${access_token}`, "Content-Type": "application/json" },

@@ -4,6 +4,8 @@ import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { Button, TextField } from "@/components/ui";
 import styles from "./prospect.module.css";
+import { RecaptchaNotice } from "@/components/recaptcha/Recaptcha";
+import { recaptchaToken } from "@/lib/recaptcha";
 
 /** Books the demo from a company's page. Posts to the public inquiry route, which files it and mails hello@. */
 export function ProspectForm({ company }: { company: string }) {
@@ -22,10 +24,11 @@ export function ProspectForm({ company }: { company: string }) {
     if (Object.keys(next).length) return;
     setState("busy");
     try {
+      const token = await recaptchaToken("demo_request");
       const res = await fetch("/api/inquiry", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: "demo", name: name.trim(), email: email.trim(), company: shop.trim(), message: `Asked for a demo from the page we made for ${company}.`, page: window.location.pathname }),
+        body: JSON.stringify({ kind: "demo", name: name.trim(), email: email.trim(), company: shop.trim(), message: `Asked for a demo from the page we made for ${company}.`, page: window.location.pathname, recaptchaToken: token }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Could not send that right now. Try again in a moment.");
@@ -77,6 +80,7 @@ export function ProspectForm({ company }: { company: string }) {
       <p className={styles.legal}>
         We use your details to set up the demo. <Link href="/privacy">Privacy policy</Link>
       </p>
+      <RecaptchaNotice />
     </form>
   );
 }

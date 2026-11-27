@@ -3,16 +3,18 @@
 import { useMemo } from "react";
 import { Users } from "lucide-react";
 import type { Member } from "@/lib/types";
-import { isOnline, useCurrentUser } from "@/lib/auth";
+import { useCurrentUser } from "@/lib/auth";
+import { useOnlineCheck } from "@/components/presence/PresenceProvider";
 import { Avatar, Badge, Card } from "@/components/ui";
 import { CardLink, CardTitle } from "./CardTitle";
 
 export function TeamCard({ members }: { members: Member[] }) {
   const user = useCurrentUser();
+  const isOnline = useOnlineCheck();
   const rows = useMemo(() => {
     const withPresence = members.map((m) => ({ member: m, online: isOnline(m) }));
     return withPresence.sort((a, b) => Number(b.online) - Number(a.online) || a.member.name.localeCompare(b.member.name));
-  }, [members]);
+  }, [members, isOnline]);
   const onlineCount = rows.filter((r) => r.online).length;
 
   return (

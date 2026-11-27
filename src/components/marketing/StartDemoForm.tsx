@@ -4,6 +4,8 @@ import { useState, useSyncExternalStore, type FormEvent } from "react";
 import { ArrowRight } from "lucide-react";
 import { Button, Checkbox, TextField } from "@/components/ui";
 import { clearLocalWorkspace, hasLocalWorkspace } from "@/lib/store/local";
+import { RecaptchaNotice } from "@/components/recaptcha/Recaptcha";
+import { recaptchaToken } from "@/lib/recaptcha";
 
 const EMAIL_KEY = "cumulus:demo:email";
 
@@ -61,7 +63,8 @@ export function StartDemoForm() {
     setState("busy");
     setError(null);
     try {
-      const res = await fetch("/api/mailing-list", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: address, source: "demo" }) });
+      const token = await recaptchaToken("demo");
+      const res = await fetch("/api/mailing-list", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: address, source: "demo", recaptchaToken: token }) });
       if (res.status === 400 || res.status === 429) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(data.error ?? "Could not save that address.");
@@ -116,6 +119,7 @@ export function StartDemoForm() {
         </div>
       )}
       {hasData && <Checkbox label="Start with fresh sample data" help="You have been in the demo before on this device. Tick to reset what you changed." checked={fresh} onChange={setFresh} />}
+      <RecaptchaNotice />
     </form>
   );
 }

@@ -3,6 +3,8 @@
 import { useState, type FormEvent } from "react";
 import { Mail } from "lucide-react";
 import { Button, TextField } from "@/components/ui";
+import { RecaptchaNotice } from "@/components/recaptcha/Recaptcha";
+import { recaptchaToken } from "@/lib/recaptcha";
 
 /** Landing-page signup for product news. Posts to the public mailing-list route; no account needed. */
 export function MailingListForm({ compact }: { compact?: boolean }) {
@@ -15,7 +17,8 @@ export function MailingListForm({ compact }: { compact?: boolean }) {
     setState("busy");
     setMessage(null);
     try {
-      const res = await fetch("/api/mailing-list", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
+      const token = await recaptchaToken("newsletter");
+      const res = await fetch("/api/mailing-list", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, recaptchaToken: token }) });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Could not sign you up right now.");
       setState("done");
@@ -28,11 +31,14 @@ export function MailingListForm({ compact }: { compact?: boolean }) {
 
   if (state === "done") return <p className="text-[14px] text-success">{message}</p>;
   return (
+    <div>
     <form onSubmit={submit} noValidate className={compact ? "flex flex-col gap-2 sm:flex-row sm:items-end" : "flex flex-col gap-2 sm:flex-row sm:items-end"}>
       <TextField label={compact ? undefined : "Email"} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" autoComplete="email" containerClassName="flex-1 sm:min-w-[260px]" error={state === "error" ? (message ?? undefined) : undefined} />
       <Button type="submit" variant="primary" icon={<Mail />} loading={state === "busy"} disabled={!email.trim() || state === "busy"}>
         Get product news
       </Button>
     </form>
+      <RecaptchaNotice className="mt-2" />
+    </div>
   );
 }

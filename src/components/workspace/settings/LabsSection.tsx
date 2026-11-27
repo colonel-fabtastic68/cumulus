@@ -16,7 +16,7 @@ const STATUS: Record<FeatureStatus, { label: string; tone: BadgeTone }> = {
   released: { label: "Released", tone: "success" },
 };
 
-const AREAS: FeatureArea[] = ["Catalog", "Inventory", "Orders", "Purchasing", "Production", "Printing and labels", "Reports", "Accounting", "Data"];
+const AREAS: FeatureArea[] = ["Catalog", "Inventory", "Orders", "Purchasing", "Production", "Printing and labels", "Reports", "Accounting", "Data", "Team and security"];
 
 /** Features a workspace can see in Labs on this deployment: everything in staging, only what it may switch in production. */
 export function labsFeatures(stage: ReleaseStage): FeatureId[] {
