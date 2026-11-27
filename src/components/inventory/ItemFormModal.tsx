@@ -12,6 +12,8 @@ import { useFeatures } from "@/lib/useFeature";
 import { useTerms } from "@/lib/useTerms";
 import { normalizeUnit, parsePackUnit, unitOptions } from "@/lib/units";
 import type { UnitConversion } from "@/lib/types";
+import { EditingNotice } from "@/components/presence/EditingNotice";
+import { recordKey } from "@/lib/presence";
 
 const ASSEMBLY_COLORS = ["#1f5f8b", "#0f7b5f", "#b45309", "#8e1f0b", "#6d28d9", "#0e7490", "#475569"];
 
@@ -245,6 +247,7 @@ function ItemForm({ open, onClose, item, defaults, onSaved, title, submitLabel }
       }
     >
       <div className="flex flex-col gap-4">
+        <EditingNotice recordKey={item ? recordKey("items", item.id) : null} noun="item" />
         <FormGrid cols={3}>
           <TextField label={terms.itemCode} value={f.sku} onChange={set("sku")} placeholder="ENC-125B-RAW" autoFocus={!editing} className="font-mono uppercase" />
           <div className="sm:col-span-2">

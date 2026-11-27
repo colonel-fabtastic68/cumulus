@@ -6,7 +6,8 @@ import { useEffect, useState } from "react";
 import { currentInstance } from "@/lib/firebase-config";
 import { Bell, Check, ChevronDown, LogOut, Menu as MenuIcon, ScanBarcode, Search, Settings2, Sparkles, UserRound } from "lucide-react";
 import { Avatar, AvatarStack, Button, IconButton, Kbd, Menu } from "@/components/ui";
-import { isOnline, useAuth, useCurrentUser } from "@/lib/auth";
+import { useAuth, useCurrentUser } from "@/lib/auth";
+import { useOnlineCheck, usePeopleHere } from "@/components/presence/PresenceProvider";
 import { useCollection } from "@/lib/store/provider";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { ScanModal, useScanWedge } from "@/components/scan";
@@ -29,7 +30,11 @@ export function TopBar({ onMenu }: { onMenu?: () => void }) {
     setSearchNonce((n) => n + 1);
     setSearchOpen(true);
   };
+  const isOnline = useOnlineCheck();
   const online = members.filter((m) => m.id !== user.id && isOnline(m));
+  // Live presence: teammates on this same screen right now.
+  const hereIds = usePeopleHere();
+  const here = members.filter((m) => hereIds.includes(m.id));
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -73,9 +78,15 @@ export function TopBar({ onMenu }: { onMenu?: () => void }) {
         </span>
       </button>
       <div className="hidden flex-1 md:block" />
+      {here.length > 0 && (
+        <div data-guide="topbar:presence" className="hidden items-center gap-2 text-[12px] text-text-secondary lg:flex" title={`Also on this page: ${here.map((m) => m.name).join(", ")}`}>
+          <AvatarStack members={here} />
+          <span>{here.length === 1 ? `${here[0]!.name.split(" ")[0]} is here too` : `${here.length} here too`}</span>
+        </div>
+      )}
       {online.length > 0 && (
         <div className="hidden items-center gap-2 text-[12px] text-text-secondary lg:flex" title={`Online: ${online.map((m) => m.name).join(", ")}`}>
-          <AvatarStack members={online} />
+          {here.length === 0 && <AvatarStack members={online} />}
           <span>{online.length} online</span>
         </div>
       )}

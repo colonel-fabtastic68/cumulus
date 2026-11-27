@@ -273,6 +273,13 @@ export const FEATURES = {
     area: "Team and security",
     notes: [],
   },
+  livePresence: {
+    label: "Live presence",
+    description: "See who is online the moment they open or close cumulusOS, who else is looking at the same record, and a warning when someone else is editing it.",
+    status: "preview",
+    area: "Team and security",
+    notes: [],
+  },
   recordRestore: {
     label: "Restore a single record",
     description: "Bring one item, order or customer back from a Time Machine snapshot without rolling back the whole workspace.",

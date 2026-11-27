@@ -3,16 +3,18 @@
 import { useMemo } from "react";
 import type { Member, MemberRole } from "@/lib/types";
 import { Avatar, Badge, Card, CardHeader } from "@/components/ui";
-import { isOnline, useCurrentUser } from "@/lib/auth";
+import { useCurrentUser } from "@/lib/auth";
+import { useOnlineCheck } from "@/components/presence/PresenceProvider";
 import { ROLE_DESCRIPTIONS, ROLE_OPTIONS, roleLabel } from "./teamUtils";
 
 /** Members seen in the last couple of minutes, current user first. */
 export function OnlineCard({ members }: { members: Member[] }) {
   const user = useCurrentUser();
+  const isOnline = useOnlineCheck();
   const online = useMemo(() => {
     const list = members.filter((m) => isOnline(m));
     return list.sort((a, b) => (a.id === user.id ? -1 : b.id === user.id ? 1 : a.name.localeCompare(b.name)));
-  }, [members, user.id]);
+  }, [members, user.id, isOnline]);
 
   return (
     <Card>

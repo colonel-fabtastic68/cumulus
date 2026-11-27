@@ -5,7 +5,8 @@ import { MoreHorizontal, UserMinus, Users } from "lucide-react";
 import type { Member, MemberRole } from "@/lib/types";
 import { Avatar, Badge, ConfirmDialog, EmptyState, IconButton, Menu, SearchField, Segmented, Select, StatusBadge, Table, useToast, type Column } from "@/components/ui";
 import { useStore } from "@/lib/store/provider";
-import { isOnline, useCurrentUser } from "@/lib/auth";
+import { useCurrentUser } from "@/lib/auth";
+import { useOnlineCheck } from "@/components/presence/PresenceProvider";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { matches } from "@/lib/utils";
 import { ROLE_OPTIONS, canManageTeam, roleLabel } from "./teamUtils";
@@ -17,6 +18,7 @@ export function MembersTable({ members, onInvite }: { members: Member[]; onInvit
   const user = useCurrentUser();
   const toast = useToast();
   const canManage = canManageTeam(user);
+  const isOnline = useOnlineCheck();
 
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
@@ -176,7 +178,7 @@ export function MembersTable({ members, onInvite }: { members: Member[]; onInvit
     }
     return cols;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canManage, ownerCount, user.id, store]);
+  }, [canManage, ownerCount, user.id, store, isOnline]);
 
   const emptyState =
     members.length === 0 ? (

@@ -84,8 +84,11 @@ service cloud.firestore {
     match /emailCodes/{userId} {
       allow read, write: if false;
     }
-    // Two-step sign-in codes are written by the server only.
+    // Two-step sign-in codes and live presence sessions are written by the server only.
     match /twoStepCodes/{userId} {
+      allow read, write: if false;
+    }
+    match /presence/{ws}/{document=**} {
       allow read, write: if false;
     }
     match /oauthStates/{state} {

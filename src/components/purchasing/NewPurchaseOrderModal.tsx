@@ -16,6 +16,8 @@ import { currencySymbol } from "./poUtils";
 import { QuickLineEntry } from "@/components/orders/QuickLineEntry";
 import { useFeatures } from "@/lib/useFeature";
 import { useTerms } from "@/lib/useTerms";
+import { EditingNotice } from "@/components/presence/EditingNotice";
+import { recordKey } from "@/lib/presence";
 
 interface Props {
   open: boolean;
@@ -211,6 +213,7 @@ function PurchaseOrderForm({ open, onClose, onCreated, template, editing }: Prop
       }
     >
       <div className="flex flex-col gap-4">
+        <EditingNotice recordKey={editing ? recordKey("purchaseOrders", editing.id) : null} noun="purchase order" />
         <FormGrid cols={3}>
           <div className="sm:col-span-2">
             <Combobox label="Supplier" value={supplier} onChange={onSupplierChange} onCreate={onSupplierChange} createLabel={(q) => `Use “${q}” as a new supplier`} placeholder="Type a supplier name" options={supplierOptions} />
