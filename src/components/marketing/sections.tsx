@@ -25,7 +25,7 @@ export function Hero({ runtimeConfig }: { runtimeConfig: RuntimeConfig }) {
     <section className="photo-ground photo-red overflow-hidden bg-brand-red text-white" style={photo("/photos/weld-red.webp", "center 58%")}>
       <div className={`${container} grid items-center gap-10 py-10 lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-16 lg:py-12`}>
         <div>
-          <h1 className="hero hero-compact hero-in text-white">Built for the people who build the cars.</h1>
+          <h1 className="hero hero-compact hero-in text-white">Inventory that keeps pace with the shop&nbsp;floor.</h1>
           <p className="lede hero-in mt-4 text-white/90!" style={{ animationDelay: "80ms" }}>
             cumulusOS runs parts, BOMs, builds, receiving and orders for chassis shops, race teams and aftermarket brands, with Strato drafting the bulk work for your approval.
           </p>
