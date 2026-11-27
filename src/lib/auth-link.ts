@@ -5,6 +5,7 @@
  */
 import type { FirebaseApp } from "firebase/app";
 import { getFirebaseAuth } from "@/lib/store/firestore";
+import { prepareAuthRecaptcha } from "@/lib/recaptcha";
 
 /** Address a sign-in link was requested for on this device (Firebase needs it back to finish). */
 export const EMAIL_FOR_SIGN_IN_KEY = "cumulus:emailForSignIn";
@@ -16,6 +17,7 @@ function absolute(path: string): string {
 /** Email a sign-in link that returns to `path`. The site's domain must be in Firebase's authorized domains. */
 export async function sendMagicLink(app: FirebaseApp, email: string, path: string): Promise<void> {
   const { sendSignInLinkToEmail } = await import("firebase/auth");
+  await prepareAuthRecaptcha(app);
   await sendSignInLinkToEmail(getFirebaseAuth(app), email.trim().toLowerCase(), { url: absolute(path), handleCodeInApp: true });
 }
 

@@ -4,6 +4,8 @@ import { useState, type FormEvent } from "react";
 import { ArrowRight } from "lucide-react";
 import { Button, TextArea, TextField } from "@/components/ui";
 import { CONTACT_EMAIL } from "@/lib/contact";
+import { RecaptchaNotice } from "@/components/recaptcha/Recaptcha";
+import { recaptchaToken } from "@/lib/recaptcha";
 
 /**
  * The site's contact form. Posts to the public inquiry route, which files the
@@ -28,7 +30,8 @@ export function InquiryForm({ kind = "general", submitLabel = "Send", stockLabel
     setState("busy");
     setError(null);
     try {
-      const res = await fetch("/api/inquiry", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, name, email: email.trim(), company, industry, message, page: window.location.pathname }) });
+      const token = await recaptchaToken(kind === "demo" ? "demo_request" : "contact");
+      const res = await fetch("/api/inquiry", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, name, email: email.trim(), company, industry, message, page: window.location.pathname, recaptchaToken: token }) });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Could not send that right now. Try again in a moment.");
       setState("done");
@@ -71,6 +74,7 @@ export function InquiryForm({ kind = "general", submitLabel = "Send", stockLabel
           </a>
         </span>
       </div>
+      <RecaptchaNotice />
     </form>
   );
 }

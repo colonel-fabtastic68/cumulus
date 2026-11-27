@@ -6,6 +6,7 @@ import { nowIso } from "@/lib/utils";
 import { useCollection, useStoreContext } from "@/lib/store/provider";
 import { getFirebaseApp, getFirebaseAuth, readFirebaseConfig } from "@/lib/store/firestore";
 import { setPendingSignUpName, useSession } from "@/lib/session";
+import { prepareAuthRecaptcha } from "@/lib/recaptcha";
 
 const LOCAL_USER_KEY = "cumulus:currentUser";
 const PRESENCE_INTERVAL_MS = 45_000;
@@ -83,7 +84,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!cfg) return false;
     setAuthError(null);
     try {
-      await action(getFirebaseAuth(getFirebaseApp(cfg)));
+      const app = getFirebaseApp(cfg);
+      await prepareAuthRecaptcha(app);
+      await action(getFirebaseAuth(app));
       return true;
     } catch (e) {
       setAuthError(describeAuthError(e));
@@ -160,6 +163,8 @@ export function describeAuthError(e: unknown): string {
   if (code.includes("operation-not-allowed")) return "This sign-in method is not enabled for the Firebase project. Under Authentication → Sign-in method → Email/Password, enable it and turn on Email link (passwordless sign-in).";
   if (code.includes("unauthorized-domain")) return "This domain is not authorized for sign-in. Add it under Authentication → Settings → Authorized domains.";
   if (code.includes("api-key-not-valid") || code.includes("invalid-api-key")) return "Firebase rejected the Web API key. Copy apiKey from Firebase console → Project settings → Your apps (no quotes or commas) into FIREBASE_API_KEY and restart the dev server.";
+  if (code.includes("recaptcha-not-enabled")) return "reCAPTCHA is on for this site but not for its Firebase project. Run node scripts/recaptcha.mjs audit, or switch the recaptcha feature off.";
+  if (code.includes("recaptcha") || code.includes("captcha-check-failed")) return "We couldn't confirm you're a person. Reload the page and try again. If it keeps happening, allow www.google.com in your ad blocker.";
   if (code.includes("network-request-failed")) return "Could not reach Firebase. Check your connection and the FIREBASE_* settings.";
   return e instanceof Error ? e.message : String(e);
 }

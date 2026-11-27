@@ -5,6 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button, Skeleton } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
 import { APP_HOME, safeNext } from "@/lib/auth-routes";
+import { useSession } from "@/lib/session";
+import { prepareAuthRecaptcha } from "@/lib/recaptcha";
+import { accountFeatureEnabled } from "@/lib/useFeature";
+import { RecaptchaNotice } from "@/components/recaptcha/Recaptcha";
 
 const noop = () => () => {};
 /** False during server rendering and hydration, true once the component has mounted in the browser. */
@@ -35,6 +39,11 @@ export function AuthPage({ title, subtitle, children, footer }: { title: string;
   // can differ from the client's. Render the same skeleton on both sides until hydration is done.
   const hydrated = useHydrated();
   const redirect = hydrated && mode === "firestore" && !loading && signedIn;
+  const { app } = useSession();
+  // Firebase scores sign-in, sign-up and reset with reCAPTCHA once it is switched on; loading it early scores people better.
+  useEffect(() => {
+    void prepareAuthRecaptcha(app);
+  }, [app]);
 
   useEffect(() => {
     if (redirect) router.replace(next);
@@ -65,6 +74,7 @@ export function AuthPage({ title, subtitle, children, footer }: { title: string;
   return (
     <AuthCard title={title} subtitle={subtitle} footer={footer}>
       {children}
+      <RecaptchaNotice show={accountFeatureEnabled("recaptcha")} className="mt-5 text-center" />
     </AuthCard>
   );
 }

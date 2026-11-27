@@ -3,6 +3,7 @@ import { HttpError, authenticateAccount, jsonError, readJson, requireServiceAcco
 import { adminApp } from "@/lib/mcp/adminStore";
 import { normalizeEmail, rateLimited, setSubscription } from "@/lib/server/mailingList";
 import { sendDemoWelcome } from "@/lib/server/demoEmail";
+import { humanCheck } from "@/lib/server/recaptcha";
 
 export const maxDuration = 30;
 
@@ -15,7 +16,7 @@ export async function POST(req: Request) {
   try {
     const sa = requireServiceAccount();
     const db = getFirestore(adminApp(sa));
-    const body = await readJson<{ email?: unknown; subscribed?: unknown; source?: unknown }>(req);
+    const body = await readJson<{ email?: unknown; subscribed?: unknown; source?: unknown; recaptchaToken?: unknown }>(req);
     const auth = req.headers.get("authorization");
     if (auth) {
       const ctx = await authenticateAccount(req);
@@ -30,6 +31,10 @@ export async function POST(req: Request) {
     const email = typeof body.email === "string" ? normalizeEmail(body.email) : null;
     if (!email) throw new HttpError(400, "Enter a valid email address.");
     const demo = body.source === "demo";
+    const refusal = await humanCheck(req, body.recaptchaToken, demo ? "demo" : "newsletter");
+    // The demo runs in the visitor's browser, so a doubtful score only keeps the address off the list; the newsletter refuses.
+    if (refusal && demo) return Response.json({ ok: true, subscribed: false });
+    if (refusal) throw new HttpError(400, refusal);
     await setSubscription(db, email, true, demo ? "demo" : "landing");
     // The welcome carries the intake form; it must never stand between the person and the demo.
     let welcome: string | undefined;
