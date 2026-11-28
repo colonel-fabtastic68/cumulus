@@ -8,6 +8,7 @@ import { customFieldsFor, itemTypeOptions } from "@/lib/catalog";
 import { CustomFieldsEditor } from "@/components/fields";
 import { useCurrentUser } from "@/lib/auth";
 import { Button, Checkbox, Combobox, FormGrid, Modal, Select, TextArea, TextField, useToast } from "@/components/ui";
+import { SupplierPicker } from "@/components/suppliers/SupplierPicker";
 import { useFeatures } from "@/lib/useFeature";
 import { useTerms } from "@/lib/useTerms";
 import { normalizeUnit, parsePackUnit, unitOptions } from "@/lib/units";
@@ -305,7 +306,7 @@ function ItemForm({ open, onClose, item, defaults, onSaved, title, submitLabel }
           <TextField label="Expected waste" suffix="%" type="number" step="any" min={0} value={f.expectedWastePct} onChange={set("expectedWastePct")} error={errors.expectedWastePct} />
         </FormGrid>
         <FormGrid cols={4}>
-          <Select label="Supplier" value={f.supplierId} onChange={set("supplierId")} placeholder="None" options={suppliers.map((s) => ({ value: s.id, label: s.name }))} help="The primary supplier. More can be added on the item page." />
+          <SupplierPicker value={f.supplierId} onChange={(supplierId) => setF((p) => ({ ...p, supplierId }))} suppliers={suppliers} emptyLabel="None" help="The primary supplier. More can be added on the item page." />
           <TextField label="Supplier SKU" value={f.supplierSku} onChange={set("supplierSku")} />
           <TextField label="Location" value={f.location} onChange={set("location")} placeholder="A-01" />
           <TextField label="Barcode" value={f.barcode} onChange={set("barcode")} />

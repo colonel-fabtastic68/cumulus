@@ -91,6 +91,13 @@ export const FEATURES = {
     area: "Inventory",
     notes: [],
   },
+  supplierPicker: {
+    label: "Suppliers A to Z, added from anywhere",
+    description: "Every supplier list is in A to Z order, and typing a new name in the item form, bulk edit or an item's supplier card creates that supplier on the spot.",
+    status: "preview",
+    area: "Purchasing",
+    notes: [],
+  },
   resetFilters: {
     label: "Reset filters",
     description: "One button that clears every filter on a list.",
