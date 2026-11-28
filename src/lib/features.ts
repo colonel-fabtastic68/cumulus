@@ -91,6 +91,13 @@ export const FEATURES = {
     area: "Inventory",
     notes: [],
   },
+  bomImport: {
+    label: "Import bills of materials",
+    description: "Bring in parts lists from a spreadsheet: assembly part number, component part number and quantity per row. Replace or add to existing lists; parts become assemblies as needed.",
+    status: "preview",
+    area: "Production",
+    notes: [],
+  },
   resetFilters: {
     label: "Reset filters",
     description: "One button that clears every filter on a list.",
