@@ -10,7 +10,7 @@
  * browser is expected.
  */
 import { instanceForHost, instanceRuntime, type InstanceRuntime } from "@/lib/instances";
-import { forcedFeaturesFromEnv, releaseStageFromEnv, type ReleaseStage } from "@/lib/features";
+import { forcedFeaturesFromEnv, releaseStageFromEnv, serverFeatureEnabled, type ReleaseStage } from "@/lib/features";
 
 export interface FirebaseConfig {
   apiKey: string;
@@ -26,6 +26,8 @@ export interface RuntimeConfig {
   workspaceId: string;
   /** New password accounts confirm their address with an emailed one-time code (Resend key and service account are set; the sender defaults to hello@). */
   emailCodes?: boolean;
+  /** Every password sign-in is followed by an emailed code (the signInCodes feature is on and codes can be mailed). */
+  signInCodes?: boolean;
   /** Calendly scheduling link behind "Book a demo"; absent hides the calendar. */
   calendlyUrl?: string;
   /** The visitor opened the public demo: the sample workspace runs in the browser with no account. */
@@ -90,10 +92,12 @@ export function parseFirebaseConfig(env: Record<string, string | undefined>): Fi
 
 /** Server-side: read the runtime config from the process environment (at request time). */
 export function runtimeConfigFromEnv(): RuntimeConfig {
+  const emailCodes = !!(cleanEnv(process.env.RESEND_API_KEY) && (cleanEnv(process.env.FIREBASE_SERVICE_ACCOUNT_JSON) || cleanEnv(process.env.FIREBASE_SERVICE_ACCOUNT_B64)));
   return {
     firebase: parseFirebaseConfig(process.env),
     workspaceId: pick(process.env, ENV_NAMES.workspaceId) ?? "default",
-    emailCodes: !!(cleanEnv(process.env.RESEND_API_KEY) && (cleanEnv(process.env.FIREBASE_SERVICE_ACCOUNT_JSON) || cleanEnv(process.env.FIREBASE_SERVICE_ACCOUNT_B64))),
+    emailCodes,
+    signInCodes: emailCodes && serverFeatureEnabled("signInCodes"),
     calendlyUrl: cleanEnv(process.env.CALENDLY_URL),
     stage: releaseStageFromEnv(process.env),
     features: forcedFeaturesFromEnv(process.env),
@@ -102,7 +106,7 @@ export function runtimeConfigFromEnv(): RuntimeConfig {
 
 /**
  * Server-side: the runtime config for a request's host. On a bespoke instance
- * the workspace is the instance's own, emailed sign-up codes and the demo
+ * the workspace is the instance's own, emailed sign-up and sign-in codes and the demo
  * calendar are off (the operator creates accounts), and the browser learns
  * which database and account pool to use.
  */
@@ -110,7 +114,7 @@ export function runtimeConfigForHost(host: string | null | undefined): RuntimeCo
   const base = runtimeConfigFromEnv();
   const inst = instanceForHost(host);
   if (!inst) return base;
-  return { firebase: base.firebase, workspaceId: inst.workspaceId, emailCodes: false, instance: instanceRuntime(inst), stage: base.stage, features: base.features };
+  return { firebase: base.firebase, workspaceId: inst.workspaceId, emailCodes: false, signInCodes: false, instance: instanceRuntime(inst), stage: base.stage, features: base.features };
 }
 
 /** Client-side: the bespoke instance this page belongs to, if any. */

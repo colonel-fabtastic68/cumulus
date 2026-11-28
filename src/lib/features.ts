@@ -22,7 +22,8 @@ export type ReleaseStage = "production" | "staging" | "development";
 
 export type FeatureStatus = "planned" | "preview" | "beta" | "released";
 
-export type FeatureArea = "Catalog" | "Orders" | "Purchasing" | "Production" | "Inventory" | "Reports" | "Printing and labels" | "Accounting" | "Data";
+/** "Account security" features apply to an account before any workspace opens, so Settings → Labs does not list them. */
+export type FeatureArea = "Catalog" | "Orders" | "Purchasing" | "Production" | "Inventory" | "Reports" | "Printing and labels" | "Accounting" | "Data" | "Account security";
 
 export interface FeatureDef {
   label: string;
@@ -265,6 +266,20 @@ export const FEATURES = {
     status: "planned",
     area: "Data",
     notes: [59],
+  },
+  signInCodes: {
+    label: "Sign-in codes",
+    description: "After the password, every sign-in asks for a 6-digit code emailed to the account. Needs the email code sender (RESEND_API_KEY) on the deployment.",
+    status: "preview",
+    area: "Account security",
+    notes: [],
+  },
+  quickbooksLiveSync: {
+    label: "Live QuickBooks sync",
+    description: "Sync now on the QuickBooks connection reports each step as it happens, over a secure WebSocket.",
+    status: "preview",
+    area: "Accounting",
+    notes: [],
   },
   quickbooksDesktop: {
     label: "QuickBooks Desktop",

@@ -6,7 +6,8 @@ import { CODE_TTL_MS, decideSend, decideVerify, generateCode, hashCode, type Ema
 import { CONTACT_EMAIL, DEFAULT_EMAIL_FROM } from "@/lib/contact";
 
 /**
- * One-time codes for new sign-ups. Codes are stored hashed in `emailCodes/{uid}`
+ * One-time codes for new sign-ups, and for the second step of every password
+ * sign-in when that is switched on (signInCodes.ts). Codes are stored hashed in `emailCodes/{uid}`
  * (server only; the rules deny browsers), mailed through Resend, and a correct
  * code marks the Firebase account's email as verified.
  */
@@ -23,7 +24,10 @@ const codeRef = (db: Firestore, uid: string) => db.doc(`emailCodes/${uid}`);
 
 export type IssueResult = { sent: true } | { sent: false; retryAfterMs: number; reason: "cooldown" | "hourly" };
 
-export async function issueCode(db: Firestore, sa: ServiceAccount, uid: string, email: string, now = Date.now()): Promise<IssueResult> {
+/** What the code is for, which decides the wording of the email. */
+export type CodePurpose = "new-account" | "sign-in";
+
+export async function issueCode(db: Firestore, sa: ServiceAccount, uid: string, email: string, purpose: CodePurpose = "new-account", now = Date.now()): Promise<IssueResult> {
   const code = generateCode();
   const decision = await db.runTransaction(async (tx) => {
     const snap = await tx.get(codeRef(db, uid));
@@ -37,7 +41,7 @@ export async function issueCode(db: Firestore, sa: ServiceAccount, uid: string, 
   });
   if (!decision.ok) return { sent: false, retryAfterMs: decision.retryAfterMs, reason: decision.reason };
   try {
-    await sendCodeEmail(email, code);
+    await sendCodeEmail(email, code, purpose);
   } catch (e) {
     // Let the person ask again straight away; the failed send still counts toward the hourly limit.
     await codeRef(db, uid).update({ sentAt: 0 }).catch(() => {});
@@ -61,16 +65,19 @@ export async function clearCode(db: Firestore, uid: string): Promise<void> {
   await codeRef(db, uid).delete().catch(() => {});
 }
 
-async function sendCodeEmail(to: string, code: string): Promise<void> {
+async function sendCodeEmail(to: string, code: string, purpose: CodePurpose): Promise<void> {
   const key = process.env.RESEND_API_KEY?.trim();
   const from = process.env.EMAIL_FROM?.trim() || DEFAULT_EMAIL_FROM;
   if (!key) throw new HttpError(503, "Email codes are not set up on this installation.");
-  const text = `Your cumulusOS verification code is ${code}.\n\nIt expires in 10 minutes. If you didn't create a cumulusOS account, you can ignore this email.`;
-  const html = `<div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#303030;line-height:1.5"><p>Your cumulusOS verification code is</p><p style="font-size:28px;font-weight:600;letter-spacing:6px;margin:12px 0">${code}</p><p style="color:#616161">It expires in 10 minutes. If you didn't create a cumulusOS account, you can ignore this email.</p></div>`;
+  const signIn = purpose === "sign-in";
+  const lead = signIn ? "Your cumulusOS sign-in code is" : "Your cumulusOS verification code is";
+  const tail = signIn ? "It expires in 10 minutes. If you didn't just sign in to cumulusOS, someone else has your password: change it from the sign-in page." : "It expires in 10 minutes. If you didn't create a cumulusOS account, you can ignore this email.";
+  const text = `${lead} ${code}.\n\n${tail}`;
+  const html = `<div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#303030;line-height:1.5"><p>${lead}</p><p style="font-size:28px;font-weight:600;letter-spacing:6px;margin:12px 0">${code}</p><p style="color:#616161">${tail}</p></div>`;
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from, to: [to], reply_to: CONTACT_EMAIL, subject: `${code} is your cumulusOS code`, text, html }),
+    body: JSON.stringify({ from, to: [to], reply_to: CONTACT_EMAIL, subject: signIn ? `${code} is your cumulusOS sign-in code` : `${code} is your cumulusOS code`, text, html }),
   });
   if (!res.ok) {
     console.error("[email-code] Resend refused the message", res.status, (await res.text().catch(() => "")).slice(0, 300));

@@ -3,7 +3,7 @@ import type { WriteOp } from "@/lib/store/types";
 import { activityOp, importItems, type ImportRow } from "@/lib/inventory";
 import { nowIso } from "@/lib/utils";
 import { applyExclusions } from "./exclusions";
-import type { Secrets, ServerContext } from "./server";
+import { HttpError, loadConnected, type Secrets, type ServerContext } from "./server";
 import { listItems, withToken, type QboEnvironment, type QboItem } from "./quickbooks";
 
 /**
@@ -55,9 +55,17 @@ export function quickbooksRows(items: QboItem[]): { rows: Array<{ row: ImportRow
   return { rows, namedAsSku, skippedOther };
 }
 
-export async function runQuickbooksSync(ctx: ServerContext, integration: Integration, secrets: Secrets): Promise<QboSyncResult> {
+/** One line per step of a sync, for callers that show it as it happens (the live-sync WebSocket). */
+export interface QboSyncProgress {
+  step: "reading" | "comparing" | "importing" | "finishing";
+  message: string;
+}
+
+export async function runQuickbooksSync(ctx: ServerContext, integration: Integration, secrets: Secrets, onProgress: (p: QboSyncProgress) => void = () => {}): Promise<QboSyncResult> {
   const environment = (secrets.environment as QboEnvironment | undefined) ?? "sandbox";
+  onProgress({ step: "reading", message: "Reading products and services from QuickBooks" });
   const all = await withToken(ctx, secrets, (token, realmId) => listItems(environment, token, realmId));
+  onProgress({ step: "comparing", message: `${all.length} record${all.length === 1 ? "" : "s"} read. Comparing with your items` });
   const listed = quickbooksRows(all);
   const { namedAsSku, skippedOther } = listed;
   const firstSync = !integration.lastSyncAt;
@@ -73,10 +81,12 @@ export async function runQuickbooksSync(ctx: ServerContext, integration: Integra
   // Opening counts come from QuickBooks only for items that do not exist here yet; existing counts are never overwritten by a pull.
   const fresh = toImport.filter((r) => !knownSkus.has(r.row.sku.toUpperCase()));
   const known = toImport.filter((r) => knownSkus.has(r.row.sku.toUpperCase()));
+  onProgress({ step: "importing", message: toImport.length ? `Importing ${fresh.length} new and ${known.length} changed product${toImport.length === 1 ? "" : "s"}` : "Nothing new or changed to import" });
   const a = await importItems(ctx.store, ctx.actor, fresh.map((r) => (takeStock ? r.row : { ...r.row, qty: undefined })), { setQuantities: takeStock });
   const b = known.length ? await importItems(ctx.store, ctx.actor, known.map((r) => ({ ...r.row, qty: undefined }))) : { created: 0, updated: 0, skipped: 0, errors: [] };
   const result = { created: a.created + b.created, updated: a.updated + b.updated };
 
+  onProgress({ step: "finishing", message: "Linking items to their QuickBooks records" });
   const items = await ctx.store.list("items");
   const bySku = new Map(items.map((i) => [i.sku.toUpperCase(), i]));
   const ops: WriteOp[] = [...excluded.ops];
@@ -92,4 +102,20 @@ export async function runQuickbooksSync(ctx: ServerContext, integration: Integra
   ops.push(activityOp(ctx.actor, "integration.synced", `QuickBooks sync: ${summary}`, { entityType: "integration", entityId: "quickbooks", meta: { created: result.created, updated: result.updated } }));
   await ctx.store.batch(ops);
   return { summary, items: { seen: all.length, created: result.created, updated: result.updated, namedAsSku, skippedOther } };
+}
+
+/**
+ * A whole sync of the workspace's QuickBooks connection, start to finish: loads
+ * the stored connection, runs the pull, and records a failure on the connection
+ * the same way POST /api/integrations/quickbooks/sync does.
+ */
+export async function syncQuickbooksNow(ctx: ServerContext, onProgress?: (p: QboSyncProgress) => void): Promise<QboSyncResult> {
+  const { integration, secrets } = await loadConnected(ctx, "quickbooks");
+  try {
+    return await runQuickbooksSync(ctx, integration, secrets, onProgress);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    await ctx.store.patch("integrations", "quickbooks", { lastError: message, status: e instanceof HttpError && e.status === 401 ? "error" : "connected", lastSyncAt: nowIso() });
+    throw e;
+  }
 }

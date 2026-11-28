@@ -5,6 +5,8 @@ import type { Actor } from "@/lib/inventory";
 import { instanceForHost, instanceTenantId, type InstanceDef } from "@/lib/instances";
 import { AdminFirestoreStore, adminApp, readServiceAccount, type ServiceAccount } from "@/lib/mcp/adminStore";
 import { verifyFirebaseIdToken, type VerifiedIdToken } from "./verifyIdToken";
+import { secondStepFor, type SecondStep } from "@/lib/server/signInCodes";
+import { SIGN_IN_CODE_PENDING } from "@/lib/server/signInCodeRules";
 
 /**
  * Shared plumbing for the integration and shipping API routes: the caller's
@@ -99,16 +101,21 @@ async function verifiedFor(token: string, sa: ServiceAccount, instance: Instance
 
 /** Verifies the bearer ID token and the caller's membership of the workspace named in `x-workspace-id`. */
 export async function authenticate(req: Request, opts: { write?: boolean; manage?: boolean } = {}): Promise<ServerContext & { member: Member }> {
+  return authenticateWith({ token: bearer(req), workspaceId: req.headers.get("x-workspace-id")?.trim() ?? "", instance: requestInstance(req) }, opts);
+}
+
+/** The same checks for callers that do not carry the token in headers (the QuickBooks WebSocket sends it as its first message). */
+export async function authenticateWith(who: { token: string; workspaceId: string; instance: InstanceDef | null }, opts: { write?: boolean; manage?: boolean } = {}): Promise<ServerContext & { member: Member }> {
   const sa = requireServiceAccount();
-  const token = bearer(req);
+  const { token, workspaceId, instance } = who;
   if (!token) throw new HttpError(401, "Sign in first.");
-  const workspaceId = req.headers.get("x-workspace-id")?.trim() ?? "";
   if (!workspaceId || !/^[A-Za-z0-9_-]{1,128}$/.test(workspaceId)) throw new HttpError(400, "Missing workspace.");
-  const instance = requestInstance(req);
   // An instance has exactly one workspace; nothing else can be named through its host.
   if (instance && workspaceId !== instance.workspaceId) throw new HttpError(403, "You are not a member of this workspace.");
-  const { uid } = await verifiedFor(token, sa, instance);
+  const verified = await verifiedFor(token, sa, instance);
+  const { uid } = verified;
   const db = firestoreFor(sa, instance);
+  if ((await secondStepFor(db, verified, instance)) === "pending") throw new HttpError(401, SIGN_IN_CODE_PENDING);
   const snap = await db.doc(`workspaces/${workspaceId}/members/${uid}`).get();
   if (!snap.exists) throw new HttpError(403, "You are not a member of this workspace.");
   const member = snap.data() as Member;
@@ -126,16 +133,24 @@ export interface AccountContext {
   emailVerified: boolean;
   signInProvider?: string;
   instance: InstanceDef | null;
+  /** auth_time of the session (seconds). */
+  authTime: number;
+  /** Where the session stands on the code emailed at sign-in. "pending" only reaches routes that pass allowPendingCode. */
+  secondStep: SecondStep;
 }
 
 /** Verifies the bearer ID token for calls made outside any workspace: email codes, billing, creating a workspace. */
-export async function authenticateAccount(req: Request): Promise<AccountContext> {
+export async function authenticateAccount(req: Request, opts: { allowPendingCode?: boolean } = {}): Promise<AccountContext> {
   const sa = requireServiceAccount();
   const token = bearer(req);
   if (!token) throw new HttpError(401, "Sign in first.");
   const instance = requestInstance(req);
   const t = await verifiedFor(token, sa, instance);
-  return { sa, db: firestoreFor(sa, instance), uid: t.uid, email: (t.email ?? "").toLowerCase(), emailVerified: t.emailVerified, signInProvider: t.signInProvider, instance };
+  const db = firestoreFor(sa, instance);
+  // Only the routes that send and check the code itself may be called before it has been entered.
+  const secondStep = await secondStepFor(db, t, instance);
+  if (secondStep === "pending" && !opts.allowPendingCode) throw new HttpError(401, SIGN_IN_CODE_PENDING);
+  return { sa, db, uid: t.uid, email: (t.email ?? "").toLowerCase(), emailVerified: t.emailVerified, signInProvider: t.signInProvider, instance, authTime: t.authTime, secondStep };
 }
 
 // ---- secrets ----------------------------------------------------------------

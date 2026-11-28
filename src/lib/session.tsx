@@ -7,6 +7,7 @@ import { currentInstance, getRuntimeConfig } from "@/lib/firebase-config";
 import type { BusinessIntake, MemberRole, UserProfile, WorkspaceInvite, WorkspaceMembership } from "@/lib/types";
 import { debugLog } from "@/lib/debug";
 import { getFirebaseApp, getFirebaseAuth, readFirebaseConfig } from "@/lib/store/firestore";
+import { SIGN_IN_CODE_EVENT } from "@/lib/server/signInCodeRules";
 import { acceptInvite as acceptInviteDoc, createInvite as createInviteDoc, createWorkspace as createWorkspaceDoc, hasMembership, loadOrCreateProfile, rememberWorkspace, removeWorkspaceFromProfile, revokeInvite as revokeInviteDoc, saveBusinessIntake, subscribeInvitesForEmail, subscribeProfile, subscribeWorkspaceInvites, updateWorkspaceName as updateWorkspaceNameDoc, type CreateWorkspaceOptions } from "@/lib/workspaces";
 
 export type SessionStatus = "loading" | "signed-out" | "no-workspace" | "ready";
@@ -21,6 +22,10 @@ export interface SessionUser {
   createdAt: string;
   /** Signs in with a password (as opposed to only emailed links). */
   passwordAccount: boolean;
+  /** How this session signed in ("password", "emailLink", "anonymous"), from the ID token. Null when the token could not be read. */
+  signInProvider: string | null;
+  /** The ID token's auth_time: the same through refreshes, new with every sign-in. Null when the token could not be read. */
+  authTime: string | null;
 }
 
 /** Password accounts created from this moment confirm their email with a one-time code. Older accounts are left alone. */
@@ -28,7 +33,7 @@ export const EMAIL_CODES_FROM = "2026-09-15T00:00:00.000Z";
 /** Accounts created from this moment see the short business intake once. */
 export const INTAKE_FROM = "2026-09-16T00:00:00.000Z";
 
-function toSessionUser(user: User): SessionUser {
+function toSessionUser(user: User, token: SessionToken): SessionUser {
   return {
     uid: user.uid,
     email: (user.email ?? "").toLowerCase(),
@@ -37,7 +42,35 @@ function toSessionUser(user: User): SessionUser {
     emailVerified: user.emailVerified,
     createdAt: user.metadata.creationTime ? new Date(user.metadata.creationTime).toISOString() : "",
     passwordAccount: user.providerData.some((p) => p.providerId === "password"),
+    signInProvider: token.signInProvider,
+    authTime: token.authTime,
   };
+}
+
+type SessionToken = Pick<SessionUser, "signInProvider" | "authTime">;
+
+/** Reads how and when this session signed in from its ID token. Offline with an expired token, both come back null. */
+async function readSessionToken(user: User): Promise<SessionToken> {
+  try {
+    const result = await user.getIdTokenResult();
+    const authTime = result.claims.auth_time;
+    return { signInProvider: result.signInProvider ?? null, authTime: typeof authTime === "string" || typeof authTime === "number" ? String(authTime) : null };
+  } catch {
+    return { signInProvider: null, authTime: null };
+  }
+}
+
+/** The session on this device that has entered its sign-in code. The server keeps the list that counts; this only saves asking it on every page load. */
+function signInCodeKey(uid: string) {
+  return `cumulus:signInCode:${uid}`;
+}
+
+function readSignInCodeDone(uid: string): string | null {
+  try {
+    return localStorage.getItem(signInCodeKey(uid));
+  } catch {
+    return null;
+  }
 }
 
 export interface SessionValue {
@@ -73,8 +106,12 @@ export interface SessionValue {
    * (a transient failure), so the caller can retry instead.
    */
   forgetWorkspace: (id: string) => Promise<boolean>;
-  /** A new password account that still has to enter the emailed one-time code. */
+  /** The account owes an emailed one-time code: a new password account confirming its address, or a password session finishing sign-in. */
   needsEmailCode: boolean;
+  /** Which of the two it is, for the wording on the code page. */
+  emailCodeReason: "new-account" | "sign-in" | null;
+  /** Called once the server has accepted this session's code (or says none is owed). */
+  confirmEmailCode: () => Promise<void>;
   /** A new account that has not answered (or skipped) the welcome intake yet. */
   needsIntake: boolean;
   /** Saves the welcome intake on the profile; the listener clears needsIntake. */
@@ -105,6 +142,8 @@ const LOCAL_SESSION: SessionValue = {
   updateWorkspaceName: () => {},
   forgetWorkspace: () => Promise.resolve(false),
   needsEmailCode: false,
+  emailCodeReason: null,
+  confirmEmailCode: () => Promise.resolve(),
   needsIntake: false,
   saveIntake: () => Promise.resolve(),
   refreshAccount: () => Promise.resolve(),
@@ -151,6 +190,8 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
   const [notice, setNotice] = useState<string | null>(null);
   const [chosen, setChosen] = useState<string | null>(null);
   const [inviteFeed, setInviteFeed] = useState<{ email: string; invites: WorkspaceInvite[] }>({ email: "", invites: [] });
+  /** The auth_time whose sign-in code this device knows was entered. */
+  const [codeDone, setCodeDone] = useState<string | null>(null);
 
   // Auth state → profile (created on first sign-in), kept live afterwards.
   useEffect(() => {
@@ -168,9 +209,13 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
           setAccount(null);
           setProfile(null);
           setChosen(null);
+          setCodeDone(null);
           return;
         }
-        setAccount(toSessionUser(user));
+        const token = await readSessionToken(user);
+        if (cancelled || getFirebaseAuth(app).currentUser?.uid !== user.uid) return;
+        setCodeDone(readSignInCodeDone(user.uid));
+        setAccount(toSessionUser(user, token));
         try {
           const loaded = await loadOrCreateProfile(app, user, pendingSignUpName);
           debugLog(`profile: loaded (${Object.keys(loaded.workspaces).length} workspaces)`);
@@ -305,10 +350,42 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
     if (!user) return;
     await user.reload();
     await user.getIdToken(true);
-    setAccount(toSessionUser(getFirebaseAuth(app).currentUser ?? user));
+    const current = getFirebaseAuth(app).currentUser ?? user;
+    setAccount(toSessionUser(current, await readSessionToken(current)));
   }, [app]);
 
-  const needsEmailCode = !!(getRuntimeConfig().emailCodes && account && !account.isAnonymous && account.passwordAccount && !account.emailVerified && account.createdAt >= EMAIL_CODES_FROM);
+  const confirmEmailCode = useCallback(async () => {
+    const user = getFirebaseAuth(app).currentUser;
+    if (!user) return;
+    const { authTime } = await readSessionToken(user);
+    if (!authTime) return;
+    try {
+      localStorage.setItem(signInCodeKey(user.uid), authTime);
+    } catch {
+      // Private browsing: the server still knows, so the code page passes straight through next time.
+    }
+    setCodeDone(authTime);
+  }, [app]);
+
+  // A route refused this session for want of its sign-in code, although this device thought it was entered: forget that and ask again.
+  useEffect(() => {
+    const reopen = () => {
+      const uid = getFirebaseAuth(app).currentUser?.uid;
+      if (!uid) return;
+      try {
+        localStorage.removeItem(signInCodeKey(uid));
+      } catch {}
+      setCodeDone(null);
+    };
+    window.addEventListener(SIGN_IN_CODE_EVENT, reopen);
+    return () => window.removeEventListener(SIGN_IN_CODE_EVENT, reopen);
+  }, [app]);
+
+  const needsAddressCode = !!(getRuntimeConfig().emailCodes && account && !account.isAnonymous && account.passwordAccount && !account.emailVerified && account.createdAt >= EMAIL_CODES_FROM);
+  // Every password sign-in is finished with an emailed code. The server refuses the session until then; this sends the person to the page that asks for it.
+  const needsSignInCode = !!(getRuntimeConfig().signInCodes && account && !account.isAnonymous && account.email && account.signInProvider === "password" && account.authTime && codeDone !== account.authTime);
+  const needsEmailCode = needsAddressCode || needsSignInCode;
+  const emailCodeReason = needsAddressCode ? "new-account" : needsSignInCode ? "sign-in" : null;
   // Once the email is confirmed, a new account answers the intake before the app opens; the answer lives on the profile.
   const needsIntake = !!(!instance && account && !account.isAnonymous && !needsEmailCode && profile && !profile.guest && !profile.business && account.createdAt >= INTAKE_FROM);
   const saveIntake = useCallback(
@@ -367,11 +444,13 @@ function FirestoreSession({ app, children }: { app: FirebaseApp; children: React
       updateWorkspaceName,
       forgetWorkspace,
       needsEmailCode,
+      emailCodeReason,
+      confirmEmailCode,
       needsIntake,
       saveIntake,
       refreshAccount,
     }),
-    [app, status, account, profile, workspaces, workspaceId, pendingInvites, error, notice, clearNotice, switchWorkspace, createWorkspace, acceptInvite, createInvite, revokeInvite, subscribeInvites, updateWorkspaceName, forgetWorkspace, needsEmailCode, needsIntake, saveIntake, refreshAccount],
+    [app, status, account, profile, workspaces, workspaceId, pendingInvites, error, notice, clearNotice, switchWorkspace, createWorkspace, acceptInvite, createInvite, revokeInvite, subscribeInvites, updateWorkspaceName, forgetWorkspace, needsEmailCode, emailCodeReason, confirmEmailCode, needsIntake, saveIntake, refreshAccount],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
