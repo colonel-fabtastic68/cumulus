@@ -2,14 +2,16 @@
 
 import { FileDown } from "lucide-react";
 import type { Item } from "@/lib/types";
-import { bomTables } from "@/lib/export/bom";
+import { bomImportTable, bomTables } from "@/lib/export/bom";
+import { useFeature } from "@/lib/useFeature";
 import { exportTables, type ExportFormat } from "@/lib/export/formats";
 import { Button, Menu, useToast } from "@/components/ui";
 
 /** Downloads one assembly's bill of materials: components grouped by category, every part at every level, and a summary. */
 export function ExportBomMenu({ assembly, items, size = "sm", label = "Export BOM" }: { assembly: Item; items: Item[]; size?: "sm" | "md"; label?: string }) {
   const toast = useToast();
-  const run = (format: ExportFormat, all: boolean) => {
+  const forImport = useFeature("bomImport");
+  const run =(format: ExportFormat, all: boolean) => {
     if (assembly.bom.length === 0) return toast(`${assembly.sku} has no components yet`, "critical");
     const t = bomTables(assembly, items);
     const res = exportTables(all ? [t.summary, t.structure, t.components, t.exploded] : [t.structure], format, `bom-${assembly.sku.toLowerCase()}`);
@@ -26,6 +28,18 @@ export function ExportBomMenu({ assembly, items, size = "sm", label = "Export BO
         </Button>
       }
       items={[
+        ...(forImport
+          ? [
+              {
+                label: "CSV · for editing and importing back",
+                onSelect: () => {
+                  if (assembly.bom.length === 0) return toast(`${assembly.sku} has no components yet`, "critical");
+                  exportTables([bomImportTable(assembly, items)], "csv", `bom-${assembly.sku.toLowerCase()}-import`);
+                  toast(`Exported the BOM for ${assembly.sku}. Edit it and bring it back through Import → Bills of materials`, "success");
+                },
+              },
+            ]
+          : []),
         { label: "CSV · structure, sub-assemblies indented", onSelect: () => run("csv", false) },
         { label: "Excel · summary, structure, by category, all parts", onSelect: () => run("xlsx", true) },
         { label: "Print / PDF", onSelect: () => run("pdf", true) },

@@ -188,6 +188,7 @@ export function planBomImport(rows: ReadonlyArray<Record<string, string>>, mappi
     if (!comp) return fail(`${asm}: no component part number`);
     if (!bySku.has(asm)) return fail(`${asm} is not in inventory. Import or add the item first`);
     if (!bySku.has(comp)) return fail(`${asm}: component ${comp} is not in inventory. Import or add the item first`);
+    if (comp === asm) return fail(`${asm}: an assembly can't contain itself`);
     const qty = parseNumber(qtyCell);
     if (qty === undefined || Number.isNaN(qty) || qty <= 0) return fail(`${asm}: quantity for ${comp} must be a number more than zero (found "${qtyCell}")`);
     const waste = parseNumber(cell("wastePct"));
@@ -216,10 +217,8 @@ export function planBomImport(rows: ReadonlyArray<Record<string, string>>, mappi
   const skuOf = new Map(items.map((i) => [i.id, i.sku.trim().toUpperCase()]));
   const pending: PendingBom[] = [];
   for (const [asm, g] of groups) {
-    if (held.has(asm)) {
-      errors.push({ row: g.row, message: `${asm}: parts list not imported because of the problem${errors.filter((e) => e.message.startsWith(`${asm}:`) || e.message.startsWith(`${asm} `)).length === 1 ? "" : "s"} listed for it. Fix the sheet and import again` });
-      continue;
-    }
+    // Held back whole; the problem rows themselves say why, and the review explains the rule once.
+    if (held.has(asm)) continue;
     const assembly = bySku.get(asm)!;
     const fromFile = mergeBomLines(g.lines);
     const inFile = new Set(fromFile.map((l) => l.sku));
