@@ -11,7 +11,12 @@ import { SuppliersCard } from "./SuppliersCard";
 export function ItemAside({ item, items, suppliers, currency, canEdit, membersById, activity }: { item: Item; items: Item[]; suppliers: Supplier[]; currency: string; canEdit: boolean; membersById: Map<string, Member>; activity: ActivityEvent[] }) {
   const supersededBy = item.supersededBy ? items.find((i) => i.id === item.supersededBy) : undefined;
   const supersedes = useMemo(() => items.filter((i) => i.supersededBy === item.id), [items, item.id]);
-  const recent = useMemo(() => activity.filter((a) => a.entityId === item.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5), [activity, item.id]);
+  // Entries about many items at once (a parts list import) name them in meta.itemIds, with a line per item in meta.perItem.
+  const recent = useMemo(() => activity.filter((a) => a.entityId === item.id || (Array.isArray(a.meta?.itemIds) && (a.meta.itemIds as string[]).includes(item.id))).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5), [activity, item.id]);
+  const messageFor = (ev: ActivityEvent) => {
+    const own = (ev.meta?.perItem as Record<string, string> | undefined)?.[item.id];
+    return own ? `${ev.actorName}: ${own}` : ev.message;
+  };
 
   return (
     <>
@@ -81,7 +86,7 @@ export function ItemAside({ item, items, suppliers, currency, canEdit, membersBy
                 <li key={ev.id} className="flex items-start gap-2">
                   <Avatar member={member ?? { name: ev.actorName, color: "#8a8a8a" }} size={22} />
                   <div className="min-w-0 flex-1">
-                    <div className="text-[12.5px] leading-4 text-text">{ev.message}</div>
+                    <div className="text-[12.5px] leading-4 text-text">{messageFor(ev)}</div>
                     <div className="text-[11.5px] text-text-tertiary" title={formatDateTime(ev.createdAt)}>
                       {formatRelative(ev.createdAt)}
                     </div>

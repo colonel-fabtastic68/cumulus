@@ -37,6 +37,36 @@ export function bomStructureTable(assembly: Item, items: Item[]): Table {
   };
 }
 
+/**
+ * The BOM in the shape the importer reads (feature `bomImport`): one row per line of every list at every level,
+ * assembly then component, quantity in the component's stocking unit. Edited in Excel and imported back in
+ * Replace mode, an unchanged file changes nothing.
+ */
+export function bomImportTable(assembly: Item, items: Item[]): Table {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const rows: Table["rows"] = [];
+  const seen = new Set<string>();
+  const visit = (asm: Item) => {
+    if (seen.has(asm.id)) return;
+    seen.add(asm.id);
+    const subs: Item[] = [];
+    for (const line of asm.bom) {
+      const comp = byId.get(line.itemId);
+      if (!comp) continue;
+      rows.push([asm.sku, comp.sku, line.qty, comp.unit, line.wastePct ?? "", line.note ?? ""]);
+      if (comp.type === "assembly" && comp.bom.length > 0) subs.push(comp);
+    }
+    subs.forEach(visit);
+  };
+  visit(assembly);
+  return {
+    id: `bom-${assembly.sku.toLowerCase()}-import`,
+    label: `BOM for import · ${assembly.sku}`,
+    headers: ["Assembly SKU", "Component SKU", "Qty", "Unit", "Waste %", "Note"],
+    rows,
+  };
+}
+
 export function bomTables(assembly: Item, items: Item[]): { structure: Table; components: Table; exploded: Table; summary: Table } {
   const byId = new Map(items.map((i) => [i.id, i]));
   const direct = assembly.bom.map((l) => ({ line: l, item: byId.get(l.itemId) })).filter((x): x is { line: (typeof assembly.bom)[number]; item: Item } => !!x.item);

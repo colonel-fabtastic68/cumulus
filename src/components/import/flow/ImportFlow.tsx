@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, Boxes, ClipboardPaste, Contact, FileSpreadsheet, Globe, NotebookPen, Plug, Sparkles, Truck, UploadCloud } from "lucide-react";
+import { ArrowLeft, ArrowRight, Boxes, ClipboardPaste, Contact, FileSpreadsheet, Globe, Layers, NotebookPen, Plug, Sparkles, Truck, UploadCloud } from "lucide-react";
 import { Badge, Banner, Button, Page, QueryParamEffect, TextArea, useToast } from "@/components/ui";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { FadeSwap, TypedText } from "@/components/onboarding/StepFrame";
@@ -16,8 +16,11 @@ import { parseFile, parsePasted } from "../parse";
 import type { ParsedSource, WizardStep } from "../types";
 import { WebsiteImport } from "../WebsiteImport";
 import { RecordImport, type RecordStage } from "./RecordImport";
+import { BomImport } from "./BomImport";
+import { useFeature } from "@/lib/useFeature";
 
-type Kind = ReadTarget;
+/** "boms" belongs to feature `bomImport`: spreadsheets and pastes only, no Strato reading. */
+type Kind = ReadTarget | "boms";
 type Route = "file" | "documents" | "paste" | "website";
 type Screen = "kind" | "route" | "source" | "map" | "review" | "done";
 
@@ -25,12 +28,13 @@ const KINDS: Array<{ id: Kind; icon: ReactNode; title: string; description: stri
   { id: "items", icon: <Boxes />, title: "Items and stock", description: "Parts, products, assemblies: SKUs, names, counts, costs, prices, bins.", points: ["Matched by SKU; existing items update", "Strato fills blanks on the review step", "Counts go through the stock ledger"] },
   { id: "customers", icon: <Contact />, title: "Customers", description: "People and companies you sell to, with emails, phones and addresses.", points: ["Matched by email, then name", "First and last name columns join", "Contact exports and vCards read as is"] },
   { id: "suppliers", icon: <Truck />, title: "Suppliers", description: "Vendors and manufacturers, with contacts, lead times and terms.", points: ["Matched by name", "Lead times feed replenishment", "Link items to them afterwards"] },
+  { id: "boms", icon: <Layers />, title: "Bills of materials", description: "Parts lists for your assemblies: assembly part number, component part number, quantity.", points: ["One row per component", "Replace or add to existing lists", "Parts become assemblies as needed"] },
 ];
 
 const ROUTES: Array<{ id: Route; icon: ReactNode; title: string; description: string; points: string[]; kinds: Kind[]; badge?: ReactNode }> = [
-  { id: "file", icon: <FileSpreadsheet />, title: "A spreadsheet or export", description: "Excel, CSV, Numbers, Google Sheets, or an export from a store, POS or accounting app.", points: ["Columns matched for you", "Shopify, WooCommerce, Square, Clover, QuickBooks exports recognized", "Anything that is not a table goes to Strato"], kinds: ["items", "customers", "suppliers"] },
+  { id: "file", icon: <FileSpreadsheet />, title: "A spreadsheet or export", description: "Excel, CSV, Numbers, Google Sheets, or an export from a store, POS or accounting app.", points: ["Columns matched for you", "Shopify, WooCommerce, Square, Clover, QuickBooks exports recognized", "Anything that is not a table goes to Strato"], kinds: ["items", "customers", "suppliers", "boms"] },
   { id: "documents", icon: <NotebookPen />, title: "Paper, photos, PDFs, any file", description: "Photograph a sheet, or drop a PDF, text, XML or vCard. Strato reads it into a table you check first.", points: ["Phone camera, straight from the shelf", "Plain-text exports and vCards read instantly", "Several files at once, read in parallel"], kinds: ["items", "customers", "suppliers"], badge: <Badge tone="magic">Strato</Badge> },
-  { id: "paste", icon: <ClipboardPaste />, title: "Paste it", description: "Copy cells from a spreadsheet, header row included, or type a plain list.", points: ["Cells go straight to matching", "A one-per-line list is read by Strato", "Nothing to save first"], kinds: ["items", "customers", "suppliers"] },
+  { id: "paste", icon: <ClipboardPaste />, title: "Paste it", description: "Copy cells from a spreadsheet, header row included, or type a plain list.", points: ["Cells go straight to matching", "A one-per-line list is read by Strato", "Nothing to save first"], kinds: ["items", "customers", "suppliers", "boms"] },
   { id: "website", icon: <Globe />, title: "Read your website", description: "A Shopify, WooCommerce or plain product site: names, SKUs, prices and images come in.", points: ["Counts and costs stay blank", "Connect the store later for live sync", "Hosted workspaces only"], kinds: ["items"] },
 ];
 
@@ -68,14 +72,16 @@ export function ImportFlow() {
   const [pasted, setPasted] = useState("");
   const [websiteDone, setWebsiteDone] = useState<{ created: number; updated: number } | null>(null);
   const hint = describeAnswers(settings.onboarding);
+  const bomImport = useFeature("bomImport");
+  const kinds = KINDS.filter((k) => k.id !== "boms" || bomImport);
 
   useEffect(() => {
     setPageContext({ page: "Import" });
   }, [setPageContext]);
   const onKindParam = useCallback((v: string) => {
     const k = KINDS.find((x) => x.id === v)?.id;
-    if (k) setKind(k);
-  }, []);
+    if (k && (k !== "boms" || bomImport)) setKind(k);
+  }, [bomImport]);
 
   const screen: Screen = !kind ? "kind" : !route ? "route" : !source ? (websiteDone ? "done" : "source") : inner;
   const screenIndex = SCREENS.findIndex((s) => s.id === screen);
@@ -104,7 +110,8 @@ export function ImportFlow() {
     const list = Array.from(files);
     const docs = list.filter((f) => isDocumentFile(f) && !isSpreadsheetFile(f) && !/\.(csv|tsv)$/i.test(f.name));
     const table = list.find((f) => !docs.includes(f));
-    if (docs.length) toDocuments(docs);
+    if (docs.length && kind === "boms") toast("Parts lists come from a spreadsheet or CSV file, with a header row.", "critical");
+    else if (docs.length) toDocuments(docs);
     if (!table) return;
     setBusy(true);
     try {
@@ -124,6 +131,7 @@ export function ImportFlow() {
   const usePasted = () => {
     const parsed = parsePasted(pasted);
     if (parsed.headers.length < 2 || parsed.rows.length === 0) {
+      if (kind === "boms") return toast("Paste cells with a header row: assembly, component, quantity.", "critical");
       toDocuments([new File([pasted], "Pasted list.txt", { type: "text/plain" })]);
       return;
     }
@@ -200,7 +208,7 @@ export function ImportFlow() {
       <FadeSwap
         id={swapKey}
         // The importers keep their state from match to review to done, so they live in the stable slot; only the heading swaps.
-        stable={source ? kind === "items" ? <ItemsStage key={source.nonce} source={source.parsed} onStep={onWizardStep} onRestart={reset} kind={kind} /> : <RecordImport key={source.nonce} kind={kind as "customers" | "suppliers"} source={source.parsed} onStage={onRecordStage} onBack={() => setSource(null)} onRestart={reset} /> : undefined}
+        stable={source ? kind === "items" ? <ItemsStage key={source.nonce} source={source.parsed} onStep={onWizardStep} onRestart={reset} kind={kind} /> : kind === "boms" ? <BomImport key={source.nonce} source={source.parsed} onStage={onRecordStage} onBack={() => setSource(null)} onRestart={reset} /> : <RecordImport key={source.nonce} kind={kind as "customers" | "suppliers"} source={source.parsed} onStage={onRecordStage} onBack={() => setSource(null)} onRestart={reset} /> : undefined}
       >
         <div className="mb-5">
           <TypedText as="p" text={heading.lead} speed={12} className="min-h-[20px] text-[13.5px] font-medium text-text-secondary" />
@@ -208,11 +216,11 @@ export function ImportFlow() {
           {heading.subtitle && <p className="mt-1 max-w-[640px] text-[13.5px] leading-5 text-text-secondary">{heading.subtitle}</p>}
         </div>
 
-        {screen === "kind" && <PickCards options={KINDS} onPick={(id) => setKind(id as Kind)} />}
+        {screen === "kind" && <PickCards options={kinds} onPick={(id) => setKind(id as Kind)} />}
 
         {screen === "route" && (
           <>
-            <PickCards options={ROUTES.filter((r) => r.kinds.includes(kind!))} onPick={(id) => setRoute(id as Route)} />
+            <PickCards options={ROUTES.filter((r) => r.kinds.includes(kind!)).map((r) => (kind === "boms" ? { ...r, points: r.points.filter((p) => !p.includes("Strato")) } : r))} onPick={(id) => setRoute(id as Route)} />
             <div className="mt-6">
               <Button icon={<ArrowLeft />} onClick={back}>
                 Back
@@ -225,10 +233,10 @@ export function ImportFlow() {
           <>
             <Panel>
               {route === "file" && <DropTarget onFiles={acceptFiles} busy={busy} />}
-              {route === "documents" && <DocumentReader target={kind!} onSource={onDocument} hint={hint} incoming={handoff} prominent />}
+              {route === "documents" && kind !== "boms" && <DocumentReader target={kind!} onSource={onDocument} hint={hint} incoming={handoff} prominent />}
               {route === "paste" && (
                 <>
-                  <TextArea value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder={kind === "items" ? "sku\tname\tqty\tunitCost\nSW-3PDT-BLU\t3PDT footswitch, blue\t320\t2.35" : kind === "customers" ? "name\temail\tphone\nJane Alvarez\tjane@example.com\t704 555 0100" : "supplier\temail\tlead time\nMouser Electronics\torders@mouser.example\t5"} className="min-h-[200px] font-mono text-[12px]" spellCheck={false} />
+                  <TextArea value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder={kind === "items" ? "sku\tname\tqty\tunitCost\nSW-3PDT-BLU\t3PDT footswitch, blue\t320\t2.35" : kind === "boms" ? "assembly\tcomponent\tqty\nASSY-100\tPART-200\t2\n\tPART-310\t4" : kind === "customers" ? "name\temail\tphone\nJane Alvarez\tjane@example.com\t704 555 0100" : "supplier\temail\tlead time\nMouser Electronics\torders@mouser.example\t5"} className="min-h-[200px] font-mono text-[12px]" spellCheck={false} />
                   <div className="mt-3 flex items-center justify-between gap-2">
                     <span className="text-[12.5px] text-text-secondary">Cells with a header row go straight to matching; a plain list is read by Strato.</span>
                     <Button variant="primary" icon={<ClipboardPaste />} onClick={usePasted} disabled={!pasted.trim()}>
@@ -243,7 +251,7 @@ export function ImportFlow() {
               <Button icon={<ArrowLeft />} onClick={back}>
                 Back
               </Button>
-              {route !== "website" && route !== "documents" && (
+              {route !== "website" && route !== "documents" && kind !== "boms" && (
                 <Button variant="plain" icon={<Sparkles />} onClick={() => setRoute("documents")}>
                   Not a table? Let Strato read it
                 </Button>

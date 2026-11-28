@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Hammer, Plus } from "lucide-react";
+import { Hammer, Plus, Upload } from "lucide-react";
 import type { Item } from "@/lib/types";
 import { useCollection, useItems, useItemsById } from "@/lib/store/provider";
 import { canWrite, useCurrentUser } from "@/lib/auth";
@@ -31,6 +31,8 @@ export default function BuildsPage() {
   const router = useRouter();
   const canCreate = useFeature("newAssembly") && writable;
   const [newOpen, setNewOpen] = useState(false);
+  // Feature `bomImport`: parts lists from a spreadsheet, through the Import page.
+  const canImport = useFeature("bomImport") && writable;
 
   // Feature `assembliesWithoutBom`: active assemblies with no parts yet are listed too, so they can be set up from here.
   const showUnbuilt = useFeature("assembliesWithoutBom");
@@ -67,10 +69,19 @@ export default function BuildsPage() {
       subtitle="Bills of materials: what each assembly is made of, what you can build now, and what has been built"
       primaryAction={buildButton}
       secondaryActions={
-        canCreate ? (
-          <Button icon={<Plus />} onClick={() => setNewOpen(true)}>
-            New assembly
-          </Button>
+        canCreate || canImport ? (
+          <>
+            {canImport && (
+              <Button icon={<Upload />} href="/import?kind=boms">
+                Import BOMs
+              </Button>
+            )}
+            {canCreate && (
+              <Button icon={<Plus />} onClick={() => setNewOpen(true)}>
+                New assembly
+              </Button>
+            )}
+          </>
         ) : undefined
       }
     >

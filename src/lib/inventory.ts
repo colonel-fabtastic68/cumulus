@@ -233,7 +233,8 @@ export function explodeBom(items: Item[], assembly: Item, qty: number, opts: Exp
     for (const line of resolveBom(asm.bom, depth === 0 ? opts.selection : undefined)) {
       const comp = byId.get(line.itemId);
       if (!comp) continue;
-      const need = round(line.qty * mult * (1 + (line.wastePct ?? comp.expectedWastePct ?? 0) / 100), 3);
+      // Full precision per line; the total per part is rounded once below, so many small lines do not lose a hundredth.
+      const need = round(line.qty * mult * (1 + (line.wastePct ?? comp.expectedWastePct ?? 0) / 100), 9);
       const isSub = comp.type === "assembly" && comp.bom.length > 0 && !path.has(comp.id);
       if (isSub && !opts.consumeSubassemblies) {
         if (opts.explodeShortfallOnly) {
@@ -252,12 +253,12 @@ export function explodeBom(items: Item[], assembly: Item, qty: number, opts: Exp
   };
   const add = (comp: Item, need: number, depth: number) => {
     const existing = acc.get(comp.id);
-    const required = round((existing?.required ?? 0) + need, 3);
+    const required = round((existing?.required ?? 0) + need, 4);
     acc.set(comp.id, {
       item: comp,
       required,
       available: comp.onHand,
-      shortage: round(Math.max(0, required - comp.onHand), 3),
+      shortage: round(Math.max(0, required - comp.onHand), 4),
       depth: Math.min(existing?.depth ?? depth, depth),
     });
   };
@@ -278,17 +279,21 @@ export function buildableQty(items: Item[], assembly: Item, opts: ExplodeOptions
 }
 
 /** Rolled-up cost of an assembly from its BOM. */
-export function rolledUpCost(items: Item[], assembly: Item, depth = 0): number {
+export function rolledUpCost(items: Item[], assembly: Item): number {
+  // Sub-assemblies are costed at full precision and only the total is rounded: rounding each one to the cent first drifts on long lists.
+  return round(rolledUpCostExact(new Map(items.map((i) => [i.id, i])), assembly, 0));
+}
+
+function rolledUpCostExact(byId: ReadonlyMap<string, Item>, assembly: Item, depth: number): number {
   if (assembly.type !== "assembly" || assembly.bom.length === 0 || depth > 8) return assembly.unitCost;
-  const byId = new Map(items.map((i) => [i.id, i]));
   let total = 0;
   // A modular BOM is costed as it is built when nobody chooses: default alternatives, default-included options.
   for (const line of resolveBom(assembly.bom)) {
     const comp = byId.get(line.itemId);
     if (!comp) continue;
-    total += rolledUpCost(items, comp, depth + 1) * line.qty * (1 + (line.wastePct ?? 0) / 100);
+    total += rolledUpCostExact(byId, comp, depth + 1) * line.qty * (1 + (line.wastePct ?? 0) / 100);
   }
-  return round(total);
+  return total;
 }
 
 // ---------------------------------------------------------------------------
