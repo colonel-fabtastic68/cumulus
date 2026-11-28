@@ -1,5 +1,5 @@
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
-import { browserLocalPersistence, getAuth, indexedDBLocalPersistence, initializeAuth, onAuthStateChanged, type Auth } from "firebase/auth";
+import { browserLocalPersistence, getAuth, indexedDBLocalPersistence, initializeAuth, initializeRecaptchaConfig, onAuthStateChanged, type Auth } from "firebase/auth";
 import {
   getFirestore,
   initializeFirestore,
@@ -55,6 +55,27 @@ export function getFirebaseAuth(app: FirebaseApp): Auth {
   if (instance) auth.tenantId = instance.tenantId ?? "unconfigured-instance-tenant";
   auths.set(app, auth);
   return auth;
+}
+
+const recaptchaReady = new WeakSet<Auth>();
+
+/**
+ * Loads the project's reCAPTCHA settings ahead of a password sign-in, sign-up
+ * or reset. When bot protection is on for the Firebase project (Authentication
+ * → Settings → Fraud prevention → reCAPTCHA), the SDK then attaches a reCAPTCHA
+ * token to those calls and Firebase refuses any call without a good one. With
+ * it off this is one small request and nothing else changes. Called from the
+ * account pages only, so no other page loads Google's script.
+ */
+export function prepareRecaptcha(app: FirebaseApp): void {
+  if (typeof window === "undefined") return;
+  const auth = getFirebaseAuth(app);
+  if (recaptchaReady.has(auth)) return;
+  recaptchaReady.add(auth);
+  initializeRecaptchaConfig(auth).catch(() => {
+    // Not reachable right now: the SDK asks again by itself if Firebase demands a token.
+    recaptchaReady.delete(auth);
+  });
 }
 
 const dbs = new WeakMap<FirebaseApp, Firestore>();

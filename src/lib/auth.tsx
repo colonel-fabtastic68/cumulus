@@ -150,6 +150,7 @@ export function describeAuthError(e: unknown): string {
   if (code.includes("unauthorized-continue-uri") || code.includes("unauthorized-domain")) return "This site's address is not authorized for sign-in links yet. In the Firebase console open Authentication → Settings → Authorized domains and add it.";
   if (code.includes("requires-recent-login")) return "For security, sign out and sign in again, then set the password within a few minutes.";
   if (code.includes("invalid-continue-uri") || code.includes("missing-continue-uri")) return "The sign-in link could not be built for this address. Reload and try again.";
+  if (code.includes("recaptcha") || code.includes("captcha-check-failed") || code.includes("missing-client-type")) return "We could not confirm this sign-in is coming from a person. Reload the page and try again; if it keeps happening, switch off any content blocker for this site.";
   if (code.includes("invalid-credential") || code.includes("wrong-password") || code.includes("user-not-found")) return "Email or password is incorrect.";
   if (code.includes("invalid-email")) return "That email address doesn't look right.";
   if (code.includes("email-already-in-use")) return "An account with that email already exists. Sign in instead.";

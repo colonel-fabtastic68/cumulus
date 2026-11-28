@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { useSession } from "@/lib/session";
 import { getFirebaseAuth } from "@/lib/store/firestore";
+import { SIGN_IN_CODE_EVENT, SIGN_IN_CODE_PENDING } from "@/lib/server/signInCodeRules";
 
 export class ApiError extends Error {
   constructor(
@@ -42,6 +43,8 @@ export function useApi(): ApiCall {
       }
       if (!res.ok) {
         const message = (data as { error?: string } | null)?.error ?? `Request failed (${res.status})`;
+        // The server no longer has this session down as having entered its sign-in code: ask for it again.
+        if (res.status === 401 && message === SIGN_IN_CODE_PENDING) window.dispatchEvent(new Event(SIGN_IN_CODE_EVENT));
         throw new ApiError(res.status, message);
       }
       return data as T;

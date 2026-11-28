@@ -13,13 +13,15 @@ import { useNextPath } from "./AuthPage";
 type SendResponse = { verified?: boolean; sent?: boolean; email?: string; retryAfterSeconds?: number };
 
 /**
- * New password accounts land here until they enter the one-time code emailed
- * to them. A code goes out when the page opens; a new one can be sent after a
- * minute. Accounts with nothing to verify are sent on to where they were going.
+ * Where an emailed one-time code is entered: by a new password account
+ * confirming its address, and by every password sign-in as its second step.
+ * A code goes out when the page opens; a new one can be sent after a minute.
+ * Accounts that owe no code are sent on to where they were going.
  */
 export function VerifyEmail() {
   const session = useSession();
-  const { status: sessionStatus, needsEmailCode, refreshAccount, app } = session;
+  const { status: sessionStatus, needsEmailCode, emailCodeReason, confirmEmailCode, refreshAccount, app } = session;
+  const signingIn = emailCodeReason === "sign-in";
   const { signOut } = useAuth();
   const router = useRouter();
   const next = useNextPath();
@@ -49,6 +51,8 @@ export function VerifyEmail() {
     try {
       const res = await accountFetch<SendResponse>(app, "/api/auth/email-code/send", {});
       if (res.verified) {
+        // The server already has this session down as finished (for example after this browser's storage was cleared).
+        await confirmEmailCode();
         await refreshAccount();
         return;
       }
@@ -59,7 +63,7 @@ export function VerifyEmail() {
     } finally {
       setBusy(null);
     }
-  }, [app, email, refreshAccount]);
+  }, [app, email, confirmEmailCode, refreshAccount]);
 
   // Send the first code when the page opens (once, even under StrictMode's double effects).
   useEffect(() => {
@@ -82,6 +86,7 @@ export function VerifyEmail() {
     setError(null);
     try {
       await accountFetch(app, "/api/auth/email-code/verify", { code: digits });
+      await confirmEmailCode();
       await refreshAccount();
       router.replace(next);
     } catch (e) {
@@ -108,7 +113,14 @@ export function VerifyEmail() {
   }
 
   return (
-    <Card title="Check your email" subtitle={<>Enter the 6-digit code we sent to <span className="font-medium text-text">{email}</span>. It expires in 10 minutes.</>}>
+    <Card
+      title={signingIn ? "Enter your sign-in code" : "Check your email"}
+      subtitle={
+        <>
+          {signingIn ? "To finish signing in, enter" : "Enter"} the 6-digit code we sent to <span className="font-medium text-text">{email}</span>. It expires in 10 minutes.
+        </>
+      }
+    >
       <form
         noValidate
         className="flex flex-col gap-4"
@@ -117,7 +129,7 @@ export function VerifyEmail() {
           void verify(code);
         }}
       >
-        <TextField label="Verification code" value={code} onChange={(e) => onCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" placeholder="123456" autoFocus className="font-mono text-[16px] tracking-[0.3em]" />
+        <TextField label={signingIn ? "Sign-in code" : "Verification code"} value={code} onChange={(e) => onCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" placeholder="123456" autoFocus className="font-mono text-[16px] tracking-[0.3em]" />
         {notice && !error && (
           <div className="flex items-start gap-3 rounded-[var(--radius)] bg-success-soft p-3 text-[13px] leading-5 text-success">
             <MailCheck className="mt-0.5 h-4 w-4 shrink-0" />
@@ -126,18 +138,18 @@ export function VerifyEmail() {
         )}
         {error && <Banner tone="critical">{error}</Banner>}
         <Button type="submit" variant="primary" size="lg" fullWidth loading={busy === "checking"} disabled={busy !== null}>
-          Verify email
+          {signingIn ? "Finish signing in" : "Verify email"}
         </Button>
         <Button type="button" size="lg" fullWidth loading={busy === "sending"} disabled={busy !== null || cooldown > 0} onClick={() => void send()}>
           {cooldown > 0 ? `Send a new code in ${cooldown}s` : "Send a new code"}
         </Button>
       </form>
       <p className="mt-5 text-center text-[12.5px] text-text-secondary">
-        Wrong address?{" "}
+        {signingIn ? "Not your account?" : "Wrong address?"}{" "}
         <button type="button" onClick={() => void signOut()} className="font-medium text-accent hover:underline">
           Sign out
-        </button>{" "}
-        and create the account again.
+        </button>
+        {signingIn ? "." : " and create the account again."}
       </p>
     </Card>
   );

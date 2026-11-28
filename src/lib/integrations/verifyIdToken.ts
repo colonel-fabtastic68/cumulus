@@ -19,6 +19,8 @@ export interface VerifiedIdToken {
   signInProvider?: string;
   /** firebase.tenant: the Identity Platform tenant the account belongs to; absent for the shared account pool. */
   tenant?: string;
+  /** auth_time: when this session signed in (seconds). It stays the same through token refreshes and changes with every new sign-in. */
+  authTime: number;
 }
 
 export async function verifyFirebaseIdToken(token: string, projectId: string): Promise<VerifiedIdToken> {
@@ -39,5 +41,6 @@ export async function verifyFirebaseIdToken(token: string, projectId: string): P
     emailVerified: payload.email_verified === true,
     signInProvider: typeof firebase.sign_in_provider === "string" ? firebase.sign_in_provider : undefined,
     tenant: typeof firebase.tenant === "string" && firebase.tenant ? firebase.tenant : undefined,
+    authTime,
   };
 }

@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button, Skeleton } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
 import { APP_HOME, safeNext } from "@/lib/auth-routes";
+import { useSession } from "@/lib/session";
+import { prepareRecaptcha } from "@/lib/store/firestore";
 
 const noop = () => () => {};
 /** False during server rendering and hydration, true once the component has mounted in the browser. */
@@ -39,6 +41,12 @@ export function AuthPage({ title, subtitle, children, footer }: { title: string;
   useEffect(() => {
     if (redirect) router.replace(next);
   }, [redirect, next, router]);
+
+  // Sign-in, sign-up and reset are the calls Firebase's reCAPTCHA guards; have its settings loaded before the form is submitted.
+  const { app } = useSession();
+  useEffect(() => {
+    if (app) prepareRecaptcha(app);
+  }, [app]);
 
   if (hydrated && mode === "local") {
     return (

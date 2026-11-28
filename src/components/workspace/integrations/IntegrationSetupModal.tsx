@@ -9,6 +9,9 @@ import { Badge, Banner, Button, ConfirmDialog, DescriptionList, Modal, Select, S
 import { useLocations } from "@/lib/locations";
 import { useSession } from "@/lib/session";
 import { ApiError, useApi } from "@/lib/api-client";
+import { useFeature } from "@/lib/useFeature";
+import { getFirebaseAuth } from "@/lib/store/firestore";
+import { LiveSyncUnavailable, quickbooksLiveSync } from "@/lib/integrations/quickbooksLiveClient";
 import { useCollection, useStore } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
 import { useAgent } from "@/components/agent/AgentProvider";
@@ -266,6 +269,10 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
   const agent = useAgent();
   const [settings, setSettings] = useState<IntegrationSettings>(() => ({ ...defaultSettings(def), ...(integration.settings ?? {}) }));
   const [busy, setBusy] = useState<"sync" | "save" | "disconnect" | "push" | "reconnect" | "skus" | null>(null);
+  // QuickBooks can report a sync step by step over a WebSocket; the line below the buttons shows the step it is on.
+  const session = useSession();
+  const liveSync = useFeature("quickbooksLiveSync") && def.id === "quickbooks";
+  const [syncStep, setSyncStep] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
   const [replace, setReplace] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "critical" | "info"; text: string } | null>(integration.lastError ? { tone: "critical", text: integration.lastError } : null);
@@ -286,7 +293,28 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
 
   const sync = () =>
     run("sync", async () => {
-      const res = await api<{ summary: string; errors?: string[] }>(`/api/integrations/${def.id}/sync`, {});
+      type SyncResult = { summary: string; errors?: string[] };
+      let res: SyncResult | null = null;
+      const { app, workspaceId } = session;
+      if (liveSync && app && workspaceId) {
+        try {
+          res = await quickbooksLiveSync<SyncResult>({
+            getToken: async () => {
+              const user = getFirebaseAuth(app).currentUser;
+              if (!user) throw new Error("Sign in first.");
+              return user.getIdToken();
+            },
+            workspaceId,
+            onProgress: setSyncStep,
+          });
+        } catch (e) {
+          // The channel never started a sync (for example on a server that cannot upgrade connections): use the ordinary request.
+          if (!(e instanceof LiveSyncUnavailable)) throw e;
+        } finally {
+          setSyncStep(null);
+        }
+      }
+      res ??= await api<SyncResult>(`/api/integrations/${def.id}/sync`, {});
       const warn = res.errors?.length ? ` · ${res.errors.slice(0, 2).join("; ")}` : "";
       return `Synced: ${res.summary}${warn}`;
     });
@@ -405,6 +433,11 @@ function ConnectedPanel({ def, integration, onClose }: { def: IntegrationDef; in
     <>
       <DescriptionList rows={rows} />
       {message && <Banner tone={message.tone}>{message.text}</Banner>}
+      {syncStep && (
+        <p role="status" className="text-[12.5px] leading-5 text-text-secondary">
+          {syncStep}…
+        </p>
+      )}
       {(def.kind === "channel" || def.kind === "accounting" || def.kind === "pos") && (
         <div className="flex flex-wrap gap-2">
           <Button variant="primary" icon={<RefreshCw />} onClick={() => void sync()} loading={busy === "sync"} disabled={busy !== null}>

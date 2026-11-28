@@ -1,5 +1,6 @@
 import type { FirebaseApp } from "firebase/app";
 import { getFirebaseAuth } from "@/lib/store/firestore";
+import { SIGN_IN_CODE_EVENT, SIGN_IN_CODE_PENDING } from "@/lib/server/signInCodeRules";
 
 export class AccountApiError extends Error {
   constructor(
@@ -30,6 +31,11 @@ export async function accountFetch<T = unknown>(app: FirebaseApp, path: string, 
   } catch {
     data = null;
   }
-  if (!res.ok) throw new AccountApiError(res.status, (data as { error?: string } | null)?.error ?? `Request failed (${res.status})`);
+  if (!res.ok) {
+    const message = (data as { error?: string } | null)?.error ?? `Request failed (${res.status})`;
+    // The server no longer has this session down as having entered its sign-in code: ask for it again.
+    if (res.status === 401 && message === SIGN_IN_CODE_PENDING) window.dispatchEvent(new Event(SIGN_IN_CODE_EVENT));
+    throw new AccountApiError(res.status, message);
+  }
   return data as T;
 }
