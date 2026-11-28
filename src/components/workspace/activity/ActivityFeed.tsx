@@ -7,6 +7,7 @@ import type { ActivityEvent, Item, Member } from "@/lib/types";
 import { Avatar } from "@/components/ui";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { activityLink, typeLabel, type ActivityDayGroup } from "./activityUtils";
+import { RevertBomImport } from "@/components/import/flow/RevertBomImport";
 
 const FALLBACK_COLOR = "#8a8a8a";
 
@@ -86,6 +87,11 @@ export function ActivityRow({ event, membersById, itemsById }: { event: Activity
       <div className="min-w-0 flex-1">
         <p className="text-[13px] leading-5 text-text">{event.message}</p>
         {changes.length > 0 && <ChangeDetails changes={changes} total={changesTotal} reason={typeof event.meta?.reason === "string" ? event.meta.reason : undefined} />}
+        {event.meta?.bomImport ? (
+          <div className="mt-1.5">
+            <RevertBomImport activityId={event.id} />
+          </div>
+        ) : null}
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] text-text-tertiary">
           <span>{typeLabel(event.type)}</span>
           <span aria-hidden>·</span>

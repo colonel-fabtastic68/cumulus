@@ -12,9 +12,9 @@
  * Plain functions, no React.
  */
 
-import type { BomLine, Item } from "@/lib/types";
+import type { ActivityEvent, BomLine, Item } from "@/lib/types";
 import type { Store, WriteOp } from "@/lib/store/types";
-import { activityOp, type Actor } from "@/lib/inventory";
+import { InventoryError, activityOp, type Actor } from "@/lib/inventory";
 import { mergeBomLines, resolveImportBoms, type ImportBomLine, type PendingBom } from "@/lib/importBoms";
 import { formatNumber } from "@/lib/format";
 import { nowIso, round } from "@/lib/utils";
@@ -236,8 +236,48 @@ export function planBomImport(rows: ReadonlyArray<Record<string, string>>, mappi
   return { boms, errors, blank };
 }
 
-/** Write the planned BOMs in one batch, with one Activity entry for the whole import. */
-export async function importBoms(store: Store, actor: Actor, plan: BomImportPlan, sourceName: string): Promise<{ set: number; converted: number }> {
+// ---- Writing, the record of an import, and putting it back -------------------
+
+/** What one assembly looked like before an import and what the import made it, kept on the import's Activity entry so it can be reverted. */
+export interface BomImportEntry {
+  itemId: string;
+  sku: string;
+  before: BomLine[];
+  after: BomLine[];
+  typeBefore: Item["type"];
+  becameAssembly: boolean;
+  /** One line for the assembly's own Recent activity. */
+  summary: string;
+}
+
+export interface BomImportRecord {
+  at: string;
+  source: string;
+  mode: BomImportMode;
+  assemblies: BomImportEntry[];
+}
+
+/** One before/after row per line the import touched, for "Show details" on the Activity entry (ActivityFeed reads meta.changes). */
+function changeLines(plan: BomImportPlan): Array<{ sku: string; field: string; from: number | string; to: number | string }> {
+  return plan.boms.flatMap((b) => [
+    ...b.diff.changed.map((c) => ({ sku: b.assembly.sku, field: `${c.sku} qty`, from: c.from!, to: c.to! })),
+    ...b.diff.added.map((c) => ({ sku: b.assembly.sku, field: `${c.sku} added`, from: "", to: c.to! })),
+    ...b.diff.removed.map((c) => ({ sku: b.assembly.sku, field: `${c.sku} removed`, from: c.from!, to: "" })),
+  ]);
+}
+
+function entrySummary(b: PlannedBom, mode: BomImportMode): string {
+  const d = b.diff;
+  const verb = b.linesBefore === 0 ? "set" : mode === "replace" ? "replaced" : "updated";
+  return `BOM ${verb} by import · ${d.changed.length} changed · ${d.added.length} added · ${d.removed.length} removed`;
+}
+
+/**
+ * Write the planned BOMs in one batch with one Activity entry. The entry keeps every touched
+ * assembly's list before and after (so "Revert this import" can put it back), the line-by-line
+ * changes for its details, and a line per assembly for that assembly's own Recent activity.
+ */
+export async function importBoms(store: Store, actor: Actor, plan: BomImportPlan, sourceName: string, mode: BomImportMode): Promise<{ set: number; converted: number; activityId?: string }> {
   if (plan.boms.length === 0) return { set: 0, converted: 0 };
   const now = nowIso();
   const converted = plan.boms.filter((b) => b.becomesAssembly).length;
@@ -247,11 +287,96 @@ export async function importBoms(store: Store, actor: Actor, plan: BomImportPlan
     id: b.assembly.id,
     patch: { bom: b.bom, ...(b.becomesAssembly ? { type: "assembly" } : {}), updatedAt: now, updatedBy: actor.id },
   }));
+  const record: BomImportRecord = {
+    at: now,
+    source: sourceName,
+    mode,
+    assemblies: plan.boms.map((b) => ({ itemId: b.assembly.id, sku: b.assembly.sku, before: b.assembly.bom, after: b.bom, typeBefore: b.assembly.type, becameAssembly: b.becomesAssembly, summary: entrySummary(b, mode) })),
+  };
+  const changes = changeLines(plan);
+  const activity = activityOp(actor, "import.completed", `${actor.name} imported parts lists for ${plan.boms.length} assembl${plan.boms.length === 1 ? "y" : "ies"} from ${sourceName}${converted ? ` (${converted} made assemblies)` : ""}`, {
+    meta: {
+      boms: plan.boms.length,
+      converted,
+      lines: plan.boms.reduce((a, b) => a + b.bom.length, 0),
+      skipped: plan.errors.length,
+      bomImport: record,
+      itemIds: record.assemblies.map((a) => a.itemId),
+      perItem: Object.fromEntries(record.assemblies.map((a) => [a.itemId, a.summary])),
+      changes,
+      changesTotal: changes.length,
+    },
+  });
+  ops.push(activity);
+  await store.batch(ops);
+  return { set: plan.boms.length, converted, activityId: activity.op === "put" ? (activity.doc as { id: string }).id : undefined };
+}
+
+/** The import record on an Activity entry, when it is a BOM import. */
+export function bomImportRecord(event: Pick<ActivityEvent, "meta"> | null | undefined): BomImportRecord | null {
+  const r = event?.meta?.bomImport as BomImportRecord | undefined;
+  return r && Array.isArray(r.assemblies) ? r : null;
+}
+
+/** The revert entry for an import, if it has been reverted. */
+export function bomImportRevertOf(activity: readonly ActivityEvent[], importId: string): ActivityEvent | undefined {
+  return activity.find((a) => a.type === "import.reverted" && a.meta?.revertOf === importId);
+}
+
+const sameLines = (a: readonly BomLine[], b: readonly BomLine[]) => {
+  const key = (lines: readonly BomLine[]) => JSON.stringify([...lines].map((l) => [l.itemId, round(l.qty, 6)]).sort());
+  return key(a) === key(b);
+};
+
+/**
+ * Put every assembly an import touched back to its list from before the import, and turn parts the
+ * import made assemblies back into parts. Refused, with the reason, when it has already been reverted,
+ * when one of the assemblies was built after the import, or when a list was edited since.
+ */
+export async function revertBomImport(store: Store, actor: Actor, importActivityId: string): Promise<{ restored: number }> {
+  const [event, activity, items, builds] = await Promise.all([store.get("activity", importActivityId), store.list("activity"), store.list("items"), store.list("builds")]);
+  const record = bomImportRecord(event);
+  if (!event || !record) throw new InventoryError("That Activity entry is not a parts list import");
+  if (bomImportRevertOf(activity, event.id)) throw new InventoryError("This import has already been reverted");
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const touched = new Set(record.assemblies.map((a) => a.itemId));
+  const builtSince = builds.filter((b) => touched.has(b.assemblyId) && (b.completedAt ?? b.createdAt) >= record.at);
+  if (builtSince.length) {
+    const b = builtSince[0]!;
+    throw new InventoryError(`${byId.get(b.assemblyId)?.sku ?? "An assembly"} was built after this import (${b.number}), so the import can't be undone automatically. Change the parts list by hand instead.`);
+  }
+  for (const a of record.assemblies) {
+    const item = byId.get(a.itemId);
+    if (!item) throw new InventoryError(`${a.sku} has been deleted since the import, so it can't be reverted`);
+    if (!sameLines(item.bom, a.after)) throw new InventoryError(`${a.sku}'s parts list was changed after the import, so reverting would undo that too. Change it by hand instead.`);
+  }
+  const now = nowIso();
+  const ops: WriteOp[] = record.assemblies.map((a) => ({
+    op: "patch",
+    collection: "items",
+    id: a.itemId,
+    patch: { bom: a.before, ...(a.becameAssembly ? { type: a.typeBefore } : {}), updatedAt: now, updatedBy: actor.id },
+  }));
+  const changes = record.assemblies.flatMap((a) => {
+    const d = diffBom(a.after, a.before, byId);
+    return [
+      ...d.changed.map((c) => ({ sku: a.sku, field: `${c.sku} qty`, from: c.from!, to: c.to! })),
+      ...d.added.map((c) => ({ sku: a.sku, field: `${c.sku} put back`, from: "", to: c.to! })),
+      ...d.removed.map((c) => ({ sku: a.sku, field: `${c.sku} removed`, from: c.from!, to: "" })),
+    ];
+  });
+  const madeParts = record.assemblies.filter((a) => a.becameAssembly).length;
   ops.push(
-    activityOp(actor, "import.completed", `${actor.name} imported parts lists for ${plan.boms.length} assembl${plan.boms.length === 1 ? "y" : "ies"} from ${sourceName}${converted ? ` (${converted} made assemblies)` : ""}`, {
-      meta: { boms: plan.boms.length, converted, lines: plan.boms.reduce((a, b) => a + b.bom.length, 0), skipped: plan.errors.length },
+    activityOp(actor, "import.reverted", `${actor.name} reverted the parts list import from ${record.source}: ${record.assemblies.length} assembl${record.assemblies.length === 1 ? "y" : "ies"} back to their lists from before${madeParts ? `, ${madeParts} back to parts` : ""}`, {
+      meta: {
+        revertOf: event.id,
+        itemIds: record.assemblies.map((a) => a.itemId),
+        perItem: Object.fromEntries(record.assemblies.map((a) => [a.itemId, `BOM put back by reverting the import from ${record.source}`])),
+        changes,
+        changesTotal: changes.length,
+      },
     }),
   );
   await store.batch(ops);
-  return { set: plan.boms.length, converted };
+  return { restored: record.assemblies.length };
 }

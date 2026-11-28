@@ -1163,6 +1163,7 @@ export type ActivityType =
   | "rma.created"
   | "rma.resolved"
   | "import.completed"
+  | "import.reverted"
   | "agent.action"
   | "member.joined"
   | "settings.updated"

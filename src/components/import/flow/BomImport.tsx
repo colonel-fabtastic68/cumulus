@@ -9,6 +9,7 @@ import { formatNumber, pluralize } from "@/lib/format";
 import { useItems, useStore } from "@/lib/store/provider";
 import type { ParsedSource } from "../types";
 import type { RecordStage } from "./RecordImport";
+import { RevertBomImport } from "./RevertBomImport";
 
 interface BomImportProps {
   source: ParsedSource;
@@ -36,7 +37,7 @@ export function BomImport({ source, onStage, onBack, onRestart }: BomImportProps
   const [mapping, setMapping] = useState<BomImportMapping>(() => guessBomMapping(source.headers));
   const [mode, setMode] = useState<BomImportMode>("replace");
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ set: number; converted: number } | null>(null);
+  const [result, setResult] = useState<{ set: number; converted: number; activityId?: string } | null>(null);
   const notify = useRef(onStage);
   useEffect(() => {
     notify.current = onStage;
@@ -59,7 +60,7 @@ export function BomImport({ source, onStage, onBack, onRestart }: BomImportProps
     if (!writable || !plan || plan.boms.length === 0) return;
     setBusy(true);
     try {
-      const r = await importBoms(store, user, plan, source.name);
+      const r = await importBoms(store, user, plan, source.name, mode);
       setResult(r);
       setStage("done");
       toast(`Imported parts lists for ${pluralize(r.set, "assembly", "assemblies")}`, "success");
@@ -83,6 +84,7 @@ export function BomImport({ source, onStage, onBack, onRestart }: BomImportProps
             Open BOM
           </Button>
           <Button onClick={onRestart}>Import something else</Button>
+          {result.activityId && <RevertBomImport activityId={result.activityId} size="md" />}
         </div>
       </Card>
     );

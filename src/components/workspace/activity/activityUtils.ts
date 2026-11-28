@@ -120,6 +120,7 @@ const TYPE_LABELS: Record<string, string> = {
   "rma.created": "Return opened",
   "rma.resolved": "Return resolved",
   "import.completed": "Import",
+  "import.reverted": "Import reverted",
   "agent.action": "Strato",
   "member.joined": "Team",
   "settings.updated": "Settings",
