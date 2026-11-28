@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, ChevronDown, ChevronRight, Download } from "lucide-react";
-import { Badge, Banner, Button, Card, Segmented, Select, SimpleTable, useToast } from "@/components/ui";
+import { Badge, Banner, Button, Card, Checkbox, Segmented, Select, SimpleTable, useToast } from "@/components/ui";
 import { canWrite, useCurrentUser } from "@/lib/auth";
 import { BOM_IMPORT_FIELDS, BOM_IMPORT_LABELS, BOM_IMPORT_REQUIRED, guessBomMapping, diffCount, importBoms, planBomImport, type BomDiff, type BomImportMapping, type BomImportMode, type BomLineChange } from "@/lib/bomImport";
 import { formatNumber, pluralize } from "@/lib/format";
@@ -36,6 +36,7 @@ export function BomImport({ source, onStage, onBack, onRestart }: BomImportProps
   const [stage, setStage] = useState<RecordStage>("map");
   const [mapping, setMapping] = useState<BomImportMapping>(() => guessBomMapping(source.headers));
   const [mode, setMode] = useState<BomImportMode>("replace");
+  const [madeInHouse, setMadeInHouse] = useState(true);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ set: number; converted: number; activityId?: string } | null>(null);
   const notify = useRef(onStage);
@@ -60,7 +61,7 @@ export function BomImport({ source, onStage, onBack, onRestart }: BomImportProps
     if (!writable || !plan || plan.boms.length === 0) return;
     setBusy(true);
     try {
-      const r = await importBoms(store, user, plan, source.name, mode);
+      const r = await importBoms(store, user, plan, source.name, mode, { madeInHouse });
       setResult(r);
       setStage("done");
       toast(`Imported parts lists for ${pluralize(r.set, "assembly", "assemblies")}`, "success");
@@ -105,6 +106,16 @@ export function BomImport({ source, onStage, onBack, onRestart }: BomImportProps
           <Tile label="Warnings" value={warningCount} tone={warningCount ? "warning" : "default"} />
           <Tile label="Problems" value={plan.errors.length} tone={plan.errors.length ? "critical" : "default"} />
         </div>
+        {converting > 0 && (
+          <Card>
+            <Checkbox
+              label={`Mark ${converting === 1 ? "this part" : `these ${converting} parts`} as made in-house (clear supplier and reorder)`}
+              help="Parts that get a parts list here are made in the shop, not bought: their supplier, lead time, min and max and reorder rule are cleared, so nobody is asked to buy them. Revert puts them back."
+              checked={madeInHouse}
+              onChange={setMadeInHouse}
+            />
+          </Card>
+        )}
         {plan.errors.length > 0 && (
           <Banner tone="warning" title={`${pluralize(plan.errors.length, "problem")} in the sheet`}>
             <p className="mb-1.5">An assembly with a problem row is held back whole, so no parts list comes in half done. The rest import.</p>

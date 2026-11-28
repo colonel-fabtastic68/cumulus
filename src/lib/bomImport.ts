@@ -265,9 +265,23 @@ export interface BomImportEntry {
   after: BomLine[];
   typeBefore: Item["type"];
   becameAssembly: boolean;
+  /** Made in-house: the buying fields the import cleared, as they were, so a revert puts them back. */
+  buyingBefore?: Partial<Pick<Item, BuyingField>>;
   /** One line for the assembly's own Recent activity. */
   summary: string;
 }
+
+/** What "made in-house" clears on a part the import turns into an assembly: who it is bought from and when to reorder it. */
+export const BUYING_FIELDS = ["supplierId", "suppliers", "supplierSku", "leadTimeDays", "minQty", "maxQty", "replenishment"] as const;
+export type BuyingField = (typeof BUYING_FIELDS)[number];
+
+function buyingFieldsOf(item: Item): Partial<Pick<Item, BuyingField>> {
+  const out: Partial<Record<BuyingField, unknown>> = {};
+  for (const f of BUYING_FIELDS) if (item[f] !== undefined) out[f] = item[f];
+  return out as Partial<Pick<Item, BuyingField>>;
+}
+
+const CLEAR_BUYING = Object.fromEntries(BUYING_FIELDS.map((f) => [f, undefined])) as Partial<Item>;
 
 export interface BomImportRecord {
   at: string;
@@ -296,21 +310,23 @@ function entrySummary(b: PlannedBom, mode: BomImportMode): string {
  * assembly's list before and after (so "Revert this import" can put it back), the line-by-line
  * changes for its details, and a line per assembly for that assembly's own Recent activity.
  */
-export async function importBoms(store: Store, actor: Actor, plan: BomImportPlan, sourceName: string, mode: BomImportMode): Promise<{ set: number; converted: number; activityId?: string }> {
+export async function importBoms(store: Store, actor: Actor, plan: BomImportPlan, sourceName: string, mode: BomImportMode, opts: { madeInHouse?: boolean } = {}): Promise<{ set: number; converted: number; activityId?: string }> {
   if (plan.boms.length === 0) return { set: 0, converted: 0 };
   const now = nowIso();
   const converted = plan.boms.filter((b) => b.becomesAssembly).length;
+  // Made in-house (task 5): a part that becomes an assembly here is made, not bought, so it loses its supplier and reorder point.
+  const inHouse = (b: PlannedBom) => !!opts.madeInHouse && b.becomesAssembly;
   const ops: WriteOp[] = plan.boms.map((b) => ({
     op: "patch",
     collection: "items",
     id: b.assembly.id,
-    patch: { bom: b.bom, ...(b.becomesAssembly ? { type: "assembly" } : {}), updatedAt: now, updatedBy: actor.id },
+    patch: { bom: b.bom, ...(b.becomesAssembly ? { type: "assembly" } : {}), ...(inHouse(b) ? CLEAR_BUYING : {}), updatedAt: now, updatedBy: actor.id },
   }));
   const record: BomImportRecord = {
     at: now,
     source: sourceName,
     mode,
-    assemblies: plan.boms.map((b) => ({ itemId: b.assembly.id, sku: b.assembly.sku, before: b.assembly.bom, after: b.bom, typeBefore: b.assembly.type, becameAssembly: b.becomesAssembly, summary: entrySummary(b, mode) })),
+    assemblies: plan.boms.map((b) => ({ itemId: b.assembly.id, sku: b.assembly.sku, before: b.assembly.bom, after: b.bom, typeBefore: b.assembly.type, becameAssembly: b.becomesAssembly, ...(inHouse(b) ? { buyingBefore: buyingFieldsOf(b.assembly) } : {}), summary: `${entrySummary(b, mode)}${inHouse(b) ? " · made in-house" : ""}` })),
   };
   const changes = changeLines(plan);
   const activity = activityOp(actor, "import.completed", `${actor.name} imported parts lists for ${plan.boms.length} assembl${plan.boms.length === 1 ? "y" : "ies"} from ${sourceName}${converted ? ` (${converted} made assemblies)` : ""}`, {
@@ -374,7 +390,7 @@ export async function revertBomImport(store: Store, actor: Actor, importActivity
     op: "patch",
     collection: "items",
     id: a.itemId,
-    patch: { bom: a.before, ...(a.becameAssembly ? { type: a.typeBefore } : {}), updatedAt: now, updatedBy: actor.id },
+    patch: { bom: a.before, ...(a.becameAssembly ? { type: a.typeBefore } : {}), ...(a.buyingBefore ?? {}), updatedAt: now, updatedBy: actor.id },
   }));
   const changes = record.assemblies.flatMap((a) => {
     const d = diffBom(a.after, a.before, byId);
