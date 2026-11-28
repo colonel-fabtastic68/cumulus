@@ -6,6 +6,7 @@ import type { Item, Rma, RmaCondition } from "@/lib/types";
 import { createRma } from "@/lib/inventory";
 import { useCollection, useStore } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
+import { useFeature } from "@/lib/useFeature";
 import { newId, uniq } from "@/lib/utils";
 import { ensureCustomer } from "@/lib/customers";
 import { Button, FormGrid, IconButton, Modal, Select, TextArea, TextField, useToast } from "@/components/ui";
@@ -40,6 +41,7 @@ export function NewRmaModal(props: NewRmaModalProps) {
 
 function NewRmaForm({ open, onClose, onCreated }: NewRmaModalProps) {
   const store = useStore();
+  const returnCap = useFeature("returnCap");
   const user = useCurrentUser();
   const toast = useToast();
   const orders = useCollection("orders");
@@ -90,6 +92,7 @@ function NewRmaForm({ open, onClose, onCreated }: NewRmaModalProps) {
         reason: reason.trim(),
         note: note.trim() || undefined,
         lines: filled.map((l) => ({ itemId: l.item!.id, qty: Number(l.qty), condition: l.condition })),
+        capToShipped: returnCap || undefined,
       });
       const record = await ensureCustomer(store, user, { name: rma.customer, source: "order" }).catch(() => undefined);
       if (record) await store.patch("rmas", rma.id, { customerId: record.id }).catch(() => {});

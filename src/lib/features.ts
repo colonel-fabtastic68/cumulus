@@ -91,6 +91,13 @@ export const FEATURES = {
     area: "Inventory",
     notes: [],
   },
+  returnCap: {
+    label: "Returns capped at what was shipped",
+    description: "A return against a sales order can't bring back more of a part than that order shipped, less what earlier returns on it already took back.",
+    status: "preview",
+    area: "Orders",
+    notes: [],
+  },
   resetFilters: {
     label: "Reset filters",
     description: "One button that clears every filter on a list.",
