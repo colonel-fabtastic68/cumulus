@@ -10,7 +10,10 @@ import { useDefaultLocation, useLocations } from "@/lib/locations";
 import { findItemByCode } from "@/lib/scan";
 import { ScanField } from "@/components/scan";
 import { ItemPicker, RoutingNotice } from "@/components/inventory";
-import { useCollection, useItems, useSettings, useStore } from "@/lib/store/provider";
+import { useCollection, useItems, useItemsById, useSettings, useStore } from "@/lib/store/provider";
+import { useFeature } from "@/lib/useFeature";
+import { receiptRevaluations, type PendingRevaluation } from "@/lib/revaluation";
+import { RevaluationConfirm } from "./RevaluationConfirm";
 import { useCurrentUser } from "@/lib/auth";
 import { formatDate, formatMoney, formatNumber, fromDateInput, pluralize, toDateInput } from "@/lib/format";
 import { cn, newId, uniq } from "@/lib/utils";
@@ -62,6 +65,9 @@ function ReceiveForm({ open, onClose, onReceived }: ReceiveDrawerProps) {
   });
   const locationName = locations.find((l) => l.id === locationId)?.name ?? home.name;
   const [updateCost, setUpdateCost] = useState(true);
+  const valuationAudit = useFeature("valuationAudit");
+  const itemsById = useItemsById();
+  const [revaluations, setRevaluations] = useState<PendingRevaluation[] | null>(null);
   const [trackLots, setTrackLots] = useState(false);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -141,7 +147,7 @@ function ReceiveForm({ open, onClose, onReceived }: ReceiveDrawerProps) {
     else qtyInputs.current.delete(key);
   };
 
-  const submit = async () => {
+  const submit = async (decision?: "revalue" | "keep") => {
     setError(null);
     const payload: Array<ReceiveLineInput & { purchaseOrderId?: string }> = [];
     for (const [i, l] of lines.entries()) {
@@ -160,9 +166,14 @@ function ReceiveForm({ open, onClose, onReceived }: ReceiveDrawerProps) {
     const poIds = uniq(payload.map((l) => l.purchaseOrderId).filter((id): id is string => !!id));
     const foreign = poIds.map((id) => purchaseOrders.find((p) => p.id === id)).find((p) => p && p.supplierId !== (supplierId || undefined));
     if (foreign) return setError(`${foreign.number} is an order to ${foreign.supplier}; pick that supplier or remove its lines`);
+    // Feature valuationAudit: a new standard cost that revalues stock on the shelf is asked about first.
+    if (valuationAudit && method === "standard" && updateCost && !decision) {
+      const revals = receiptRevaluations(itemsById, payload);
+      if (revals.length) return setRevaluations(revals);
+    }
     setBusy(true);
     try {
-      const common = { reference: reference.trim() || undefined, receivedAt: fromDateInput(date), note: note.trim() || undefined, updateStandardCost: method === "standard" ? updateCost : undefined, ignoreRouting: ignoreRouting || undefined };
+      const common = { reference: reference.trim() || undefined, receivedAt: fromDateInput(date), note: note.trim() || undefined, updateStandardCost: method === "standard" ? updateCost && decision !== "keep" : undefined, recordRevaluation: valuationAudit || undefined, ignoreRouting: ignoreRouting || undefined };
       const receipt = poIds.length
         ? (await receivePurchaseOrders(store, user, poIds, { ...common, lines: payload, allowExtraLines: true })).receipt
         : await receiveStock(store, user, { ...common, supplierId: supplierId || undefined, lines: payload });
@@ -174,6 +185,7 @@ function ReceiveForm({ open, onClose, onReceived }: ReceiveDrawerProps) {
       setError(e instanceof Error ? e.message : "Something went wrong while receiving");
     } finally {
       setBusy(false);
+      setRevaluations(null);
     }
   };
 
@@ -202,7 +214,7 @@ function ReceiveForm({ open, onClose, onReceived }: ReceiveDrawerProps) {
             )}
           </div>
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" onClick={submit} loading={busy} disabled={totals.count === 0}>
+          <Button variant="primary" onClick={() => void submit()} loading={busy} disabled={totals.count === 0}>
             Receive stock
           </Button>
         </>
@@ -329,6 +341,7 @@ function ReceiveForm({ open, onClose, onReceived }: ReceiveDrawerProps) {
         <TextArea label="Note" hint="(optional)" rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
         {error && <p className="text-[12.5px] text-critical">{error}</p>}
       </div>
+      <RevaluationConfirm revaluations={revaluations} currency={currency} busy={busy} onRevalue={() => void submit("revalue")} onKeepCost={() => void submit("keep")} onClose={() => setRevaluations(null)} />
     </Drawer>
   );
 }

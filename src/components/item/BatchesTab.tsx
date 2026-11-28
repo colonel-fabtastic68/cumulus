@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Package, ScanSearch } from "lucide-react";
 import type { Item, Lot, Receipt } from "@/lib/types";
 import { useCollection } from "@/lib/store/provider";
+import { useFeature } from "@/lib/useFeature";
 import { lotLabel, lotSourceLabel } from "@/lib/traceability";
 import { formatDate, formatMoney, formatNumber, formatQty, pluralize } from "@/lib/format";
 import { daysBetween, round, sum } from "@/lib/utils";
@@ -16,6 +17,7 @@ type View = "shelf" | "all";
 export function BatchesTab({ item, lots, receipts, currency }: { item: Item; lots: Lot[]; receipts: Receipt[]; currency: string }) {
   const builds = useCollection("builds");
   const purchaseOrders = useCollection("purchaseOrders");
+  const oneValue = useFeature("valuationAudit");
   const receiptById = useMemo(() => new Map(receipts.map((r) => [r.id, r])), [receipts]);
   const buildById = useMemo(() => new Map(builds.map((b) => [b.id, b])), [builds]);
   const poById = useMemo(() => new Map(purchaseOrders.map((p) => [p.id, p])), [purchaseOrders]);
@@ -136,8 +138,8 @@ export function BatchesTab({ item, lots, receipts, currency }: { item: Item; lot
             Oldest <span className="font-medium text-text tabular">{pluralize(summary.oldest.age, "day")}</span> ({formatDate(summary.oldest.lot.receivedAt)})
           </span>
         )}
-        <span>
-          Batch value <span className="font-medium text-text tabular">{formatMoney(summary.value, currency)}</span>
+        <span title={oneValue ? "What the batches on the shelf were bought or built at. The item's inventory value, at its cost, is the one reports and exports use." : undefined}>
+          {oneValue ? "Batch value (reference)" : "Batch value"} <span className="font-medium text-text tabular">{formatMoney(summary.value, currency)}</span>
         </span>
         {summary.old > 0 && <span className="text-warning">{formatNumber(summary.old)} older than {OLD_BATCH_DAYS} days</span>}
         {summary.expired > 0 && <span className="text-critical">{formatNumber(summary.expired)} expired</span>}

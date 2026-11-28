@@ -3,7 +3,9 @@
 
 import { useMemo } from "react";
 import type { Item, Lot, StockMovement, WorkspaceSettings } from "@/lib/types";
-import { consumptionRate, isLowStock, reorderQty } from "@/lib/inventory";
+import { consumptionRate, costingMethod, isLowStock, reorderQty } from "@/lib/inventory";
+import { COSTING_LABELS } from "@/lib/valuation";
+import { useFeature } from "@/lib/useFeature";
 import { formatMoney, formatNumber, formatQty } from "@/lib/format";
 import { cn, round } from "@/lib/utils";
 import { Card } from "@/components/ui";
@@ -19,6 +21,9 @@ export function StockSummaryCard({ item, movements, lots, settings }: { item: It
   const daysOfCover = rate > 0 ? Math.floor(item.onHand / rate) : null;
   const avg = useMemo(() => weightedAverageCost(lots, item.unitCost), [lots, item.unitCost]);
   const value = round(item.onHand * item.unitCost);
+  // Feature valuationAudit: one value for the books, the batch figure marked as reference.
+  const oneValue = useFeature("valuationAudit");
+  const method = costingMethod(settings);
 
   const ceiling = item.maxQty ?? (item.minQty !== undefined ? item.minQty * 2 : undefined);
   const pct = ceiling && ceiling > 0 ? Math.min(100, Math.max(0, (item.onHand / ceiling) * 100)) : null;
@@ -45,12 +50,25 @@ export function StockSummaryCard({ item, movements, lots, settings }: { item: It
           hint={rate > 0 ? `${formatQty(round(rate * 7, 2), item.unit)} / week, last 90 days` : "No consumption in 90 days"}
           tone={coverTone}
         />
-        <Tile label="Inventory value" value={formatMoney(value, currency)} hint={`at ${formatMoney(item.unitCost, currency)} standard cost`} />
-        <Tile
-          label="Avg unit cost"
-          value={formatMoney(avg.cost, currency)}
-          hint={avg.fromLots ? "Weighted across batches on shelf" : "No batches on shelf; standard cost"}
-        />
+        {oneValue ? (
+          <>
+            <Tile label="Inventory value" value={formatMoney(value, currency)} hint={`${formatQty(item.onHand, item.unit)} at ${formatMoney(item.unitCost, currency)}, ${COSTING_LABELS[method].toLowerCase()}. What reports and exports use.`} />
+            <Tile
+              label="Batch average"
+              value={avg.fromLots ? formatMoney(avg.cost, currency) : "—"}
+              hint={avg.fromLots ? "Reference only: what the batches on the shelf were bought or built at" : "No batches on the shelf"}
+            />
+          </>
+        ) : (
+          <>
+            <Tile label="Inventory value" value={formatMoney(value, currency)} hint={`at ${formatMoney(item.unitCost, currency)} standard cost`} />
+            <Tile
+              label="Avg unit cost"
+              value={formatMoney(avg.cost, currency)}
+              hint={avg.fromLots ? "Weighted across batches on shelf" : "No batches on shelf; standard cost"}
+            />
+          </>
+        )}
       </div>
 
       <div className="mt-4 border-t border-border pt-3">

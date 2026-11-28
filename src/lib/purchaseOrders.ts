@@ -333,6 +333,8 @@ export interface ReceivePurchaseOrderInput {
   /** Printed on the receipt; defaults to the order numbers. */
   reference?: string;
   updateStandardCost?: boolean;
+  /** Feature `valuationAudit`: record a revaluation when a new standard cost changes stock on hand. */
+  recordRevaluation?: boolean;
   /** Lines for items none of the orders carry are received without an order instead of being refused (the receiving form's extra lines). */
   allowExtraLines?: boolean;
   /** Put every line at locationId (or the workspace default) even when a part's own routing names another receive location. */
@@ -383,7 +385,7 @@ export async function receivePurchaseOrders(store: Store, actor: Actor, ids: str
     }
   }
   if (receiptLines.length === 0) throw new InventoryError("Nothing to receive: every line is already in");
-  const receipt = await receiveStock(store, actor, { supplierId: pos[0]!.supplierId, reference: input.reference?.trim() || numbers, purchaseOrderIds: pos.map((p) => p.id), receivedAt: input.receivedAt, note: input.note, lines: receiptLines, updateStandardCost: input.updateStandardCost, ignoreRouting: input.ignoreRouting });
+  const receipt = await receiveStock(store, actor, { supplierId: pos[0]!.supplierId, reference: input.reference?.trim() || numbers, purchaseOrderIds: pos.map((p) => p.id), receivedAt: input.receivedAt, note: input.note, lines: receiptLines, updateStandardCost: input.updateStandardCost, recordRevaluation: input.recordRevaluation, ignoreRouting: input.ignoreRouting });
   const now = nowIso();
   const ops: WriteOp[] = [];
   const next: PurchaseOrder[] = [];
