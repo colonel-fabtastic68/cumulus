@@ -6,11 +6,13 @@ import { Mail, MoreHorizontal, Plus, Sparkles, Star, Trash2 } from "lucide-react
 import type { Item, Supplier } from "@/lib/types";
 import { isLowStock, reorderQty } from "@/lib/inventory";
 import { addItemSupplier, itemSupplierLinks, removeItemSupplier, setPrimarySupplier, type SupplierLink } from "@/lib/suppliers";
-import { useStore, useSettings } from "@/lib/store/provider";
+import { useCollection, useStore, useSettings } from "@/lib/store/provider";
 import { useCurrentUser } from "@/lib/auth";
 import { useAgent } from "@/components/agent/AgentProvider";
 import { formatMoney, pluralize } from "@/lib/format";
-import { Badge, Button, Card, CardHeader, FormGrid, IconButton, Menu, Modal, Select, TextField, useToast } from "@/components/ui";
+import { Badge, Button, Card, CardHeader, FormGrid, IconButton, Menu, Modal, TextField, useToast } from "@/components/ui";
+import { useFeature } from "@/lib/useFeature";
+import { SupplierPicker, sortSuppliers } from "@/components/suppliers/SupplierPicker";
 import { supplierHref } from "./utils";
 
 /** Every supplier a part can come from, with the primary one first. */
@@ -121,7 +123,9 @@ function AddSupplierForm({ onClose, item, suppliers, currency }: { onClose: () =
   const store = useStore();
   const user = useCurrentUser();
   const toast = useToast();
-  const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? "");
+  const pickerOn = useFeature("supplierPicker");
+  const [supplierId, setSupplierId] = useState(() => (pickerOn ? sortSuppliers(suppliers) : suppliers)[0]?.id ?? "");
+  const allSuppliers = useCollection("suppliers");
   const [sku, setSku] = useState("");
   const [cost, setCost] = useState("");
   const [lead, setLead] = useState("");
@@ -134,7 +138,7 @@ function AddSupplierForm({ onClose, item, suppliers, currency }: { onClose: () =
     setBusy(true);
     try {
       await addItemSupplier(store, user, item, { supplierId, supplierSku: sku, unitCost: cost.trim() ? Number(cost) : undefined, leadTimeDays: lead.trim() ? Number(lead) : undefined, note }, { makePrimary: primary });
-      toast(`${suppliers.find((s) => s.id === supplierId)?.name ?? "Supplier"} added to ${item.sku}`, "success");
+      toast(`${allSuppliers.find((s) => s.id === supplierId)?.name ?? "Supplier"} added to ${item.sku}`, "success");
       onClose();
     } catch (e) {
       toast(e instanceof Error ? e.message : "Could not add the supplier", "critical");
@@ -160,7 +164,7 @@ function AddSupplierForm({ onClose, item, suppliers, currency }: { onClose: () =
       }
     >
       <div className="flex flex-col gap-3">
-        {suppliers.length === 0 ? (
+        {suppliers.length === 0 && !pickerOn ? (
           <p className="text-[13px] text-text-secondary">
             Every supplier is already on this item, or none exist yet.{" "}
             <Link href="/suppliers" className="text-accent hover:underline">
@@ -170,7 +174,7 @@ function AddSupplierForm({ onClose, item, suppliers, currency }: { onClose: () =
           </p>
         ) : (
           <>
-            <Select label="Supplier" value={supplierId} onChange={(e) => setSupplierId(e.target.value)} options={suppliers.map((s) => ({ value: s.id, label: s.name }))} autoFocus />
+            <SupplierPicker value={supplierId} onChange={setSupplierId} suppliers={suppliers} />
             <FormGrid cols={2}>
               <TextField label="Their part number" hint="(optional)" value={sku} onChange={(e) => setSku(e.target.value)} />
               <TextField label={`Last price (${currency})`} hint="(optional)" type="number" min={0} step="any" value={cost} onChange={(e) => setCost(e.target.value)} />

@@ -9,6 +9,7 @@ import { useCurrentUser } from "@/lib/auth";
 import { formatPercent, pluralize } from "@/lib/format";
 import { round } from "@/lib/utils";
 import { Button, FormGrid, Modal, Select, TextField, useToast } from "@/components/ui";
+import { SupplierPicker } from "@/components/suppliers/SupplierPicker";
 
 export interface BulkEditValues {
   category: string;
@@ -249,7 +250,7 @@ function BulkEditForm({ open, onClose, items, onDone }: BulkEditModalProps) {
             ]}
             help="To supersede, open the item and choose a replacement part"
           />
-          <Select label="Supplier" value={v.supplierId} onChange={set("supplierId")} placeholder="Leave unchanged" options={suppliers.map((s) => ({ value: s.id, label: s.name }))} />
+          <SupplierPicker value={v.supplierId} onChange={(supplierId) => setV((p) => ({ ...p, supplierId }))} suppliers={suppliers} emptyLabel="Leave unchanged" />
         </FormGrid>
         <FormGrid cols={4}>
           <TextField label="Bin / shelf" value={v.location} onChange={set("location")} placeholder="Leave unchanged" help={locations.length > 1 ? "A label like A-12. Which location items live in is set below." : "A label like A-12."} />

@@ -13,6 +13,8 @@ interface NewSupplierModalProps {
   open: boolean;
   onClose: () => void;
   onCreated?: (supplier: Supplier) => void;
+  /** Starts the form with this name, e.g. what was typed into a supplier picker. */
+  initialName?: string;
 }
 
 /** Mounts the form only while open so every opening starts from a clean state. */
@@ -21,12 +23,12 @@ export function NewSupplierModal(props: NewSupplierModalProps) {
   return <NewSupplierForm {...props} />;
 }
 
-function NewSupplierForm({ open, onClose, onCreated }: NewSupplierModalProps) {
+function NewSupplierForm({ open, onClose, onCreated, initialName }: NewSupplierModalProps) {
   const store = useStore();
   const user = useCurrentUser();
   const toast = useToast();
   const suppliers = useCollection("suppliers");
-  const [draft, setDraft] = useState<SupplierDraft>(() => draftFromSupplier());
+  const [draft, setDraft] = useState<SupplierDraft>(() => ({ ...draftFromSupplier(), name: initialName ?? "" }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
