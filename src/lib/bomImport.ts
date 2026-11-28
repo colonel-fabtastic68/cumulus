@@ -18,8 +18,9 @@ import { InventoryError, activityOp, type Actor } from "@/lib/inventory";
 import { mergeBomLines, resolveImportBoms, type ImportBomLine, type PendingBom } from "@/lib/importBoms";
 import { formatNumber } from "@/lib/format";
 import { nowIso, round } from "@/lib/utils";
+import { unitFactor } from "@/lib/units";
 
-export const BOM_IMPORT_FIELDS = ["assembly", "component", "qty", "wastePct", "note"] as const;
+export const BOM_IMPORT_FIELDS = ["assembly", "component", "qty", "unit", "wastePct", "note"] as const;
 export type BomImportField = (typeof BOM_IMPORT_FIELDS)[number];
 export type BomImportMapping = Partial<Record<BomImportField, string>>;
 
@@ -27,6 +28,7 @@ export const BOM_IMPORT_LABELS: Record<BomImportField, string> = {
   assembly: "Assembly part number",
   component: "Component part number",
   qty: "Quantity per assembly",
+  unit: "Unit of the quantity",
   wastePct: "Expected waste %",
   note: "Note",
 };
@@ -37,6 +39,7 @@ const HINTS: Record<BomImportField, RegExp> = {
   assembly: /^(parent|assembly|assy|top|finished|fg|kit|product|bom)\b.*|.*\b(parent|assembly|assy)\b.*/i,
   component: /^(child|component|comp|part|item|material|raw|ingredient)\b.*|.*\b(child|component)\b.*/i,
   qty: /^(qty|quantity|amount|count|per|usage|qty\s*per)\b.*|.*\b(qty|quantity)\b.*/i,
+  unit: /^(unit|units|uom|u\/m|unit of measure)$/i,
   wastePct: /waste|scrap|loss|yield/i,
   note: /note|comment|remark|description|memo/i,
 };
@@ -77,6 +80,8 @@ export interface PlannedBom {
   diff: BomDiff;
   /** Things worth a look that do not stop the import, e.g. two sheet rows for one component combined. */
   warnings: string[];
+  /** Plain information, e.g. "converted 62.125 in → 5.1771 ft". */
+  notes: string[];
 }
 
 /** One component in a before/after comparison of a parts list. */
@@ -156,7 +161,7 @@ export interface BomImportPlan {
 export function planBomImport(rows: ReadonlyArray<Record<string, string>>, mapping: BomImportMapping, items: readonly Item[], mode: BomImportMode): BomImportPlan {
   const bySku = new Map(items.map((i) => [i.sku.trim().toUpperCase(), i]));
   const errors: BomImportPlan["errors"] = [];
-  const groups = new Map<string, { row: number; lines: Array<ImportBomLine & { wastePct?: number; note?: string }> }>();
+  const groups = new Map<string, { row: number; lines: Array<ImportBomLine & { wastePct?: number; note?: string }>; notes: string[] }>();
   let blank = 0;
   let lastAssembly = "";
   /** Assemblies with a row that could not be used: held back whole. */
@@ -188,8 +193,22 @@ export function planBomImport(rows: ReadonlyArray<Record<string, string>>, mappi
     const waste = parseNumber(cell("wastePct"));
     if (waste !== undefined && (Number.isNaN(waste) || waste < 0 || waste >= 100)) return fail(`${asm}: waste for ${comp} must be a percentage from 0 to 99 (found "${cell("wastePct")}")`);
     const note = cell("note") || undefined;
-    const g = groups.get(asm) ?? { row, lines: [] };
-    g.lines.push({ sku: comp, qty, ...(waste !== undefined ? { wastePct: waste } : {}), ...(note ? { note } : {}) });
+    // A unit on the row is converted to the component's stocking unit (in → ft, or the item's own conversions); one that can't be is a problem.
+    const unitCell = cell("unit");
+    const component = bySku.get(comp)!;
+    let stockQty = qty;
+    let converted: string | undefined;
+    if (unitCell) {
+      const factor = unitFactor(component, unitCell);
+      if (factor === null) return fail(`${asm}: ${comp} is stocked in ${component.unit}, and "${unitCell}" can't be converted to ${component.unit}`);
+      if (factor !== 1) {
+        stockQty = round(qty * factor, 4);
+        converted = `${comp}: converted ${formatNumber(qty, 4)} ${unitCell} → ${formatNumber(stockQty, 4)} ${component.unit}`;
+      }
+    }
+    const g = groups.get(asm) ?? { row, lines: [], notes: [] };
+    g.lines.push({ sku: comp, qty: stockQty, ...(waste !== undefined ? { wastePct: waste } : {}), ...(note ? { note } : {}) });
+    if (converted) g.notes.push(converted);
     groups.set(asm, g);
   });
 
@@ -229,7 +248,7 @@ export function planBomImport(rows: ReadonlyArray<Record<string, string>>, mappi
     for (const l of sheetLines) rowsPer.set(l.sku, { n: (rowsPer.get(l.sku)?.n ?? 0) + 1, qty: round((rowsPer.get(l.sku)?.qty ?? 0) + l.qty, 6) });
     const warnings = [...rowsPer].filter(([, v]) => v.n > 1).map(([sku, v]) => `${v.n} rows for ${sku} combined → qty ${formatNumber(v.qty, 4)}`);
     const named = mode === "add" ? new Set(sheetLines.map((l) => bySku.get(l.sku)?.id).filter((id): id is string => !!id)) : undefined;
-    boms.push({ assembly, bom: finished, row: p.row, fileLines: rowsPer.size, linesBefore: assembly.bom.length, becomesAssembly: assembly.type !== "assembly", diff: diffBom(assembly.bom, finished, itemsById, named), warnings });
+    boms.push({ assembly, bom: finished, row: p.row, fileLines: rowsPer.size, linesBefore: assembly.bom.length, becomesAssembly: assembly.type !== "assembly", diff: diffBom(assembly.bom, finished, itemsById, named), warnings, notes: groups.get(p.sku)!.notes });
   }
   boms.sort((a, b) => a.row - b.row);
   errors.sort((a, b) => a.row - b.row);

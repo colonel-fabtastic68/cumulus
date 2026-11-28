@@ -149,6 +149,7 @@ export function BomImport({ source, onStage, onBack, onRestart }: BomImportProps
                               {w}
                             </span>
                           ))}
+                          {b.notes.length > 0 && <span className="mt-0.5 block pl-[18px] text-[12px] text-text-tertiary">{b.notes.length === 1 ? b.notes[0] : `${b.notes.length} quantities converted to the stocking unit`}</span>}
                         </td>
                         <td className="tabular text-right text-text-secondary">{b.linesBefore}</td>
                         <td className="tabular text-right text-text">{b.bom.length}</td>
@@ -163,7 +164,7 @@ export function BomImport({ source, onStage, onBack, onRestart }: BomImportProps
                         <tr>
                           <td />
                           <td colSpan={4} className="pb-3">
-                            <BomDiffList diff={b.diff} />
+                            <BomDiffList diff={b.diff} notes={b.notes} />
                           </td>
                         </tr>
                       )}
@@ -233,7 +234,7 @@ export function BomImport({ source, onStage, onBack, onRestart }: BomImportProps
 }
 
 /** Per component, what the import does: added, removed, quantity changed; unchanged lines as a count. */
-function BomDiffList({ diff }: { diff: BomDiff }) {
+function BomDiffList({ diff, notes = [] }: { diff: BomDiff; notes?: string[] }) {
   const qty = (n: number | undefined, unit: string) => (n === undefined ? "—" : `${formatNumber(n, 4)} ${unit}`);
   const rows: Array<{ key: string; tone: "success" | "critical" | "attention" | "default"; label: string; c: BomLineChange; text: string }> = [
     ...diff.changed.map((c) => ({ key: `c-${c.itemId}`, tone: "attention" as const, label: "Qty changed", c, text: `${qty(c.from, c.unit)} → ${qty(c.to, c.unit)}` })),
@@ -256,6 +257,11 @@ function BomDiffList({ diff }: { diff: BomDiff }) {
         </ul>
       )}
       <p className={rows.length ? "mt-1.5 text-text-tertiary" : "text-text-tertiary"}>{diff.unchanged === 0 && rows.length === 0 ? "No lines." : `${formatNumber(diff.unchanged)} unchanged`}</p>
+      {notes.map((n) => (
+        <p key={n} className="mt-0.5 text-text-secondary">
+          {n}
+        </p>
+      ))}
     </div>
   );
 }
