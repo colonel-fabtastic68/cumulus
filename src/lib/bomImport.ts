@@ -16,6 +16,7 @@ import type { BomLine, Item } from "@/lib/types";
 import type { Store, WriteOp } from "@/lib/store/types";
 import { activityOp, type Actor } from "@/lib/inventory";
 import { mergeBomLines, resolveImportBoms, type ImportBomLine, type PendingBom } from "@/lib/importBoms";
+import { formatNumber } from "@/lib/format";
 import { nowIso, round } from "@/lib/utils";
 
 export const BOM_IMPORT_FIELDS = ["assembly", "component", "qty", "wastePct", "note"] as const;
@@ -74,6 +75,8 @@ export interface PlannedBom {
   becomesAssembly: boolean;
   /** What the import does to each component of the list. */
   diff: BomDiff;
+  /** Things worth a look that do not stop the import, e.g. two sheet rows for one component combined. */
+  warnings: string[];
 }
 
 /** One component in a before/after comparison of a parts list. */
@@ -93,8 +96,10 @@ export interface BomDiff {
   added: BomLineChange[];
   removed: BomLineChange[];
   changed: BomLineChange[];
-  /** Lines with the same quantity before and after. */
+  /** Lines with the same quantity before and after that the sheet did not name. */
   unchanged: number;
+  /** Add mode: lines the sheet named that already had that quantity ("1 → 1, unchanged"). */
+  confirmed: BomLineChange[];
 }
 
 /** Lines the import touches (added, removed or a different quantity). */
@@ -102,8 +107,12 @@ export function diffCount(d: BomDiff): number {
   return d.added.length + d.removed.length + d.changed.length;
 }
 
-/** Component by component, what turns `before` into `after`. Quantities are compared per component, summed when a list names one twice. */
-export function diffBom(before: readonly BomLine[], after: readonly BomLine[], itemsById: ReadonlyMap<string, Item>): BomDiff {
+/**
+ * Component by component, what turns `before` into `after`. Quantities are compared per component, summed when a
+ * list names one twice. `named` (Add mode) lists the components the sheet named, so the ones it left at the same
+ * quantity are shown rather than folded into the unchanged count.
+ */
+export function diffBom(before: readonly BomLine[], after: readonly BomLine[], itemsById: ReadonlyMap<string, Item>, named?: ReadonlySet<string>): BomDiff {
   const total = (lines: readonly BomLine[]) => {
     const m = new Map<string, number>();
     for (const l of lines) m.set(l.itemId, (m.get(l.itemId) ?? 0) + l.qty);
@@ -115,11 +124,12 @@ export function diffBom(before: readonly BomLine[], after: readonly BomLine[], i
     const item = itemsById.get(itemId);
     return { itemId, sku: item?.sku ?? itemId, name: item?.name ?? "", unit: item?.unit ?? "ea", ...(from !== undefined ? { from: round(from, 6) } : {}), ...(to !== undefined ? { to: round(to, 6) } : {}) };
   };
-  const diff: BomDiff = { added: [], removed: [], changed: [], unchanged: 0 };
+  const diff: BomDiff = { added: [], removed: [], changed: [], unchanged: 0, confirmed: [] };
   for (const [id, to] of b) {
     const from = a.get(id);
     if (from === undefined) diff.added.push(describe(id, undefined, to));
     else if (Math.abs(from - to) > 1e-9) diff.changed.push(describe(id, from, to));
+    else if (named?.has(id)) diff.confirmed.push(describe(id, from, to));
     else diff.unchanged++;
   }
   for (const [id, from] of a) if (!b.has(id)) diff.removed.push(describe(id, from));
@@ -127,6 +137,7 @@ export function diffBom(before: readonly BomLine[], after: readonly BomLine[], i
   diff.added.sort(bySku);
   diff.removed.sort(bySku);
   diff.changed.sort(bySku);
+  diff.confirmed.sort(bySku);
   return diff;
 }
 
@@ -212,7 +223,13 @@ export function planBomImport(rows: ReadonlyArray<Record<string, string>>, mappi
     const extras = new Map<string, { wastePct?: number; note?: string }>();
     for (const l of groups.get(p.sku)!.lines) if (l.wastePct !== undefined || l.note) extras.set(l.sku, { ...(extras.get(l.sku) ?? {}), ...(l.wastePct !== undefined ? { wastePct: l.wastePct } : {}), ...(l.note ? { note: l.note } : {}) });
     const finished = bom.map((line) => ({ ...line, qty: round(line.qty, 6), ...(extras.get(skuOf.get(line.itemId) ?? "") ?? {}) }));
-    boms.push({ assembly, bom: finished, row: p.row, fileLines: mergeBomLines(groups.get(p.sku)!.lines).length, linesBefore: assembly.bom.length, becomesAssembly: assembly.type !== "assembly", diff: diffBom(assembly.bom, finished, itemsById) });
+    // Two sheet rows for one component are added together; say so, since a doubled line doubles what a build pulls.
+    const sheetLines = groups.get(p.sku)!.lines;
+    const rowsPer = new Map<string, { n: number; qty: number }>();
+    for (const l of sheetLines) rowsPer.set(l.sku, { n: (rowsPer.get(l.sku)?.n ?? 0) + 1, qty: round((rowsPer.get(l.sku)?.qty ?? 0) + l.qty, 6) });
+    const warnings = [...rowsPer].filter(([, v]) => v.n > 1).map(([sku, v]) => `${v.n} rows for ${sku} combined → qty ${formatNumber(v.qty, 4)}`);
+    const named = mode === "add" ? new Set(sheetLines.map((l) => bySku.get(l.sku)?.id).filter((id): id is string => !!id)) : undefined;
+    boms.push({ assembly, bom: finished, row: p.row, fileLines: rowsPer.size, linesBefore: assembly.bom.length, becomesAssembly: assembly.type !== "assembly", diff: diffBom(assembly.bom, finished, itemsById, named), warnings });
   }
   boms.sort((a, b) => a.row - b.row);
   errors.sort((a, b) => a.row - b.row);

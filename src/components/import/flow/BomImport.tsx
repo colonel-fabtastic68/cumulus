@@ -52,6 +52,7 @@ export function BomImport({ source, onStage, onBack, onRestart }: BomImportProps
   const lineCount = plan ? plan.boms.reduce((a, b) => a + b.bom.length, 0) : 0;
   const converting = plan ? plan.boms.filter((b) => b.becomesAssembly).length : 0;
   const changedCount = plan ? plan.boms.reduce((a, b) => a + diffCount(b.diff), 0) : 0;
+  const warningCount = plan ? plan.boms.reduce((a, b) => a + b.warnings.length, 0) : 0;
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
   const run = async () => {
@@ -94,11 +95,12 @@ export function BomImport({ source, onStage, onBack, onRestart }: BomImportProps
             Your role can review the file but not import it.
           </Banner>
         )}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           <Tile label="Assemblies" value={plan.boms.length} tone="success" />
           <Tile label="Parts list lines" value={lineCount} />
           <Tile label="Lines changed" value={changedCount} tone={changedCount ? "info" : "default"} />
           <Tile label="Parts becoming assemblies" value={converting} tone="info" />
+          <Tile label="Warnings" value={warningCount} tone={warningCount ? "warning" : "default"} />
           <Tile label="Problems" value={plan.errors.length} tone={plan.errors.length ? "critical" : "default"} />
         </div>
         {plan.errors.length > 0 && (
@@ -140,6 +142,11 @@ export function BomImport({ source, onStage, onBack, onRestart }: BomImportProps
                             <span className="font-mono text-[12px] text-text">{b.assembly.sku}</span>
                           </span>
                           <span className="ml-2 text-text-secondary">{b.assembly.name}</span>
+                          {b.warnings.map((w) => (
+                            <span key={w} className="mt-0.5 block pl-[18px] text-[12px] text-warning">
+                              {w}
+                            </span>
+                          ))}
                         </td>
                         <td className="tabular text-right text-text-secondary">{b.linesBefore}</td>
                         <td className="tabular text-right text-text">{b.bom.length}</td>
@@ -201,7 +208,7 @@ export function BomImport({ source, onStage, onBack, onRestart }: BomImportProps
         <div className="flex flex-col gap-2 border-t border-border px-4 py-3 md:flex-row md:items-center md:justify-between">
           <div>
             <div className="text-[13px] font-medium text-text">Assemblies that already have parts</div>
-            <p className="text-[12.5px] text-text-secondary">{mode === "replace" ? "The sheet's list becomes the whole parts list." : "The sheet's lines are added; a component already on the list takes the sheet's quantity."}</p>
+            <p className="text-[12.5px] text-text-secondary">{mode === "replace" ? "The sheet's list becomes the whole parts list." : "The sheet's lines are added to the list. Components already on the list take the sheet's quantity."}</p>
           </div>
           <Segmented value={mode} onChange={setMode} options={MODES} />
         </div>
@@ -226,10 +233,11 @@ export function BomImport({ source, onStage, onBack, onRestart }: BomImportProps
 /** Per component, what the import does: added, removed, quantity changed; unchanged lines as a count. */
 function BomDiffList({ diff }: { diff: BomDiff }) {
   const qty = (n: number | undefined, unit: string) => (n === undefined ? "—" : `${formatNumber(n, 4)} ${unit}`);
-  const rows: Array<{ key: string; tone: "success" | "critical" | "attention"; label: string; c: BomLineChange; text: string }> = [
+  const rows: Array<{ key: string; tone: "success" | "critical" | "attention" | "default"; label: string; c: BomLineChange; text: string }> = [
     ...diff.changed.map((c) => ({ key: `c-${c.itemId}`, tone: "attention" as const, label: "Qty changed", c, text: `${qty(c.from, c.unit)} → ${qty(c.to, c.unit)}` })),
     ...diff.added.map((c) => ({ key: `a-${c.itemId}`, tone: "success" as const, label: "Added", c, text: qty(c.to, c.unit) })),
     ...diff.removed.map((c) => ({ key: `r-${c.itemId}`, tone: "critical" as const, label: "Removed", c, text: `was ${qty(c.from, c.unit)}` })),
+    ...diff.confirmed.map((c) => ({ key: `u-${c.itemId}`, tone: "default" as const, label: "In sheet", c, text: `${qty(c.from, c.unit)} → ${qty(c.to, c.unit)} (unchanged)` })),
   ];
   return (
     <div className="rounded-[var(--radius)] border border-border bg-surface-subdued/50 px-3 py-2 text-[12.5px]">
@@ -250,8 +258,8 @@ function BomDiffList({ diff }: { diff: BomDiff }) {
   );
 }
 
-function Tile({ label, value, tone = "default" }: { label: string; value: number; tone?: "default" | "success" | "info" | "critical" }) {
-  const cls = { default: "text-text", success: "text-success", info: "text-info", critical: "text-critical" }[tone];
+function Tile({ label, value, tone = "default" }: { label: string; value: number; tone?: "default" | "success" | "info" | "warning" | "critical" }) {
+  const cls = { default: "text-text", success: "text-success", info: "text-info", warning: "text-warning", critical: "text-critical" }[tone];
   return (
     <div className="card px-4 py-3">
       <div className="text-[12.5px] font-medium text-text-secondary">{label}</div>
