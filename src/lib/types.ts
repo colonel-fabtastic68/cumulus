@@ -220,7 +220,9 @@ export type MovementType =
   | "rma_return"
   | "import"
   | "transfer_out"
-  | "transfer_in";
+  | "transfer_in"
+  /** No quantity: a new standard cost applied to stock already on hand (src/lib/revaluation.ts). */
+  | "revaluation";
 
 export type RefType = "receipt" | "build" | "order" | "rma" | "import" | "agent" | "manual" | "transfer" | "shipment" | "channel" | "count";
 
@@ -249,6 +251,10 @@ export interface StockMovement {
   refId?: ID;
   reason?: string;
   note?: string;
+  /** Revaluations: the unit cost before the change. */
+  previousUnitCost?: number;
+  /** Revaluations: the signed change in inventory value (on hand × cost difference). */
+  valueChange?: number;
   /** Running on-hand balance after this movement was applied. */
   balanceAfter: number;
   /** Effective date. May be back-dated relative to createdAt. */
@@ -1153,6 +1159,7 @@ export type ActivityType =
   | "item.created"
   | "item.updated"
   | "item.deleted"
+  | "item.revalued"
   | "stock.adjusted"
   | "stock.received"
   | "stock.written_off"

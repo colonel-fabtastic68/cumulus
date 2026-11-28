@@ -49,6 +49,7 @@ function BuildForm({ open, onClose, assembly: fixed, onDone }: BuildModalProps) 
   const locations = useCollection("locations");
   const settings = useSettings();
   const pickLists = useFeature("pickLists");
+  const valuationAudit = useFeature("valuationAudit");
   const terms = useTerms();
 
   const live = useMemo(() => (assembly ? items.find((i) => i.id === assembly.id) ?? assembly : null), [items, assembly]);
@@ -73,7 +74,7 @@ function BuildForm({ open, onClose, assembly: fixed, onDone }: BuildModalProps) 
     setBusy(true);
     setError(null);
     try {
-      const b = await buildAssembly(store, user, { assemblyId: live.id, qty: n, consumeSubassemblies: consumeSub, note: note || undefined, occurredAt: fromDateInput(date), ...(modular ? { options: selection } : {}) });
+      const b = await buildAssembly(store, user, { assemblyId: live.id, qty: n, consumeSubassemblies: consumeSub, note: note || undefined, occurredAt: fromDateInput(date), recordRevaluation: valuationAudit || undefined, ...(modular ? { options: selection } : {}) });
       toast(`Built ${n} × ${live.sku} (${b.number})`, "success");
       onDone?.();
       onClose();

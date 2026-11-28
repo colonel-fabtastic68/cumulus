@@ -16,7 +16,7 @@ import { newId, nowIso, round, sum } from "@/lib/utils";
  *
  *   planned      a date on the schedule; the BOM can still change
  *   released     the component list is fixed; the parts are committed
- *   in_progress  some units are done
+ *   in_progress  some units are done, or a step has been started or finished
  *   completed    every unit is booked
  *
  * Stock moves when units are completed: each completion books a Build, which
@@ -339,6 +339,8 @@ export interface CompleteWorkOrderInput {
   serialIds?: string[];
   occurredAt?: string;
   note?: string;
+  /** Feature `valuationAudit`: record a revaluation when the builds change the standard cost of units on hand. */
+  recordRevaluation?: boolean;
 }
 
 /**
@@ -357,7 +359,7 @@ export async function completeWorkOrder(store: Store, actor: Actor, id: string, 
   checkQty(qty);
   if (qty > remaining) throw new InventoryError(`Only ${remaining} of ${wo.number} are still open`);
   const note = input.note?.trim() || `Work order ${wo.number}`;
-  const buildInput = { assemblyId: wo.assemblyId, consumeSubassemblies: wo.consumeSubassemblies, locationId: wo.locationId, options: wo.options, occurredAt: input.occurredAt, workOrderId: wo.id, jobId: wo.jobId };
+  const buildInput = { assemblyId: wo.assemblyId, consumeSubassemblies: wo.consumeSubassemblies, locationId: wo.locationId, options: wo.options, occurredAt: input.occurredAt, workOrderId: wo.id, jobId: wo.jobId, recordRevaluation: input.recordRevaluation };
 
   const items = await store.list("items");
   const assembly = items.find((i) => i.id === wo.assemblyId);
@@ -493,7 +495,8 @@ export async function advanceWorkOrderStep(store: Store, actor: Actor, id: strin
     step.finishedBy = actor.id;
   }
   const now = nowIso();
-  const next: WorkOrder = { ...wo, steps: steps.map((s, i) => (i === idx ? step : s)), startedAt: wo.startedAt ?? (action === "skip" ? undefined : at), updatedAt: now };
+  // Work on a step means the run is under way, so the header says In progress, not Released.
+  const next: WorkOrder = { ...wo, steps: steps.map((s, i) => (i === idx ? step : s)), status: action === "skip" ? wo.status : "in_progress", startedAt: wo.startedAt ?? (action === "skip" ? undefined : at), updatedAt: now };
   const label = `${step.name}${step.workCenter ? ` at ${step.workCenter}` : ""}`;
   const kind = action === "start" ? "step_started" : action === "finish" ? "step_finished" : "step_skipped";
   const text = `${action === "start" ? "Started" : action === "finish" ? "Finished" : "Skipped"} ${label}${step.outside && action === "start" ? " (outside)" : ""}`;

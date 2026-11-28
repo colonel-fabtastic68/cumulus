@@ -78,7 +78,8 @@ export function inventoryValueAt(items: Item[], movements: StockMovement[], date
     const cost = m.unitCost ?? item.unitCost;
     const row = acc.get(m.itemId) ?? { itemId: m.itemId, qty: 0, value: 0 };
     row.qty = round(row.qty + m.qty, 3);
-    row.value = round(row.value + m.qty * cost, 4);
+    // A revaluation moves no units, only value.
+    row.value = round(row.value + m.qty * cost + (m.valueChange ?? 0), 4);
     acc.set(m.itemId, row);
   }
   return Array.from(acc.values()).map((r) => ({ ...r, value: round(Math.max(0, r.value)) }));

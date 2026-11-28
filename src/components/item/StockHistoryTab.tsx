@@ -4,7 +4,9 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { History } from "lucide-react";
 import type { Build, Item, Member, MovementType, Receipt, RefType, Rma, SalesOrder, StockMovement } from "@/lib/types";
-import { formatDate, formatDateTime, formatQty, pluralize } from "@/lib/format";
+import { formatDate, formatDateTime, formatMoney, formatQty, pluralize } from "@/lib/format";
+import { useSettings } from "@/lib/store/provider";
+import { useFeature } from "@/lib/useFeature";
 import { cn, matches } from "@/lib/utils";
 import { Badge, EmptyState, SearchField, Select, Table, type Column } from "@/components/ui";
 import { MOVEMENT_LABELS, MOVEMENT_TYPES, REF_LABELS, isBackDated, movementTone, refHref } from "./utils";
@@ -25,6 +27,8 @@ interface RefInfo {
 export function StockHistoryTab({ item, movements, lookups }: { item: Item; movements: StockMovement[]; lookups: HistoryLookups }) {
   const [q, setQ] = useState("");
   const [type, setType] = useState<"" | MovementType>("");
+  const currency = useSettings().currency;
+  const revaluations = useFeature("valuationAudit") || movements.some((m) => m.type === "revaluation");
 
   const numbers = useMemo(() => {
     const m = new Map<string, string>();
@@ -75,7 +79,13 @@ export function StockHistoryTab({ item, movements, lookups }: { item: Item; move
       header: "Qty",
       align: "right",
       sortValue: (m) => m.qty,
-      render: (m) => (
+      render: (m) =>
+        m.type === "revaluation" ? (
+          <span className="font-medium text-text-secondary" title={`${formatMoney(m.previousUnitCost ?? 0, currency)} → ${formatMoney(m.unitCost ?? 0, currency)} per ${item.unit}`}>
+            {(m.valueChange ?? 0) >= 0 ? "+" : "−"}
+            {formatMoney(Math.abs(m.valueChange ?? 0), currency)} value
+          </span>
+        ) : (
         <span className={cn("font-medium", m.qty > 0 ? "text-success" : m.qty < 0 ? "text-critical" : "text-text-tertiary")}>
           {m.qty > 0 ? "+" : m.qty < 0 ? "−" : ""}
           {formatQty(Math.abs(m.qty), item.unit)}
@@ -137,7 +147,7 @@ export function StockHistoryTab({ item, movements, lookups }: { item: Item; move
             value={type}
             onChange={(e) => setType(e.target.value as "" | MovementType)}
             placeholder="All types"
-            options={MOVEMENT_TYPES.map((t) => ({ value: t, label: MOVEMENT_LABELS[t] }))}
+            options={MOVEMENT_TYPES.filter((t) => t !== "revaluation" || revaluations).map((t) => ({ value: t, label: MOVEMENT_LABELS[t] }))}
             containerClassName="w-44"
           />
           <span className="ml-auto text-[12.5px] text-text-tertiary">{pluralize(rows.length, "movement")}</span>

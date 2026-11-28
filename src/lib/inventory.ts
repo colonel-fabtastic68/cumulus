@@ -42,6 +42,7 @@ import { bomSelectionError, resolveBom } from "@/lib/bomOptions";
 import { isTracked, serialEvent, serialsInStock } from "@/lib/serials";
 import { resolveImportBoms, type ImportBomLine, type PendingBom } from "@/lib/importBoms";
 import { toDateInput } from "@/lib/format";
+import { pendingRevaluation, revaluationOps } from "@/lib/revaluation";
 
 export type Actor = Pick<Member, "id" | "name">;
 
@@ -828,6 +829,8 @@ export interface ReceiveInput {
   purchaseOrderIds?: string[];
   /** Standard costing only: update the item's standard cost to the received cost. Default true. */
   updateStandardCost?: boolean;
+  /** Feature `valuationAudit`: post a revaluation movement when a new standard cost changes the value of stock already on hand. */
+  recordRevaluation?: boolean;
   /**
    * Put every line where the line (or the workspace default) says, even when the
    * part's own routing names a different receive location.
@@ -924,6 +927,9 @@ export async function receiveStock(store: Store, actor: Actor, input: ReceiveInp
     const patch: Partial<Item> = itemCostPatches.get(item.id) ?? {};
     // Costing: standard cost follows the receipt when asked; average and FIFO follow their own rules.
     const next = costAfterReceipt(method, item, lotsByItem.get(item.id) ?? [], line.qty, unitCost, input.updateStandardCost !== false);
+    // A new standard cost revalues the units already on the shelf: post that as its own movement.
+    const reval = method === "standard" && input.recordRevaluation ? pendingRevaluation(item, next) : null;
+    if (reval) ops.push(...revaluationOps(actor, reval, { currency: settings.currency, occurredAt: receivedAt, refType: "receipt", refId: receipt.id, reason: `Standard cost updated by ${receipt.number}` }));
     if (next !== item.unitCost) {
       patch.unitCost = next;
       item.unitCost = next;
@@ -974,6 +980,8 @@ export interface BuildInput {
   jobId?: string;
   /** Per component, batches to consume first (the batches of the serial-numbered parts being built in). */
   fromLotIds?: Record<string, string[]>;
+  /** Feature `valuationAudit`: post a revaluation movement when the build changes the standard cost of assemblies already on hand. */
+  recordRevaluation?: boolean;
 }
 
 /** Factor 19/20: build an assembly, relieving components (and sub-assemblies) correctly. */
@@ -1024,9 +1032,11 @@ export async function buildAssembly(store: Store, actor: Actor, input: BuildInpu
   const lot: Lot = { id: lotId, number: numbers.lot[0], itemId: assembly.id, source: "build", buildId: build.id, qtyReceived: input.qty, qtyRemaining: input.qty, unitCost: cost, receivedAt: occurredAt };
   const [lots, settings] = await Promise.all([store.list("lots"), loadSettings(store)]);
   const unitCost = costAfterReceipt(costingMethod(settings), assembly, [...lots.filter((l) => l.itemId === assembly.id), lot], input.qty, cost, true);
+  const reval = costingMethod(settings) === "standard" && input.recordRevaluation ? pendingRevaluation(assembly, unitCost) : null;
   const ops: WriteOp[] = [
     ...counterOps,
     ...consume.ops,
+    ...(reval ? revaluationOps(actor, reval, { currency: settings.currency, occurredAt, refType: "build", refId: build.id, reason: `Standard cost updated by ${build.number}` }) : []),
     ...produce.ops,
     { op: "put", collection: "lots", doc: lot },
     { op: "patch", collection: "items", id: assembly.id, patch: { unitCost } },

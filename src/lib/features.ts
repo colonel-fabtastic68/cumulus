@@ -91,6 +91,13 @@ export const FEATURES = {
     area: "Inventory",
     notes: [],
   },
+  valuationAudit: {
+    label: "Revaluations on the record",
+    description: "When a receipt or build changes an item's standard cost, you're asked first and the change in value of stock already on hand is posted to the ledger and Activity. The item page shows one inventory value for your costing method.",
+    status: "preview",
+    area: "Accounting",
+    notes: [],
+  },
   resetFilters: {
     label: "Reset filters",
     description: "One button that clears every filter on a list.",

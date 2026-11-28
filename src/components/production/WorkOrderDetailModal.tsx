@@ -38,6 +38,7 @@ function Detail({ wo, onClose, canWrite }: { wo: WorkOrder; onClose: () => void;
   const settings = useSettings();
   const locationName = useLocationName();
   const pickLists = useFeature("pickLists");
+  const valuationAudit = useFeature("valuationAudit");
   const serialsOn = useFeature("serials");
   const stepsOn = useFeature("workOrderSteps");
   const serials = useCollection("serials");
@@ -80,7 +81,7 @@ function Detail({ wo, onClose, canWrite }: { wo: WorkOrder; onClose: () => void;
   const release = () => run("release", async () => `Released ${(await releaseWorkOrder(store, user, wo.id)).number}`);
   const complete = () =>
     run("complete", async () => {
-      const res = await completeWorkOrder(store, user, wo.id, { qty: n, occurredAt: date === toDateInput() ? undefined : fromDateInput(date) });
+      const res = await completeWorkOrder(store, user, wo.id, { qty: n, occurredAt: date === toDateInput() ? undefined : fromDateInput(date), recordRevaluation: valuationAudit || undefined });
       setQty(String(workOrderRemaining(res.workOrder) || 1));
       return res.workOrder.status === "completed" ? `${wo.number} is complete (${res.buildNumber})` : `Booked ${n} on ${wo.number} (${res.buildNumber})`;
     });

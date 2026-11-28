@@ -10,6 +10,9 @@ import { printReceivingChecklist } from "@/lib/receivingChecklist";
 import { useDefaultLocation, useLocations } from "@/lib/locations";
 import { RoutingNotice } from "@/components/inventory";
 import { useItemsById, useSettings, useStore } from "@/lib/store/provider";
+import { useFeature } from "@/lib/useFeature";
+import { receiptRevaluations, type PendingRevaluation } from "@/lib/revaluation";
+import { RevaluationConfirm } from "@/components/receiving/RevaluationConfirm";
 import { useCurrentUser } from "@/lib/auth";
 import { formatDate, formatMoney, fromDateInput, pluralize, toDateInput } from "@/lib/format";
 import { round, sum } from "@/lib/utils";
@@ -57,6 +60,8 @@ function ReceiveForm({ pos, onClose, onReceived }: Props & { pos: PurchaseOrder[
   const [date, setDate] = useState(() => toDateInput());
   const [note, setNote] = useState("");
   const [updateCost, setUpdateCost] = useState(true);
+  const valuationAudit = useFeature("valuationAudit");
+  const [revaluations, setRevaluations] = useState<PendingRevaluation[] | null>(null);
   const [trackLots, setTrackLots] = useState(false);
   const [rows, setRows] = useState<Row[]>(() => pos.flatMap((po) => poOpenLines(po).map((l) => ({ key: `${po.id}:${l.itemId}`, purchaseOrderId: po.id, poNumber: po.number, itemId: l.itemId, open: poLineOpenQty(l), qty: String(poLineOpenQty(l)), unitCost: String(l.unitCost), supplierLot: "", expiresAt: "" }))));
   const [busy, setBusy] = useState(false);
@@ -81,13 +86,18 @@ function ReceiveForm({ pos, onClose, onReceived }: Props & { pos: PurchaseOrder[
     if (!printReceivingChecklist({ title: `Receiving checklist ${numbers}`, subtitle: `${supplier} · due on ${pos.length === 1 ? "this order" : "these orders"}`, rows: sheet, companyName: settings.companyName, blankQty: true })) toast("Allow pop-ups to print the checklist", "critical");
   };
 
-  const submit = async () => {
+  const submit = async (decision?: "revalue" | "keep") => {
     if (receiving.length === 0) return setError("Enter a quantity on at least one line");
     for (const r of rows) {
       const q = Number(r.qty);
       const sku = itemsById.get(r.itemId)?.sku ?? r.itemId;
       if (!Number.isFinite(q) || q < 0) return setError(`Enter a valid quantity for ${sku}`);
       if (q > r.open) return setError(`${sku}: ${q} is more than the ${r.open} still open on ${r.poNumber}`);
+    }
+    // Feature valuationAudit: a new standard cost that revalues stock on the shelf is asked about first.
+    if (valuationAudit && method === "standard" && updateCost && !decision) {
+      const revals = receiptRevaluations(itemsById, receiving.map((r) => ({ itemId: r.itemId, qty: Number(r.qty), unitCost: Number(r.unitCost) || undefined })));
+      if (revals.length) return setRevaluations(revals);
     }
     setBusy(true);
     setError(null);
@@ -100,7 +110,8 @@ function ReceiveForm({ pos, onClose, onReceived }: Props & { pos: PurchaseOrder[
           lines: receiving.map((r) => ({ purchaseOrderId: r.purchaseOrderId, itemId: r.itemId, qty: Number(r.qty), unitCost: Number(r.unitCost) || undefined, locationId, supplierLot: trackLots ? r.supplierLot.trim() || undefined : undefined, expiresAt: trackLots ? r.expiresAt || undefined : undefined })),
           receivedAt: fromDateInput(date),
           note: note.trim() || undefined,
-          updateStandardCost: method === "standard" ? updateCost : undefined,
+          updateStandardCost: method === "standard" ? updateCost && decision !== "keep" : undefined,
+          recordRevaluation: valuationAudit || undefined,
           ignoreRouting: ignoreRouting || undefined,
         },
       );
@@ -114,6 +125,7 @@ function ReceiveForm({ pos, onClose, onReceived }: Props & { pos: PurchaseOrder[
       toast(msg, "critical");
     } finally {
       setBusy(false);
+      setRevaluations(null);
     }
   };
 
@@ -132,7 +144,7 @@ function ReceiveForm({ pos, onClose, onReceived }: Props & { pos: PurchaseOrder[
             Print checklist
           </Button>
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" onClick={submit} loading={busy} disabled={receiving.length === 0}>
+          <Button variant="primary" onClick={() => void submit()} loading={busy} disabled={receiving.length === 0}>
             {everything ? "Receive everything" : "Receive these lines"}
           </Button>
         </>
@@ -203,6 +215,7 @@ function ReceiveForm({ pos, onClose, onReceived }: Props & { pos: PurchaseOrder[
         )}
         {error && <p className="text-[12.5px] text-critical">{error}</p>}
       </div>
+      <RevaluationConfirm revaluations={revaluations} currency={currency} busy={busy} onRevalue={() => void submit("revalue")} onKeepCost={() => void submit("keep")} onClose={() => setRevaluations(null)} />
     </Modal>
   );
 }
