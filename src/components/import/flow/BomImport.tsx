@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Download } from "lucide-react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, ChevronDown, ChevronRight, Download } from "lucide-react";
 import { Badge, Banner, Button, Card, Segmented, Select, SimpleTable, useToast } from "@/components/ui";
 import { canWrite, useCurrentUser } from "@/lib/auth";
-import { BOM_IMPORT_FIELDS, BOM_IMPORT_LABELS, BOM_IMPORT_REQUIRED, guessBomMapping, importBoms, planBomImport, type BomImportMapping, type BomImportMode } from "@/lib/bomImport";
-import { pluralize } from "@/lib/format";
+import { BOM_IMPORT_FIELDS, BOM_IMPORT_LABELS, BOM_IMPORT_REQUIRED, guessBomMapping, diffCount, importBoms, planBomImport, type BomDiff, type BomImportMapping, type BomImportMode, type BomLineChange } from "@/lib/bomImport";
+import { formatNumber, pluralize } from "@/lib/format";
 import { useItems, useStore } from "@/lib/store/provider";
 import type { ParsedSource } from "../types";
 import type { RecordStage } from "./RecordImport";
@@ -51,6 +51,8 @@ export function BomImport({ source, onStage, onBack, onRestart }: BomImportProps
   const samples = useMemo(() => Object.fromEntries(source.headers.map((h) => [h, source.rows.find((r) => r[h])?.[h] ?? ""])), [source]);
   const lineCount = plan ? plan.boms.reduce((a, b) => a + b.bom.length, 0) : 0;
   const converting = plan ? plan.boms.filter((b) => b.becomesAssembly).length : 0;
+  const changedCount = plan ? plan.boms.reduce((a, b) => a + diffCount(b.diff), 0) : 0;
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
   const run = async () => {
     if (!writable || !plan || plan.boms.length === 0) return;
@@ -92,9 +94,10 @@ export function BomImport({ source, onStage, onBack, onRestart }: BomImportProps
             Your role can review the file but not import it.
           </Banner>
         )}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
           <Tile label="Assemblies" value={plan.boms.length} tone="success" />
           <Tile label="Parts list lines" value={lineCount} />
+          <Tile label="Lines changed" value={changedCount} tone={changedCount ? "info" : "default"} />
           <Tile label="Parts becoming assemblies" value={converting} tone="info" />
           <Tile label="Problems" value={plan.errors.length} tone={plan.errors.length ? "critical" : "default"} />
         </div>
@@ -117,29 +120,47 @@ export function BomImport({ source, onStage, onBack, onRestart }: BomImportProps
                 <tr>
                   <th className="w-16">Row</th>
                   <th>Assembly</th>
-                  <th className="w-28 text-right">Lines now</th>
-                  <th className="w-28 text-right">Lines after</th>
-                  <th className="w-44">Change</th>
+                  <th className="w-24 text-right">Lines now</th>
+                  <th className="w-24 text-right">Lines after</th>
+                  <th className="w-[300px]">Change</th>
                 </tr>
               </thead>
               <tbody>
-                {plan.boms.map((b) => (
-                  <tr key={b.assembly.id}>
-                    <td className="tabular text-text-tertiary">{b.row}</td>
-                    <td>
-                      <span className="font-mono text-[12px] text-text">{b.assembly.sku}</span>
-                      <span className="ml-2 text-text-secondary">{b.assembly.name}</span>
-                    </td>
-                    <td className="tabular text-right text-text-secondary">{b.linesBefore}</td>
-                    <td className="tabular text-right text-text">{b.bom.length}</td>
-                    <td>
-                      <span className="flex flex-wrap gap-1">
-                        {b.linesBefore === 0 ? <Badge tone="success">New list</Badge> : mode === "replace" ? <Badge tone="attention">Replaces list</Badge> : <Badge tone="info">Adds lines</Badge>}
-                        {b.becomesAssembly && <Badge tone="info">Becomes assembly</Badge>}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {plan.boms.map((b) => {
+                  const open = expanded.has(b.assembly.id);
+                  const toggle = () => setExpanded((s) => (s.has(b.assembly.id) ? new Set([...s].filter((x) => x !== b.assembly.id)) : new Set([...s, b.assembly.id])));
+                  const Chevron = open ? ChevronDown : ChevronRight;
+                  return (
+                    <Fragment key={b.assembly.id}>
+                      <tr className="cursor-pointer hover:bg-surface-hover" onClick={toggle} aria-expanded={open}>
+                        <td className="tabular text-text-tertiary">{b.row}</td>
+                        <td>
+                          <span className="inline-flex items-center gap-1">
+                            <Chevron className="h-3.5 w-3.5 shrink-0 text-text-tertiary" />
+                            <span className="font-mono text-[12px] text-text">{b.assembly.sku}</span>
+                          </span>
+                          <span className="ml-2 text-text-secondary">{b.assembly.name}</span>
+                        </td>
+                        <td className="tabular text-right text-text-secondary">{b.linesBefore}</td>
+                        <td className="tabular text-right text-text">{b.bom.length}</td>
+                        <td>
+                          <span className="flex flex-wrap gap-1">
+                            {b.linesBefore === 0 ? <Badge tone="success">New list</Badge> : diffCount(b.diff) === 0 ? <Badge>No change</Badge> : <Badge tone="attention">{`${b.diff.changed.length} changed · ${b.diff.added.length} added · ${b.diff.removed.length} removed`}</Badge>}
+                            {b.becomesAssembly && <Badge tone="info">Becomes assembly</Badge>}
+                          </span>
+                        </td>
+                      </tr>
+                      {open && (
+                        <tr>
+                          <td />
+                          <td colSpan={4} className="pb-3">
+                            <BomDiffList diff={b.diff} />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </SimpleTable>
           </div>
@@ -198,6 +219,33 @@ export function BomImport({ source, onStage, onBack, onRestart }: BomImportProps
           Review {pluralize(source.rows.length, "row")}
         </Button>
       </div>
+    </div>
+  );
+}
+
+/** Per component, what the import does: added, removed, quantity changed; unchanged lines as a count. */
+function BomDiffList({ diff }: { diff: BomDiff }) {
+  const qty = (n: number | undefined, unit: string) => (n === undefined ? "—" : `${formatNumber(n, 4)} ${unit}`);
+  const rows: Array<{ key: string; tone: "success" | "critical" | "attention"; label: string; c: BomLineChange; text: string }> = [
+    ...diff.changed.map((c) => ({ key: `c-${c.itemId}`, tone: "attention" as const, label: "Qty changed", c, text: `${qty(c.from, c.unit)} → ${qty(c.to, c.unit)}` })),
+    ...diff.added.map((c) => ({ key: `a-${c.itemId}`, tone: "success" as const, label: "Added", c, text: qty(c.to, c.unit) })),
+    ...diff.removed.map((c) => ({ key: `r-${c.itemId}`, tone: "critical" as const, label: "Removed", c, text: `was ${qty(c.from, c.unit)}` })),
+  ];
+  return (
+    <div className="rounded-[var(--radius)] border border-border bg-surface-subdued/50 px-3 py-2 text-[12.5px]">
+      {rows.length > 0 && (
+        <ul className="flex flex-col gap-1">
+          {rows.map((r) => (
+            <li key={r.key} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <Badge tone={r.tone}>{r.label}</Badge>
+              <span className="font-mono text-[12px] text-text">{r.c.sku}</span>
+              <span className="text-text-secondary">{r.c.name}</span>
+              <span className="ml-auto tabular font-medium text-text">{r.text}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className={rows.length ? "mt-1.5 text-text-tertiary" : "text-text-tertiary"}>{diff.unchanged === 0 && rows.length === 0 ? "No lines." : `${formatNumber(diff.unchanged)} unchanged`}</p>
     </div>
   );
 }

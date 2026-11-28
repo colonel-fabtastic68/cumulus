@@ -72,6 +72,62 @@ export interface PlannedBom {
   linesBefore: number;
   /** A plain part today; becomes an assembly. */
   becomesAssembly: boolean;
+  /** What the import does to each component of the list. */
+  diff: BomDiff;
+}
+
+/** One component in a before/after comparison of a parts list. */
+export interface BomLineChange {
+  itemId: string;
+  sku: string;
+  name: string;
+  /** The component's stocking unit. */
+  unit: string;
+  /** Quantity before (absent when added). */
+  from?: number;
+  /** Quantity after (absent when removed). */
+  to?: number;
+}
+
+export interface BomDiff {
+  added: BomLineChange[];
+  removed: BomLineChange[];
+  changed: BomLineChange[];
+  /** Lines with the same quantity before and after. */
+  unchanged: number;
+}
+
+/** Lines the import touches (added, removed or a different quantity). */
+export function diffCount(d: BomDiff): number {
+  return d.added.length + d.removed.length + d.changed.length;
+}
+
+/** Component by component, what turns `before` into `after`. Quantities are compared per component, summed when a list names one twice. */
+export function diffBom(before: readonly BomLine[], after: readonly BomLine[], itemsById: ReadonlyMap<string, Item>): BomDiff {
+  const total = (lines: readonly BomLine[]) => {
+    const m = new Map<string, number>();
+    for (const l of lines) m.set(l.itemId, (m.get(l.itemId) ?? 0) + l.qty);
+    return m;
+  };
+  const a = total(before);
+  const b = total(after);
+  const describe = (itemId: string, from?: number, to?: number): BomLineChange => {
+    const item = itemsById.get(itemId);
+    return { itemId, sku: item?.sku ?? itemId, name: item?.name ?? "", unit: item?.unit ?? "ea", ...(from !== undefined ? { from: round(from, 6) } : {}), ...(to !== undefined ? { to: round(to, 6) } : {}) };
+  };
+  const diff: BomDiff = { added: [], removed: [], changed: [], unchanged: 0 };
+  for (const [id, to] of b) {
+    const from = a.get(id);
+    if (from === undefined) diff.added.push(describe(id, undefined, to));
+    else if (Math.abs(from - to) > 1e-9) diff.changed.push(describe(id, from, to));
+    else diff.unchanged++;
+  }
+  for (const [id, from] of a) if (!b.has(id)) diff.removed.push(describe(id, from));
+  const bySku = (x: BomLineChange, y: BomLineChange) => x.sku.localeCompare(y.sku);
+  diff.added.sort(bySku);
+  diff.removed.sort(bySku);
+  diff.changed.sort(bySku);
+  return diff;
 }
 
 export interface BomImportPlan {
@@ -147,6 +203,7 @@ export function planBomImport(rows: ReadonlyArray<Record<string, string>>, mappi
   errors.push(...resolved.errors);
 
   const boms: PlannedBom[] = [];
+  const itemsById = new Map(items.map((i) => [i.id, i]));
   for (const p of pending) {
     const assembly = bySku.get(p.sku)!;
     const bom = resolved.boms.get(assembly.id);
@@ -155,7 +212,7 @@ export function planBomImport(rows: ReadonlyArray<Record<string, string>>, mappi
     const extras = new Map<string, { wastePct?: number; note?: string }>();
     for (const l of groups.get(p.sku)!.lines) if (l.wastePct !== undefined || l.note) extras.set(l.sku, { ...(extras.get(l.sku) ?? {}), ...(l.wastePct !== undefined ? { wastePct: l.wastePct } : {}), ...(l.note ? { note: l.note } : {}) });
     const finished = bom.map((line) => ({ ...line, qty: round(line.qty, 6), ...(extras.get(skuOf.get(line.itemId) ?? "") ?? {}) }));
-    boms.push({ assembly, bom: finished, row: p.row, fileLines: mergeBomLines(groups.get(p.sku)!.lines).length, linesBefore: assembly.bom.length, becomesAssembly: assembly.type !== "assembly" });
+    boms.push({ assembly, bom: finished, row: p.row, fileLines: mergeBomLines(groups.get(p.sku)!.lines).length, linesBefore: assembly.bom.length, becomesAssembly: assembly.type !== "assembly", diff: diffBom(assembly.bom, finished, itemsById) });
   }
   boms.sort((a, b) => a.row - b.row);
   errors.sort((a, b) => a.row - b.row);
