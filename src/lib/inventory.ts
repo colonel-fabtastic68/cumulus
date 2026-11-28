@@ -1333,11 +1333,44 @@ export interface RmaInput {
   reason: string;
   note?: string;
   lines: Array<{ itemId: string; qty: number; condition?: Rma["lines"][number]["condition"] }>;
+  /** Feature `returnCap`: refuse lines for more than the order shipped, less what earlier returns on it already took back. */
+  capToShipped?: boolean;
+}
+
+/** Units of an item an order has shipped. Orders that pre-date per-line shipping count in full once fulfilled. */
+export function shippedOnOrder(order: Pick<SalesOrder, "status" | "lines">, itemId: string): number {
+  return round(sum(order.lines.filter((l) => l.itemId === itemId).map((l) => l.shipped ?? (order.status === "fulfilled" ? l.qty : 0))), 3);
+}
+
+/**
+ * Feature `returnCap`: a return against an order can bring back at most what that order shipped,
+ * less what earlier returns against it already took back. Throws with the numbers when a line is over.
+ */
+export function checkReturnAgainstOrder(order: Pick<SalesOrder, "number" | "status" | "lines">, earlierRmas: Array<Pick<Rma, "lines">>, lines: RmaInput["lines"], skuOf: (itemId: string) => string): void {
+  const asked = new Map<string, number>();
+  for (const l of lines) asked.set(l.itemId, round((asked.get(l.itemId) ?? 0) + l.qty, 3));
+  for (const [itemId, qty] of asked) {
+    const shipped = shippedOnOrder(order, itemId);
+    const returned = round(sum(earlierRmas.flatMap((r) => r.lines.filter((l) => l.itemId === itemId).map((l) => l.qty))), 3);
+    const left = Math.max(0, round(shipped - returned, 3));
+    if (qty <= left + 1e-9) continue;
+    const sku = skuOf(itemId);
+    if (shipped === 0) throw new InventoryError(`${order.number} has not shipped any ${sku}, so none can come back against it`, { itemId, shipped, returned, requested: qty });
+    throw new InventoryError(`${order.number} shipped ${shipped} × ${sku}${returned > 0 ? ` and ${returned} already came back` : ""}, so at most ${left} can be returned (you entered ${qty})`, { itemId, shipped, returned, requested: qty });
+  }
 }
 
 /** Factor 11: RMA ticket creation. */
 export async function createRma(store: Store, actor: Actor, input: RmaInput): Promise<Rma> {
   if (input.lines.length === 0) throw new InventoryError("An RMA needs at least one line");
+  if (input.capToShipped && input.orderId) {
+    const order = await store.get("orders", input.orderId);
+    if (order) {
+      const [rmas, items] = await Promise.all([store.list("rmas"), store.list("items")]);
+      const skus = new Map(items.map((i) => [i.id, i.sku]));
+      checkReturnAgainstOrder(order, rmas.filter((r) => r.orderId === order.id), input.lines, (id) => skus.get(id) ?? id);
+    }
+  }
   const { number, ops } = await nextNumber(store, "rma");
   const rma: Rma = {
     id: newId("rma"),
